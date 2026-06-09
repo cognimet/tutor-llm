@@ -1,93 +1,151 @@
-# AI Tutor New
+# Everything AI Tutor — Full-Stack MVP
 
+A working full-stack build of the AI Tutor: **Laravel API + React (Vite) frontend + Google Gemini-powered AI**, with three roles — **Admin, Student, Parent**.
 
+The MVP delivers the core learning loop from the vision doc:
 
-## Getting started
+> **Ask → AI explains → Mini-assessment → Gap detection → Learning plan → Progress**
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## Repository layout
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/cognimet-group/ai-tutor-new.git
-git branch -M main
-git push -uf origin main
+AI Tutor MVP/
+├── backend/        Laravel 11 API (overlay files + setup.sh)
+├── frontend/       React + Vite SPA (Tailwind, role-based)
+├── preview.html    Standalone design preview (no build needed)
+└── README.md       ← you are here
 ```
 
-## Integrate with your tools
+> The earlier `src/` + `preview.html` were the static design pass. The **canonical app is now `frontend/`** (wired to the backend). `preview.html` is kept as a quick visual reference.
 
-* [Set up project integrations](https://gitlab.com/cognimet-group/ai-tutor-new/-/settings/integrations)
+---
 
-## Collaborate with your team
+## What each role can do
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+| Role | Capabilities |
+|------|--------------|
+| **Student** | Topic-wise AI tutor chat, mini-assessments, AI gap detection, personalized next-step plans, progress snapshot. |
+| **Parent**  | Link children by email, view each child's mastery/accuracy/gaps, mastery-over-time chart, recent assessments. |
+| **Admin**   | Platform stats, signups chart, user management (search/filter, enable/disable), curriculum management. |
 
-## Test and Deploy
+---
 
-Use the built-in continuous integration in GitLab.
+## The learning loop (how the AI works)
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+1. **Tutor chat** — `TutorService::explain()` builds a pedagogical, topic-scoped prompt (step-by-step, examples, common mistakes, a comprehension check) and calls Gemini.
+2. **Mini-assessment** — `generateAssessment()` asks Gemini for diagnostic MCQs (JSON), each probing a sub-concept with a misconception distractor.
+3. **Gap detection** — on submit, wrong answers are sent back to Gemini (`detectGaps()`) which returns concepts + severity + recommendations, persisted as `knowledge_gaps`.
+4. **Learning plan** — `buildLearningPlan()` turns open gaps into 3–4 short next-step tasks. Completing a task can auto-resolve the matching gap and nudge mastery.
+5. **Progress** — `ProgressService` keeps a rolling daily snapshot (mastery, accuracy, streak) shown to students and parents.
 
-***
+If `GEMINI_API_KEY` is missing or `GEMINI_MOCK=true`, the backend returns deterministic mock responses so the **entire flow runs with zero external calls**.
 
-# Editing this README
+---
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## ▶️ Quickest way to run — Docker (one command)
 
-## Suggestions for a good README
+No need to install PHP, Composer, or Node — Docker supplies them.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```bash
+cd "AI Tutor MVP"
+cp .env.example .env          # then paste your Gemini key into .env
+docker compose up --build
+```
 
-## Name
-Choose a self-explaining name for your project.
+Then open **http://localhost:5173**. The backend auto-migrates + seeds on first boot.
+Demo logins (password `password`): `admin@tuto.ai`, `student@tuto.ai`, `parent@tuto.ai`.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+> To run with **no API key**, set `GEMINI_MOCK=true` in `.env` — the whole flow works on mock AI.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+---
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+## ▶️ Run locally on macOS — one script (installs PHP + Node for you)
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+If you'd rather not use Docker, this script installs PHP/Composer/Node via Homebrew
+(if missing), sets up the backend, and starts both servers:
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+bash "$HOME/Documents/AI Tutor/AI Tutor MVP/run-mac.sh"
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+It opens http://localhost:5173 automatically. Press Ctrl+C to stop.
+(If you don't have Homebrew, the script prints the one line to install it first.)
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+---
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## Prerequisites (fully manual)
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+- PHP **8.2+** and Composer
+- Node **18+** and npm
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## 1) Backend (Laravel + SQLite)
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+cd "AI Tutor MVP/backend"
+chmod +x setup.sh
+./setup.sh           # scaffolds Laravel 11, overlays these files, migrates + seeds
+cd .laravel
+php artisan serve    # http://localhost:8000
+```
 
-## License
-For open source projects, say how it is licensed.
+`setup.sh` creates a fresh Laravel app in `backend/.laravel`, copies in the app code (models, controllers, services, routes, migrations, seeders, config, `.env`), then runs `migrate:fresh --seed` on SQLite.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+> Prefer manual setup? `composer create-project laravel/laravel:^11.0 .laravel`, then `php artisan install:api`, copy `app/`, `routes/`, `database/`, `config/gemini.php`, `config/cors.php`, `bootstrap/app.php`, `.env` over the defaults, `touch database/database.sqlite`, `php artisan key:generate`, `php artisan migrate --seed`.
+
+## 2) Frontend (React + Vite)
+
+```bash
+cd "AI Tutor MVP/frontend"
+npm install
+npm run dev          # http://localhost:5173 (proxies /api to :8000)
+```
+
+## Demo accounts (password: `password`)
+
+| Role | Email |
+|------|-------|
+| Admin | `admin@tuto.ai` |
+| Student | `student@tuto.ai` |
+| Parent | `parent@tuto.ai` (linked to the two student accounts) |
+
+The login screen has one-tap demo buttons for each.
+
+---
+
+## API surface (selected)
+
+```
+POST /api/register | /api/login | /api/logout      (auth)
+GET  /api/me                                         (current user)
+GET  /api/curriculum                                 (subject→chapter→topic tree)
+
+# Student (role:student)
+POST /api/tutor/sessions            start a topic-scoped chat
+POST /api/tutor/sessions/{id}/send  send a message → AI reply
+POST /api/assessments/generate      AI mini-assessment
+POST /api/assessments/{id}/submit   score + AI gap detection
+POST /api/plans/generate            AI next-step plan
+GET  /api/progress                  progress snapshot
+
+# Parent (role:parent)
+GET  /api/parent/children
+GET  /api/parent/children/{child}/report
+POST /api/parent/children/link
+
+# Admin (role:admin)
+GET  /api/admin/stats | /api/admin/users
+PATCH /api/admin/users/{user}/active
+```
+
+Auth is token-based (Laravel Sanctum). Role access is enforced by the `role:` middleware.
+
+---
+
+## 🔐 Security note
+
+Your Gemini API key was shared in chat and is currently in `backend/.env` for local dev only.
+`.env` is gitignored, but **rotate that key** at https://aistudio.google.com/app/apikey before any real deployment, and keep production keys in server env vars.
+
+## Mobile reuse
+
+The API is plain JSON + bearer tokens, so the same endpoints power a React Native / Flutter app — no backend changes needed.

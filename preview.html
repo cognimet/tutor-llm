@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tuto.ai — AI Tutor MVP Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Nunito',system-ui,sans-serif}
+  h1,h2,h3,.font-display{font-family:'Baloo 2',cursive}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:9px;border:3px solid transparent;background-clip:content-box}
+</style>
+<script>
+  tailwind.config = { theme: { extend: { fontFamily: { sans:['Nunito','sans-serif'], display:['"Baloo 2"','cursive'] } } } };
+</script>
+</head>
+<body class="bg-gradient-to-b from-slate-50 to-indigo-50/40 text-slate-900 antialiased">
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useRef, useEffect, useMemo } = React;
+
+/* ---------- inline icons ---------- */
+const I = ({d, cls="h-5 w-5", sw=2, fill="none"}) => (
+  <svg viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" className={cls}>{d}</svg>
+);
+const Ic = {
+  arrow:   (p)=><I {...p} d={<><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>}/>,
+  back:    (p)=><I {...p} d={<><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></>}/>,
+  check:   (p)=><I {...p} sw={3} d={<path d="M20 6 9 17l-5-5"/>}/>,
+  chat:    (p)=><I {...p} d={<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>}/>,
+  brain:   (p)=><I {...p} d={<><path d="M12 5a3 3 0 1 0-5.997.142 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.142 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/></>}/>,
+  send:    (p)=><I {...p} d={<><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></>}/>,
+  search:  (p)=><I {...p} d={<><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>}/>,
+  chevron: (p)=><I {...p} d={<path d="m9 18 6-6-6-6"/>}/>,
+  star:    (p)=><I {...p} fill="currentColor" d={<path d="M12 2l3 6.5 7 .5-5.5 4.5 2 7-6.5-4-6.5 4 2-7L2 9l7-.5z"/>}/>,
+  spark:   (p)=><I {...p} d={<path d="M12 3v4m0 10v4M3 12h4m10 0h4M6 6l2 2m8 8 2 2m0-12-2 2M8 16l-2 2"/>}/>,
+  book:    (p)=><I {...p} d={<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>}/>,
+  bulb:    (p)=><I {...p} d={<><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></>}/>,
+  reset:   (p)=><I {...p} d={<><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></>}/>,
+};
+
+/* ---------- data (Indian education system) ---------- */
+const BOARDS=[
+  {id:"cbse",name:"CBSE",full:"Central Board of Secondary Education",emoji:"📘",tint:"indigo"},
+  {id:"icse",name:"ICSE",full:"Indian Certificate of Secondary Education",emoji:"📗",tint:"emerald"},
+  {id:"state",name:"State Board",full:"Maharashtra · TN · UP · and more",emoji:"📙",tint:"amber"},
+  {id:"ncert",name:"NCERT",full:"National Council of Educational Research",emoji:"📕",tint:"rose"},
+];
+const CLASSES=[6,7,8,9,10,11,12];
+const LANGS=[{id:"en",native:"English",name:"English"},{id:"hi",native:"हिन्दी",name:"Hindi"},{id:"hinglish",native:"Hinglish",name:"Hinglish"}];
+const SUBJECTS=[
+  {id:"maths",name:"Mathematics",emoji:"📐",tint:"indigo",blurb:"Numbers, algebra, geometry & more",chapters:[
+    {id:"rn",name:"Real Numbers",topics:["Euclid's Division Lemma","Fundamental Theorem of Arithmetic","Rational & Irrational Numbers"]},
+    {id:"poly",name:"Polynomials",topics:["Zeroes of a Polynomial","Zeroes & Coefficients","Division Algorithm"]},
+    {id:"lin",name:"Pair of Linear Equations",topics:["Graphical Method","Substitution Method","Elimination Method"]},
+    {id:"trig",name:"Introduction to Trigonometry",topics:["Trigonometric Ratios","Trigonometric Identities","Heights & Distances"]},
+  ]},
+  {id:"science",name:"Science",emoji:"🔬",tint:"emerald",blurb:"Physics, Chemistry & Biology",chapters:[
+    {id:"light",name:"Light – Reflection & Refraction",topics:["Laws of Reflection","Spherical Mirrors","Refraction of Light","Lens Formula"]},
+    {id:"acid",name:"Acids, Bases & Salts",topics:["pH Scale","Neutralisation Reaction","Properties of Acids & Bases"]},
+    {id:"life",name:"Life Processes",topics:["Nutrition","Respiration","Transportation","Excretion"]},
+  ]},
+  {id:"social",name:"Social Science",emoji:"🌏",tint:"amber",blurb:"History, Geography, Civics & Economics",chapters:[
+    {id:"nat",name:"Nationalism in India",topics:["Non-Cooperation Movement","Civil Disobedience","Collective Belonging"]},
+    {id:"res",name:"Resources & Development",topics:["Types of Resources","Land Degradation","Soil Conservation"]},
+  ]},
+  {id:"english",name:"English",emoji:"✍️",tint:"sky",blurb:"Grammar, literature & writing",chapters:[
+    {id:"gram",name:"Grammar Essentials",topics:["Tenses","Subject–Verb Agreement","Reported Speech","Active & Passive Voice"]},
+    {id:"write",name:"Writing Skills",topics:["Formal Letter","Article Writing","Story Writing"]},
+  ]},
+  {id:"hindi",name:"Hindi",emoji:"📜",tint:"rose",blurb:"व्याकरण, साहित्य और लेखन",chapters:[
+    {id:"vy",name:"व्याकरण",topics:["संधि","समास","अलंकार","रस"]},
+  ]},
+  {id:"cs",name:"Computer",emoji:"💻",tint:"violet",blurb:"Coding, logic & digital skills",chapters:[
+    {id:"py",name:"Python Basics",topics:["Variables & Data Types","Loops","Functions","Lists & Dictionaries"]},
+  ]},
+];
+const TINTS={
+  indigo:{soft:"bg-indigo-50",text:"text-indigo-600",ring:"ring-indigo-200",solid:"bg-indigo-500",grad:"from-indigo-500 to-violet-500",dot:"bg-indigo-400",border:"border-indigo-200"},
+  violet:{soft:"bg-violet-50",text:"text-violet-600",ring:"ring-violet-200",solid:"bg-violet-500",grad:"from-violet-500 to-fuchsia-500",dot:"bg-violet-400",border:"border-violet-200"},
+  emerald:{soft:"bg-emerald-50",text:"text-emerald-600",ring:"ring-emerald-200",solid:"bg-emerald-500",grad:"from-emerald-500 to-teal-500",dot:"bg-emerald-400",border:"border-emerald-200"},
+  amber:{soft:"bg-amber-50",text:"text-amber-600",ring:"ring-amber-200",solid:"bg-amber-500",grad:"from-amber-500 to-orange-500",dot:"bg-amber-400",border:"border-amber-200"},
+  rose:{soft:"bg-rose-50",text:"text-rose-600",ring:"ring-rose-200",solid:"bg-rose-500",grad:"from-rose-500 to-pink-500",dot:"bg-rose-400",border:"border-rose-200"},
+  sky:{soft:"bg-sky-50",text:"text-sky-600",ring:"ring-sky-200",solid:"bg-sky-500",grad:"from-sky-500 to-cyan-500",dot:"bg-sky-400",border:"border-sky-200"},
+};
+const tint=(n)=>TINTS[n]||TINTS.indigo;
+
+/* ---------- shared ---------- */
+const Backdrop=()=>(
+  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+    <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-indigo-300/40 blur-3xl"/>
+    <div className="absolute top-1/3 -right-24 h-96 w-96 rounded-full bg-rose-300/40 blur-3xl"/>
+    <div className="absolute -bottom-32 left-1/4 h-96 w-96 rounded-full bg-amber-200/50 blur-3xl"/>
+    <div className="absolute inset-0" style={{backgroundImage:"radial-gradient(circle at 1px 1px, rgba(99,102,241,0.08) 1px, transparent 0)",backgroundSize:"22px 22px"}}/>
+  </div>
+);
+const Logo=({onClick})=>(
+  <button onClick={onClick} className="flex items-center gap-2.5 select-none transition-transform hover:scale-[1.02]">
+    <div className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-lg text-white shadow-lg shadow-indigo-500/30">🦉</div>
+    <div className="text-left leading-tight">
+      <p className="font-display font-extrabold tracking-tight text-slate-800">Tuto<span className="text-indigo-500">.ai</span></p>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">AI Tutor</p>
+    </div>
+  </button>
+);
+const Btn=({children,variant="primary",className="",...p})=>{
+  const s={
+    primary:"bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 px-5 py-3",
+    ghost:"bg-white/70 text-slate-700 ring-1 ring-slate-200 hover:bg-white px-5 py-3",
+  }[variant];
+  return <button className={`inline-flex items-center justify-center gap-2 rounded-2xl font-extrabold transition-all active:scale-[0.97] disabled:opacity-40 ${s} ${className}`} {...p}>{children}</button>;
+};
+const Nav=({onHome,right})=>(
+  <header className="sticky top-0 z-20 border-b border-white/40 bg-white/60 backdrop-blur-xl">
+    <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3"><Logo onClick={onHome}/><div className="flex items-center gap-3">{right}</div></div>
+  </header>
+);
+
+/* ---------- Landing ---------- */
+const FEATURES=[
+  {icon:Ic.brain,title:"AI Tutor",grad:"from-indigo-500 to-violet-500",soft:"bg-indigo-50",text:"text-indigo-600",
+   desc:"Learns your board, class and pace — then explains any concept step by step with examples, not just answers.",
+   points:["Step-by-step explanations","Examples & common mistakes","Adapts to your level"]},
+  {icon:Ic.chat,title:"Topic-wise AI Chat",grad:"from-rose-500 to-pink-500",soft:"bg-rose-50",text:"text-rose-600",
+   desc:"Every chat is locked to one topic, so the tutor stays focused and your doubts never drift off-syllabus.",
+   points:["Scoped to a single topic","On-syllabus, always","Pick up where you left off"]},
+];
+function Landing({onStart}){
+  return (
+    <div className="min-h-screen">
+      <Backdrop/>
+      <Nav onHome={onStart} right={<Btn className="px-4 py-2 text-sm" onClick={onStart}>Start learning {Ic.arrow({cls:"h-4 w-4"})}</Btn>}/>
+      <section className="mx-auto max-w-6xl px-5 pt-16 pb-10 text-center sm:pt-24">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs font-extrabold text-indigo-600 ring-1 ring-indigo-100">{Ic.spark({cls:"h-3.5 w-3.5"})} Built for the Indian syllabus · CBSE · ICSE · State</span>
+        <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-6xl">
+          Your personal AI tutor that <span className="relative whitespace-nowrap"><span className="bg-gradient-to-br from-indigo-500 to-violet-500 bg-clip-text text-transparent">actually gets you</span>
+          <svg className="absolute -bottom-2 left-0 w-full" height="12" viewBox="0 0 200 12" fill="none"><path d="M2 9C50 3 150 3 198 9" stroke="#a78bfa" strokeWidth="4" strokeLinecap="round"/></svg></span>
+        </h1>
+        <p className="mx-auto mt-7 max-w-xl text-lg text-slate-500">Ask any doubt in plain language. Get clear, step-by-step explanations — topic by topic, exactly to your class and board.</p>
+        <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Btn onClick={onStart} className="text-base">Start learning free {Ic.arrow({cls:"h-5 w-5"})}</Btn>
+          <Btn variant="ghost" onClick={onStart} className="text-base">{Ic.book({cls:"h-5 w-5"})} See how it works</Btn>
+        </div>
+        <div className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-400">
+          <span className="flex text-amber-400">{[0,1,2,3,4].map(i=>Ic.star({key:i,cls:"h-4 w-4"}))}</span> Loved by students across India
+        </div>
+      </section>
+      <section className="mx-auto max-w-6xl px-5 pb-24">
+        <div className="grid gap-5 sm:grid-cols-2">
+          {FEATURES.map(f=>(
+            <div key={f.title} className="group relative overflow-hidden rounded-3xl border border-white/60 bg-white/70 p-7 shadow-xl shadow-slate-200/50 backdrop-blur-sm transition-all hover:-translate-y-1 hover:shadow-2xl">
+              <div className={`absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br ${f.grad} opacity-10 blur-2xl`}/>
+              <div className={`grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br ${f.grad} text-white shadow-lg`}>{f.icon({cls:"h-7 w-7"})}</div>
+              <h3 className="mt-5 text-2xl font-extrabold">{f.title}</h3>
+              <p className="mt-2 text-slate-500">{f.desc}</p>
+              <ul className="mt-5 space-y-2">{f.points.map(p=>(
+                <li key={p} className="flex items-center gap-2.5 text-sm font-bold text-slate-700"><span className={`grid h-5 w-5 place-items-center rounded-full ${f.soft} ${f.text}`}>{Ic.check({cls:"h-3.5 w-3.5"})}</span>{p}</li>
+              ))}</ul>
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 grid grid-cols-3 gap-4 rounded-3xl border border-white/60 bg-white/60 p-6 text-center backdrop-blur-sm">
+          {[["6–12","Classes covered"],["6+","Core subjects"],["100%","On-syllabus"]].map(([n,l])=>(
+            <div key={l}><p className="font-display text-3xl font-extrabold text-indigo-600">{n}</p><p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-400">{l}</p></div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ---------- Onboarding ---------- */
+function Dots({total,current}){return <div className="flex items-center gap-2">{Array.from({length:total}).map((_,i)=><div key={i} className={`h-2 rounded-full transition-all ${i===current?"w-8 bg-indigo-500":i<current?"w-2 bg-indigo-300":"w-2 bg-slate-200"}`}/>)}</div>;}
+function Onboarding({onHome,onDone}){
+  const [step,setStep]=useState(0),[board,setBoard]=useState(null),[klass,setKlass]=useState(null),[lang,setLang]=useState("en");
+  const canNext=(step===0&&board)||(step===1&&klass)||step===2;
+  const next=()=>{ step<2?setStep(step+1):onDone({board,klass,lang}); };
+  return (
+    <div className="min-h-screen"><Backdrop/>
+      <Nav onHome={onHome} right={<Dots total={3} current={step}/>}/>
+      <div className="mx-auto max-w-3xl px-5 py-12">
+        <p className="text-sm font-extrabold uppercase tracking-widest text-indigo-400">Step {step+1} of 3</p>
+        <h2 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">{["Which board are you studying?","Pick your class","Preferred language"][step]}</h2>
+        <p className="mt-2 text-slate-500">{["We tailor every explanation to your board's syllabus.","So topics and difficulty match your grade.","Your tutor can explain in any of these — switch anytime."][step]}</p>
+
+        {step===0&&<div className="mt-8 grid gap-4 sm:grid-cols-2">{BOARDS.map(b=>{const t=tint(b.tint),a=board===b.id;return(
+          <button key={b.id} onClick={()=>setBoard(b.id)} className={`flex items-center gap-4 rounded-3xl border bg-white/80 p-5 text-left backdrop-blur-sm transition-all hover:-translate-y-0.5 ${a?`${t.border} ring-2 ${t.ring} shadow-lg`:"border-slate-100 shadow-sm"}`}>
+            <div className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-2xl ${t.soft}`}>{b.emoji}</div>
+            <div className="min-w-0"><p className="text-lg font-extrabold">{b.name}</p><p className="truncate text-sm text-slate-400">{b.full}</p></div>
+            {a&&<div className={`ml-auto grid h-7 w-7 place-items-center rounded-full ${t.solid} text-white`}>{Ic.check({cls:"h-4 w-4"})}</div>}
+          </button>);})}</div>}
+
+        {step===1&&<div className="mt-8 grid grid-cols-3 gap-4 sm:grid-cols-4">{CLASSES.map(c=>{const a=klass===c;return(
+          <button key={c} onClick={()=>setKlass(c)} className={`aspect-square rounded-3xl border backdrop-blur-sm transition-all hover:-translate-y-0.5 ${a?"border-indigo-300 bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/30":"border-slate-100 bg-white/80 text-slate-800 shadow-sm"}`}>
+            <p className={`text-xs font-bold uppercase tracking-wide ${a?"text-white/70":"text-slate-400"}`}>Class</p><p className="font-display text-3xl font-extrabold">{c}</p></button>);})}</div>}
+
+        {step===2&&<div className="mt-8 grid gap-4 sm:grid-cols-3">{LANGS.map(l=>{const a=lang===l.id;return(
+          <button key={l.id} onClick={()=>setLang(l.id)} className={`rounded-3xl border bg-white/80 p-6 text-center backdrop-blur-sm transition-all hover:-translate-y-0.5 ${a?"border-indigo-300 ring-2 ring-indigo-200 shadow-lg":"border-slate-100 shadow-sm"}`}>
+            <p className="text-2xl font-extrabold">{l.native}</p><p className="mt-1 text-sm text-slate-400">{l.name}</p></button>);})}</div>}
+
+        <div className="mt-10 flex items-center justify-between">
+          <Btn variant="ghost" onClick={()=>step===0?onHome():setStep(step-1)}>{Ic.back({cls:"h-4 w-4"})} Back</Btn>
+          <Btn onClick={next} disabled={!canNext}>{step===2?"Start learning":"Continue"} {Ic.arrow({cls:"h-4 w-4"})}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Browse ---------- */
+function Browse({profile,onHome,onOpenTopic}){
+  const [active,setActive]=useState(null),[q,setQ]=useState("");
+  const board=BOARDS.find(b=>b.id===profile.board), subject=SUBJECTS.find(s=>s.id===active);
+  const filtered=useMemo(()=>{ if(!subject)return[]; if(!q.trim())return subject.chapters; const x=q.toLowerCase();
+    return subject.chapters.map(c=>({...c,topics:c.topics.filter(t=>t.toLowerCase().includes(x))})).filter(c=>c.topics.length||c.name.toLowerCase().includes(x)); },[subject,q]);
+  return (
+    <div className="min-h-screen"><Backdrop/>
+      <Nav onHome={onHome} right={<div className="flex items-center gap-2 rounded-full bg-white/70 px-3 py-1.5 text-xs font-extrabold text-slate-600 ring-1 ring-slate-200"><span>{board?.emoji}</span> {board?.name} · Class {profile.klass}</div>}/>
+      <div className="mx-auto max-w-6xl px-5 py-10">
+        {!subject?(<>
+          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">What do you want to learn today?</h2>
+          <p className="mt-2 text-slate-500">Pick a subject, then choose a topic to start a focused chat with your tutor.</p>
+          <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{SUBJECTS.map(s=>{const t=tint(s.tint),n=s.chapters.reduce((a,c)=>a+c.topics.length,0);return(
+            <button key={s.id} onClick={()=>{setActive(s.id);setQ("");}} className="group relative overflow-hidden rounded-3xl border border-white/60 bg-white/75 p-6 text-left shadow-lg shadow-slate-200/40 backdrop-blur-sm transition-all hover:-translate-y-1 hover:shadow-xl">
+              <div className={`absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br ${t.grad} opacity-10 blur-2xl`}/>
+              <div className={`grid h-14 w-14 place-items-center rounded-2xl text-3xl ${t.soft}`}>{s.emoji}</div>
+              <h3 className="mt-4 text-xl font-extrabold">{s.name}</h3><p className="mt-1 text-sm text-slate-400">{s.blurb}</p>
+              <div className="mt-5 flex items-center justify-between"><span className={`rounded-full px-3 py-1 text-xs font-extrabold ${t.soft} ${t.text}`}>{s.chapters.length} chapters · {n} topics</span>{Ic.chevron({cls:"h-5 w-5 text-slate-300 transition-transform group-hover:translate-x-1 group-hover:text-indigo-400"})}</div>
+            </button>);})}</div>
+        </>):(<>
+          <button onClick={()=>setActive(null)} className="mb-5 inline-flex items-center gap-2 text-sm font-extrabold text-slate-500 hover:text-indigo-600">{Ic.back({cls:"h-4 w-4"})} All subjects</button>
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-center gap-4"><div className={`grid h-16 w-16 place-items-center rounded-3xl text-3xl ${tint(subject.tint).soft}`}>{subject.emoji}</div>
+              <div><h2 className="text-3xl font-extrabold tracking-tight">{subject.name}</h2><p className="text-slate-400">{subject.blurb}</p></div></div>
+            <div className="relative w-full sm:w-72"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">{Ic.search({cls:"h-4 w-4"})}</span>
+              <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search topics…" className="w-full rounded-2xl border border-slate-200 bg-white/80 py-3 pl-11 pr-4 text-sm font-semibold outline-none ring-indigo-200 focus:ring-2"/></div>
+          </div>
+          <div className="mt-8 space-y-7">{filtered.map(ch=>(
+            <div key={ch.id}><div className="mb-3 flex items-center gap-3"><span className={`h-2.5 w-2.5 rounded-full ${tint(subject.tint).dot}`}/><h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-500">{ch.name}</h3></div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{ch.topics.map(topic=>(
+                <button key={topic} onClick={()=>onOpenTopic({subject,chapter:ch.name,topic})} className="group flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/80 p-4 text-left shadow-sm backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
+                  <span className="text-sm font-extrabold text-slate-700 group-hover:text-indigo-600">{topic}</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-500 transition-colors group-hover:bg-indigo-500 group-hover:text-white">{Ic.chat({cls:"h-4 w-4"})}</span>
+                </button>))}</div></div>))}
+            {filtered.length===0&&<div className="rounded-3xl border border-dashed border-slate-200 bg-white/60 p-10 text-center text-slate-400">{Ic.spark({cls:"mx-auto h-6 w-6"})}<p className="mt-2 font-bold">No topics match “{q}”.</p></div>}
+          </div>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Chat ---------- */
+const STARTERS=(t)=>[`Explain "${t}" simply`,`Give me a solved example`,`What mistakes do students make here?`,`Quick 3-question check`];
+function reply(topic,text){return `Great question about ${topic}! Let's break it down step by step.\n\n1. First, picture the core idea in plain terms.\n2. Then we apply it to "${text.slice(0,40)}…".\n3. Finally, watch the classic mistake students make here.\n\nWant me to give you a solved example next?`;}
+function Bubble({role,content}){const u=role==="user";return(
+  <div className={`flex gap-3 ${u?"flex-row-reverse":""}`}>
+    <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl text-lg shadow-sm ${u?"bg-slate-200":"bg-gradient-to-br from-indigo-500 to-violet-500 text-white"}`}>{u?"🧑‍🎓":"🦉"}</div>
+    <div className={`max-w-[78%] whitespace-pre-wrap rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm ${u?"rounded-tr-md bg-indigo-500 text-white":"rounded-tl-md border border-slate-100 bg-white text-slate-700"}`}>{content}</div>
+  </div>);}
+function Chat({session,profile,onHome,onBack}){
+  const {subject,chapter,topic}=session, t=tint(subject.tint);
+  const [msgs,setMsgs]=useState([{role:"tutor",content:`Hi! I'm your tutor for ${topic}. Ask me anything about this topic — I'll explain it step by step. Where should we start? 🦉`}]);
+  const [input,setInput]=useState(""),[typing,setTyping]=useState(false),ref=useRef(null);
+  useEffect(()=>{ref.current&&ref.current.scrollTo({top:ref.current.scrollHeight,behavior:"smooth"});},[msgs,typing]);
+  const send=(text)=>{const v=(text??input).trim(); if(!v||typing)return; setMsgs(m=>[...m,{role:"user",content:v}]); setInput(""); setTyping(true);
+    setTimeout(()=>{setTyping(false); setMsgs(m=>[...m,{role:"tutor",content:reply(topic,v)}]);},700);};
+  return (
+    <div className="flex h-screen flex-col"><Backdrop/>
+      <Nav onHome={onHome} right={<button onClick={()=>setMsgs(msgs.slice(0,1))} className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-xs font-extrabold text-slate-600 ring-1 ring-slate-200 hover:text-indigo-600">{Ic.reset({cls:"h-3.5 w-3.5"})} New chat</button>}/>
+      <div className="mx-auto flex w-full max-w-5xl flex-1 gap-5 overflow-hidden px-4 py-5">
+        <aside className="hidden w-64 shrink-0 flex-col gap-4 lg:flex">
+          <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-extrabold text-slate-500 hover:text-indigo-600">{Ic.back({cls:"h-4 w-4"})} Topics</button>
+          <div className="rounded-3xl border border-white/60 bg-white/75 p-5 shadow-lg shadow-slate-200/40 backdrop-blur-sm">
+            <div className={`grid h-12 w-12 place-items-center rounded-2xl text-2xl ${t.soft}`}>{subject.emoji}</div>
+            <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">{subject.name} · {chapter}</p>
+            <h2 className="mt-1 text-lg font-extrabold leading-snug">{topic}</h2>
+            <div className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-extrabold ${t.soft} ${t.text}`}>{Ic.spark({cls:"h-3.5 w-3.5"})} Focused on this topic</div>
+          </div>
+          <div className="rounded-3xl border border-white/60 bg-white/60 p-5 text-sm text-slate-500 backdrop-blur-sm">
+            <p className="flex items-center gap-2 font-extrabold text-slate-700">{Ic.bulb({cls:"h-4 w-4 text-amber-500"})} Tip</p>
+            <p className="mt-2">Ask “why”, not just “what”. The tutor explains reasoning, not just answers.</p></div>
+        </aside>
+        <main className="flex min-w-0 flex-1 flex-col rounded-3xl border border-white/60 bg-white/50 shadow-xl shadow-slate-200/50 backdrop-blur-sm">
+          <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 lg:hidden">
+            <button onClick={onBack}>{Ic.back({cls:"h-5 w-5 text-slate-500"})}</button>
+            <div className={`grid h-8 w-8 place-items-center rounded-xl text-base ${t.soft}`}>{subject.emoji}</div>
+            <div className="min-w-0"><p className="truncate text-sm font-extrabold">{topic}</p><p className="truncate text-xs text-slate-400">{subject.name} · {chapter}</p></div>
+          </div>
+          <div ref={ref} className="flex-1 space-y-5 overflow-y-auto px-5 py-6">
+            {msgs.map((m,i)=><Bubble key={i} role={m.role==="user"?"user":"tutor"} content={m.content}/>)}
+            {typing&&<div className="flex gap-3"><div className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-lg text-white">🦉</div>
+              <div className="flex items-center gap-1 rounded-3xl rounded-tl-md border border-slate-100 bg-white px-4 py-4">{[0,1,2].map(i=><span key={i} className="h-2 w-2 animate-bounce rounded-full bg-indigo-300" style={{animationDelay:`${i*0.15}s`}}/>)}</div></div>}
+          </div>
+          {msgs.length<=1&&<div className="flex flex-wrap gap-2 px-5 pb-3">{STARTERS(topic).map(s=><button key={s} onClick={()=>send(s)} className="rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-extrabold text-slate-600 transition-colors hover:border-indigo-300 hover:text-indigo-600">{s}</button>)}</div>}
+          <div className="border-t border-slate-100 p-3">
+            <div className="flex items-end gap-2 rounded-3xl bg-white p-2 shadow-sm ring-1 ring-slate-200 focus-within:ring-2 focus-within:ring-indigo-300">
+              <textarea rows={1} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} placeholder={`Ask anything about ${topic}…`} className="max-h-32 flex-1 resize-none bg-transparent px-3 py-2 text-sm outline-none placeholder:text-slate-400"/>
+              <button onClick={()=>send()} disabled={!input.trim()||typing} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/30 transition-all active:scale-95 disabled:opacity-40">{Ic.send({cls:"h-5 w-5"})}</button>
+            </div>
+            <p className="mt-2 px-2 text-center text-[11px] text-slate-400">{Ic.book({cls:"mr-1 inline h-3 w-3"})} Answers stay scoped to <b>{topic}</b> · {profile.board.toUpperCase()} Class {profile.klass}</p>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- App ---------- */
+function App(){
+  const [screen,setScreen]=useState("landing"),[profile,setProfile]=useState(null),[session,setSession]=useState(null);
+  return (<>
+    {screen==="landing"&&<Landing onStart={()=>setScreen("onboarding")}/>}
+    {screen==="onboarding"&&<Onboarding onHome={()=>setScreen("landing")} onDone={p=>{setProfile(p);setScreen("browse");}}/>}
+    {screen==="browse"&&<Browse profile={profile} onHome={()=>setScreen("landing")} onOpenTopic={s=>{setSession(s);setScreen("chat");}}/>}
+    {screen==="chat"&&<Chat session={session} profile={profile} onHome={()=>setScreen("landing")} onBack={()=>setScreen("browse")}/>}
+  </>);
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

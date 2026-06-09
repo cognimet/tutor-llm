@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tuto.ai — Full App Demo (3 roles)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Nunito',system-ui,sans-serif}
+  h1,h2,h3,.font-display{font-family:'Baloo 2',cursive}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:9px;border:3px solid transparent;background-clip:content-box}
+</style>
+</head>
+<body class="bg-gradient-to-b from-slate-50 to-indigo-50/40 text-slate-900 antialiased">
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useRef, useEffect, useMemo } = React;
+
+/* ---------------- icons ---------------- */
+const SvgI=({d,cls="h-5 w-5",sw=2,fill="none"})=>(<svg viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" className={cls}>{d}</svg>);
+const Ic={
+  arrow:p=><SvgI {...p} d={<><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>}/>,
+  back:p=><SvgI {...p} d={<><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></>}/>,
+  check:p=><SvgI {...p} sw={3} d={<path d="M20 6 9 17l-5-5"/>}/>,
+  chat:p=><SvgI {...p} d={<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>}/>,
+  send:p=><SvgI {...p} d={<><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></>}/>,
+  search:p=><SvgI {...p} d={<><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>}/>,
+  chevron:p=><SvgI {...p} d={<path d="m9 18 6-6-6-6"/>}/>,
+  spark:p=><SvgI {...p} d={<path d="M12 3v4m0 10v4M3 12h4m10 0h4M6 6l2 2m8 8 2 2m0-12-2 2M8 16l-2 2"/>}/>,
+  brain:p=><SvgI {...p} d={<path d="M12 5a3 3 0 1 0-6 .14A4 4 0 0 0 4 11a4 4 0 0 0 .5 6.6A4 4 0 1 0 12 18Z"/>}/>,
+  target:p=><SvgI {...p} d={<><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></>}/>,
+  flame:p=><SvgI {...p} d={<path d="M12 2c1 4 5 5 5 9a5 5 0 0 1-10 0c0-2 1-3 2-4 .5 2 3 2 3 4 1-1 0-5 0-9Z"/>}/>,
+  list:p=><SvgI {...p} d={<><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></>}/>,
+  x:p=><SvgI {...p} d={<><path d="M18 6 6 18M6 6l12 12"/></>}/>,
+  power:p=><SvgI {...p} d={<><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></>}/>,
+  logout:p=><SvgI {...p} d={<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></>}/>,
+  grad:p=><SvgI {...p} d={<><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1 3 3 6 3s6-2 6-3v-5"/></>}/>,
+  users:p=><SvgI {...p} d={<><path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="7" r="4"/></>}/>,
+  shield:p=><SvgI {...p} d={<><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></>}/>,
+  book:p=><SvgI {...p} d={<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>}/>,
+  clip:p=><SvgI {...p} d={<><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="m9 14 2 2 4-4"/></>}/>,
+};
+
+/* ---------------- design atoms ---------------- */
+const TINTS={indigo:{soft:"bg-indigo-50",text:"text-indigo-600",grad:"from-indigo-500 to-violet-500",dot:"bg-indigo-400"},emerald:{soft:"bg-emerald-50",text:"text-emerald-600",grad:"from-emerald-500 to-teal-500",dot:"bg-emerald-400"},amber:{soft:"bg-amber-50",text:"text-amber-600",grad:"from-amber-500 to-orange-500",dot:"bg-amber-400"},rose:{soft:"bg-rose-50",text:"text-rose-600",grad:"from-rose-500 to-pink-500",dot:"bg-rose-400"},sky:{soft:"bg-sky-50",text:"text-sky-600",grad:"from-sky-500 to-cyan-500",dot:"bg-sky-400"},violet:{soft:"bg-violet-50",text:"text-violet-600",grad:"from-violet-500 to-fuchsia-500",dot:"bg-violet-400"}};
+const tint=n=>TINTS[n]||TINTS.indigo;
+const Backdrop=()=>(<div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+  <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-indigo-300/40 blur-3xl"/>
+  <div className="absolute top-1/3 -right-24 h-96 w-96 rounded-full bg-rose-300/40 blur-3xl"/>
+  <div className="absolute -bottom-32 left-1/4 h-96 w-96 rounded-full bg-amber-200/50 blur-3xl"/>
+  <div className="absolute inset-0" style={{backgroundImage:"radial-gradient(circle at 1px 1px, rgba(99,102,241,0.08) 1px, transparent 0)",backgroundSize:"22px 22px"}}/></div>);
+const Logo=({sub="AI Tutor"})=>(<div className="flex items-center gap-2.5 select-none">
+  <div className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-lg text-white shadow-lg shadow-indigo-500/30">🦉</div>
+  <div className="leading-tight"><p className="font-display font-extrabold tracking-tight text-slate-800">Tuto<span className="text-indigo-500">.ai</span></p>
+  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{sub}</p></div></div>);
+const Btn=({children,variant="primary",className="",...p})=>{const s={primary:"bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/30 hover:shadow-xl px-5 py-3",ghost:"bg-white/70 text-slate-700 ring-1 ring-slate-200 hover:bg-white px-5 py-3",soft:"bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-5 py-3"}[variant];return <button className={`inline-flex items-center justify-center gap-2 rounded-2xl font-extrabold transition-all active:scale-[0.97] disabled:opacity-40 ${s} ${className}`} {...p}>{children}</button>;};
+const Card=({children,className=""})=>(<div className={`rounded-3xl border border-white/60 bg-white/75 shadow-lg shadow-slate-200/40 backdrop-blur-sm ${className}`}>{children}</div>);
+const Header=({user,onLogout,right})=>{const lbl={admin:"Admin",student:"Student",parent:"Parent"}[user.role];return(
+  <header className="sticky top-0 z-20 border-b border-white/40 bg-white/60 backdrop-blur-xl"><div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3"><Logo sub={lbl}/>
+  <div className="flex items-center gap-3">{right}<span className="hidden text-sm font-bold text-slate-600 sm:block">{user.name}</span>
+  <button onClick={onLogout} className="grid h-9 w-9 place-items-center rounded-xl bg-white/70 text-slate-500 ring-1 ring-slate-200 hover:text-rose-500" title="Log out">{Ic.logout({cls:"h-4 w-4"})}</button></div></div></header>);};
+
+/* ---------------- mock data ---------------- */
+const SUBJECTS=[
+  {id:"maths",name:"Mathematics",emoji:"📐",tint:"indigo",blurb:"Numbers, algebra, geometry & more",chapters:[
+    {id:"rn",name:"Real Numbers",topics:["Euclid's Division Lemma","Fundamental Theorem of Arithmetic","Rational & Irrational Numbers"]},
+    {id:"poly",name:"Polynomials",topics:["Zeroes of a Polynomial","Zeroes & Coefficients","Division Algorithm"]},
+    {id:"trig",name:"Introduction to Trigonometry",topics:["Trigonometric Ratios","Trigonometric Identities","Heights & Distances"]}]},
+  {id:"science",name:"Science",emoji:"🔬",tint:"emerald",blurb:"Physics, Chemistry & Biology",chapters:[
+    {id:"light",name:"Light – Reflection & Refraction",topics:["Laws of Reflection","Spherical Mirrors","Lens Formula"]},
+    {id:"life",name:"Life Processes",topics:["Nutrition","Respiration","Transportation"]}]},
+  {id:"social",name:"Social Science",emoji:"🌏",tint:"amber",blurb:"History, Geography & Civics",chapters:[
+    {id:"nat",name:"Nationalism in India",topics:["Non-Cooperation Movement","Civil Disobedience"]}]},
+  {id:"english",name:"English",emoji:"✍️",tint:"sky",blurb:"Grammar, literature & writing",chapters:[
+    {id:"gram",name:"Grammar Essentials",topics:["Tenses","Reported Speech","Active & Passive Voice"]}]},
+  {id:"cs",name:"Computer",emoji:"💻",tint:"violet",blurb:"Coding, logic & digital skills",chapters:[
+    {id:"py",name:"Python Basics",topics:["Variables & Data Types","Loops","Functions"]}]},
+];
+
+/* ---------------- mock AI ---------------- */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const mockReply=(topic,msg)=>`Great question about **${topic}**! Let's break it down step by step.\n\n1. **Core idea** — first picture what's really happening in plain terms.\n2. **Apply it** — we use that idea on "${msg.slice(0,42)}…".\n3. **Watch out** — the classic mistake here is rushing step 2.\n\nQuick check: can you tell me in one line why step 1 matters? 🦉`;
+const mockAssessment=(topic)=>([
+  {id:1,question:`Which statement best describes ${topic}?`,options:["A core definition","An unrelated idea","A random fact","None of these"],correct:0,concept:"Definition",explanation:"The definition anchors everything else."},
+  {id:2,question:`What is the first step when applying ${topic}?`,options:["Guess","Identify the given information","Skip ahead","Memorise the answer"],correct:1,concept:"Application",explanation:"Always start by identifying what you're given."},
+  {id:3,question:`A common mistake in ${topic} is:`,options:["Checking units","Rushing without understanding","Drawing a diagram","Re-reading"],correct:1,concept:"Common mistakes",explanation:"Rushing leads to avoidable errors."},
+]);
+const mockGaps=(qs,answers)=>{const wrong=qs.filter(q=>answers[q.id]!==q.correct);
+  return {gaps:wrong.map((q,i)=>({id:i+1,concept:q.concept,severity:q.concept==="Application"?"medium":"low",recommendation:`Revise "${q.concept.toLowerCase()}" with a worked example.`,topic_name:""})),
+    summary: wrong.length===0?"No gaps detected — you answered everything correctly. Strong work!":`You understand some parts well but slip on ${wrong.map(w=>w.concept).join(", ")}. Focus practice there.`};};
+const mockPlan=(topic,gaps)=>({title:"Your focused next steps",items:[
+  {id:1,title:"Watch a 5-min recap",detail:"Refresh the core definition.",concept:"Definition",minutes:5,done:false},
+  {id:2,title:"Solve 3 guided examples",detail:"Practice setting up problems step by step.",concept:"Application",minutes:15,done:false},
+  {id:3,title:"Re-take the mini quiz",detail:"Confirm the gap is closed.",concept:"Application",minutes:5,done:false}]});
+
+/* ---------------- shared progress store (per student) ---------------- */
+const initialProgress=()=>({mastery:62,accuracy:71,open_gaps:1,streak_days:4,topics_studied:7,trend:[48,52,55,58,60,61,62]});
+
+/* ================= AUTH ================= */
+const DEMOS=[{role:"student",label:"Student",icon:Ic.grad,name:"Aarav Sharma"},{role:"parent",label:"Parent",icon:Ic.users,name:"Mr. Sharma"},{role:"admin",label:"Admin",icon:Ic.shield,name:"Admin User"}];
+function Auth({onLogin}){
+  return(<div className="min-h-screen"><Backdrop/>
+    <div className="mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-5 py-10 lg:grid-cols-2">
+      <div className="hidden lg:block"><Logo/>
+        <h1 className="mt-10 text-5xl font-extrabold leading-[1.1] tracking-tight">Your personal AI tutor that <span className="bg-gradient-to-br from-indigo-500 to-violet-500 bg-clip-text text-transparent">actually gets you</span></h1>
+        <p className="mt-6 max-w-md text-lg text-slate-500">Ask any doubt, take a quick check, and get a focused plan for exactly what you misunderstand — built for the Indian syllabus.</p>
+        <div className="mt-8 space-y-3">{["Topic-wise AI tutor chat","Mini-assessment + gap detection","Personalized next-steps & progress"].map(t=>(
+          <p key={t} className="flex items-center gap-3 font-bold text-slate-700"><span className="grid h-6 w-6 place-items-center rounded-full bg-indigo-50 text-indigo-600">{Ic.spark({cls:"h-3.5 w-3.5"})}</span>{t}</p>))}</div>
+      </div>
+      <div className="mx-auto w-full max-w-md rounded-3xl border border-white/60 bg-white/80 p-7 shadow-xl shadow-slate-200/50 backdrop-blur-sm">
+        <div className="lg:hidden"><Logo/></div>
+        <h2 className="mt-4 text-2xl font-extrabold">Welcome back 👋</h2>
+        <p className="text-slate-500">This is a live demo — pick a role to sign in.</p>
+        <div className="mt-6 grid gap-3">
+          {DEMOS.map(d=>(<button key={d.role} onClick={()=>onLogin(d)} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">{d.icon({cls:"h-6 w-6"})}</span>
+            <div className="flex-1"><p className="font-extrabold text-slate-800">Continue as {d.label}</p><p className="text-xs text-slate-400">{d.name}</p></div>
+            {Ic.arrow({cls:"h-5 w-5 text-slate-300"})}</button>))}
+        </div>
+        <p className="mt-5 text-center text-xs text-slate-400">Demo runs entirely in your browser. No backend needed.</p>
+      </div>
+    </div></div>);
+}
+
+/* ================= STUDENT ================= */
+function StudentApp({user,onLogout}){
+  const [view,setView]=useState("home");
+  const [ctx,setCtx]=useState(null);
+  const [progress,setProgress]=useState(initialProgress());
+  const [gaps,setGaps]=useState([{id:99,concept:"Application",topic_name:"Polynomials",severity:"medium"}]);
+  const open=(payload)=>{setCtx(payload);setView("chat");};
+  const bumpMastery=(d)=>setProgress(p=>({...p,mastery:Math.max(0,Math.min(100,p.mastery+d)),trend:[...p.trend.slice(1),Math.max(0,Math.min(100,p.mastery+d))]}));
+  return(<div className={view==="chat"?"h-screen":"min-h-screen"}><Backdrop/>
+    <Header user={user} onLogout={onLogout}/>
+    {view==="home"
+      ? <StudentHome user={user} progress={progress} gaps={gaps} onOpen={open}/>
+      : <Chat ctx={ctx} onBack={()=>setView("home")} progress={progress} setProgress={setProgress} setGaps={setGaps} bumpMastery={bumpMastery}/>}
+  </div>);
+}
+function Stat({icon,tintName,label,value}){const t=tint(tintName);return(<Card className="p-4"><div className={`grid h-10 w-10 place-items-center rounded-2xl ${t.soft} ${t.text}`}>{icon({cls:"h-5 w-5"})}</div><p className="mt-3 text-2xl font-extrabold">{value}</p><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p></Card>);}
+function StudentHome({user,progress,gaps,onOpen}){
+  const [active,setActive]=useState(null),[q,setQ]=useState("");
+  const subject=SUBJECTS.find(s=>s.id===active);
+  const filtered=useMemo(()=>{if(!subject)return[];if(!q.trim())return subject.chapters;const x=q.toLowerCase();return subject.chapters.map(c=>({...c,topics:c.topics.filter(t=>t.toLowerCase().includes(x))})).filter(c=>c.topics.length);},[subject,q]);
+  return(<div className="mx-auto max-w-6xl px-5 py-8">
+    <h1 className="text-3xl font-extrabold tracking-tight">Hi {user.name.split(" ")[0]} 👋</h1>
+    <p className="text-slate-500">Class 10 · CBSE — ready to learn something today?</p>
+    <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <Stat icon={Ic.brain} tintName="indigo" label="Mastery" value={progress.mastery+"%"}/>
+      <Stat icon={Ic.target} tintName="emerald" label="Accuracy" value={progress.accuracy+"%"}/>
+      <Stat icon={Ic.list} tintName="amber" label="Open gaps" value={gaps.length}/>
+      <Stat icon={Ic.flame} tintName="rose" label="Day streak" value={progress.streak_days}/>
+    </div>
+    {gaps.length>0&&<Card className="mt-6 p-5"><p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Focus areas the AI found</p>
+      <div className="mt-3 flex flex-wrap gap-2">{gaps.map(g=><span key={g.id} className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-600">{g.concept} · {g.topic_name}</span>)}</div></Card>}
+    <div className="mt-10">
+      {!subject?(<>
+        <h2 className="text-2xl font-extrabold tracking-tight">What do you want to learn?</h2>
+        <p className="mt-1 text-slate-500">Pick a subject, then a topic to start a focused chat.</p>
+        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{SUBJECTS.map(s=>{const t=tint(s.tint),n=s.chapters.reduce((a,c)=>a+c.topics.length,0);return(
+          <button key={s.id} onClick={()=>{setActive(s.id);setQ("");}} className="group relative overflow-hidden rounded-3xl border border-white/60 bg-white/75 p-6 text-left shadow-lg shadow-slate-200/40 backdrop-blur-sm transition-all hover:-translate-y-1 hover:shadow-xl">
+            <div className={`absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br ${t.grad} opacity-10 blur-2xl`}/>
+            <div className={`grid h-14 w-14 place-items-center rounded-2xl text-3xl ${t.soft}`}>{s.emoji}</div>
+            <h3 className="mt-4 text-xl font-extrabold">{s.name}</h3><p className="mt-1 text-sm text-slate-400">{s.blurb}</p>
+            <div className="mt-5 flex items-center justify-between"><span className={`rounded-full px-3 py-1 text-xs font-extrabold ${t.soft} ${t.text}`}>{s.chapters.length} chapters · {n} topics</span>{Ic.chevron({cls:"h-5 w-5 text-slate-300 group-hover:text-indigo-400"})}</div></button>);})}</div>
+      </>):(<>
+        <button onClick={()=>setActive(null)} className="mb-5 inline-flex items-center gap-2 text-sm font-extrabold text-slate-500 hover:text-indigo-600">{Ic.back({cls:"h-4 w-4"})} All subjects</button>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex items-center gap-4"><div className={`grid h-16 w-16 place-items-center rounded-3xl text-3xl ${tint(subject.tint).soft}`}>{subject.emoji}</div>
+            <div><h2 className="text-3xl font-extrabold tracking-tight">{subject.name}</h2><p className="text-slate-400">{subject.blurb}</p></div></div>
+          <div className="relative w-full sm:w-72"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">{Ic.search({cls:"h-4 w-4"})}</span>
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search topics…" className="w-full rounded-2xl border border-slate-200 bg-white/80 py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200"/></div></div>
+        <div className="mt-8 space-y-7">{filtered.map(ch=>(<div key={ch.id}>
+          <div className="mb-3 flex items-center gap-3"><span className={`h-2.5 w-2.5 rounded-full ${tint(subject.tint).dot}`}/><h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-500">{ch.name}</h3></div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{ch.topics.map(topic=>(
+            <button key={topic} onClick={()=>onOpen({topic,chapter:ch.name,subject:subject.name,tint:subject.tint,emoji:subject.emoji})} className="group flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/80 p-4 text-left shadow-sm backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
+              <span className="text-sm font-extrabold text-slate-700 group-hover:text-indigo-600">{topic}</span>
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-500 group-hover:bg-indigo-500 group-hover:text-white">{Ic.chat({cls:"h-4 w-4"})}</span></button>))}</div></div>))}</div>
+      </>)}
+    </div>
+  </div>);
+}
+/* ---- chat + assessment ---- */
+function Bubble({role,content}){const u=role==="user";return(<div className={`flex gap-3 ${u?"flex-row-reverse":""}`}>
+  <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl text-lg shadow-sm ${u?"bg-slate-200":"bg-gradient-to-br from-indigo-500 to-violet-500 text-white"}`}>{u?"🧑‍🎓":"🦉"}</div>
+  <div className={`max-w-[78%] whitespace-pre-wrap rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm ${u?"rounded-tr-md bg-indigo-500 text-white":"rounded-tl-md border border-slate-100 bg-white text-slate-700"}`}>{content}</div></div>);}
+function Chat({ctx,onBack,setGaps,bumpMastery}){
+  const t=tint(ctx.tint);
+  const [msgs,setMsgs]=useState([{role:"tutor",content:`Hi! I'm your tutor for **${ctx.topic}**. Ask me anything about this topic — I'll explain step by step. Where should we start? 🦉`}]);
+  const [input,setInput]=useState(""),[typing,setTyping]=useState(false),[quiz,setQuiz]=useState(false),ref=useRef(null);
+  useEffect(()=>{ref.current&&ref.current.scrollTo({top:ref.current.scrollHeight,behavior:"smooth"});},[msgs,typing]);
+  const send=async(text)=>{const v=(text??input).trim();if(!v||typing)return;setMsgs(m=>[...m,{role:"user",content:v}]);setInput("");setTyping(true);await sleep(650);setTyping(false);setMsgs(m=>[...m,{role:"tutor",content:mockReply(ctx.topic,v)}]);};
+  const starters=[`Explain "${ctx.topic}" simply`,"Give me a solved example","What mistakes do students make here?"];
+  return(<div className="flex h-[calc(100vh-57px)] flex-col">
+    <div className="mx-auto flex w-full max-w-5xl flex-1 gap-5 overflow-hidden px-4 py-5">
+      <aside className="hidden w-64 shrink-0 flex-col gap-4 lg:flex">
+        <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-extrabold text-slate-500 hover:text-indigo-600">{Ic.back({cls:"h-4 w-4"})} Topics</button>
+        <div className="rounded-3xl border border-white/60 bg-white/75 p-5 shadow-lg shadow-slate-200/40 backdrop-blur-sm">
+          <div className={`grid h-12 w-12 place-items-center rounded-2xl text-2xl ${t.soft}`}>{ctx.emoji}</div>
+          <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">{ctx.subject} · {ctx.chapter}</p>
+          <h2 className="mt-1 text-lg font-extrabold leading-snug">{ctx.topic}</h2>
+          <button onClick={()=>setQuiz(true)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 px-3 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-indigo-500/30">{Ic.clip({cls:"h-4 w-4"})} Check my understanding</button></div>
+      </aside>
+      <main className="flex min-w-0 flex-1 flex-col rounded-3xl border border-white/60 bg-white/50 shadow-xl shadow-slate-200/50 backdrop-blur-sm">
+        <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 lg:hidden"><button onClick={onBack}>{Ic.back({cls:"h-5 w-5 text-slate-500"})}</button>
+          <p className="truncate text-sm font-extrabold">{ctx.topic}</p><button onClick={()=>setQuiz(true)} className="ml-auto rounded-xl bg-indigo-500 px-3 py-1.5 text-xs font-extrabold text-white">Quiz</button></div>
+        <div ref={ref} className="flex-1 space-y-5 overflow-y-auto px-5 py-6">{msgs.map((m,i)=><Bubble key={i} role={m.role} content={m.content}/>)}
+          {typing&&<div className="flex gap-3"><div className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-lg text-white">🦉</div><div className="flex items-center gap-1 rounded-3xl rounded-tl-md border border-slate-100 bg-white px-4 py-4">{[0,1,2].map(i=><span key={i} className="h-2 w-2 animate-bounce rounded-full bg-indigo-300" style={{animationDelay:`${i*0.15}s`}}/>)}</div></div>}</div>
+        {msgs.length<=1&&<div className="flex flex-wrap gap-2 px-5 pb-3">{starters.map(s=><button key={s} onClick={()=>send(s)} className="rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-extrabold text-slate-600 hover:border-indigo-300 hover:text-indigo-600">{s}</button>)}</div>}
+        <div className="border-t border-slate-100 p-3"><div className="flex items-end gap-2 rounded-3xl bg-white p-2 shadow-sm ring-1 ring-slate-200 focus-within:ring-2 focus-within:ring-indigo-300">
+          <textarea rows={1} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} placeholder={`Ask anything about ${ctx.topic}…`} className="max-h-32 flex-1 resize-none bg-transparent px-3 py-2 text-sm outline-none placeholder:text-slate-400"/>
+          <button onClick={()=>send()} disabled={!input.trim()||typing} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">{Ic.send({cls:"h-5 w-5"})}</button></div></div>
+      </main>
+    </div>
+    {quiz&&<Assessment topic={ctx.topic} onClose={()=>setQuiz(false)} setGaps={setGaps} bumpMastery={bumpMastery}/>}
+  </div>);
+}
+function Assessment({topic,onClose,setGaps,bumpMastery}){
+  const [stage,setStage]=useState("loading"),[qs,setQs]=useState([]),[ans,setAns]=useState({}),[res,setRes]=useState(null),[plan,setPlan]=useState(null),[busy,setBusy]=useState(false);
+  useEffect(()=>{(async()=>{await sleep(700);setQs(mockAssessment(topic));setStage("quiz");})();},[]);
+  const submit=async()=>{setBusy(true);await sleep(500);const score=qs.filter(q=>ans[q.id]===q.correct).length;const det=mockGaps(qs,ans);det.gaps.forEach(g=>g.topic_name=topic);setRes({score,total:qs.length,...det});bumpMastery(Math.round(score/qs.length*10)-3);setGaps(det.gaps.length?det.gaps:[]);setBusy(false);setStage("result");};
+  const build=async()=>{setBusy(true);await sleep(500);setPlan(mockPlan(topic,res.gaps));setBusy(false);setStage("plan");};
+  const toggle=(id)=>setPlan(p=>({...p,items:p.items.map(i=>i.id===id?{...i,done:!i.done}:i)}));
+  const all=qs.length&&qs.every(q=>ans[q.id]!=null);
+  const sev=s=>({high:"bg-rose-100 text-rose-600",medium:"bg-amber-100 text-amber-600",low:"bg-emerald-100 text-emerald-600"}[s]);
+  return(<div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
+    <div className="flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div className="flex items-center gap-2">
+        <span className="grid h-9 w-9 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">{Ic.target({cls:"h-5 w-5"})}</span>
+        <div><p className="text-sm font-extrabold">Mini-assessment</p><p className="text-xs text-slate-400">{topic}</p></div></div>
+        <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100">{Ic.x({cls:"h-5 w-5"})}</button></div>
+      <div className="flex-1 overflow-y-auto px-5 py-5">
+        {stage==="loading"&&<div className="py-16 text-center font-bold text-slate-400">Generating your quiz…</div>}
+        {stage==="quiz"&&<div className="space-y-6">{qs.map((q,qi)=>(<div key={q.id}><p className="font-extrabold text-slate-800">{qi+1}. {q.question}</p>
+          <div className="mt-3 grid gap-2">{q.options.map((o,oi)=>{const sel=ans[q.id]===oi;return(<button key={oi} onClick={()=>setAns(a=>({...a,[q.id]:oi}))} className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition-all ${sel?"border-indigo-300 bg-indigo-50 text-indigo-700":"border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>
+            <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${sel?"bg-indigo-500 text-white":"bg-slate-100 text-slate-500"}`}>{"ABCD"[oi]}</span>{o}</button>);})}</div></div>))}</div>}
+        {stage==="result"&&res&&<div className="space-y-5">
+          <div className="rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-500 p-6 text-center text-white"><p className="text-sm font-bold uppercase tracking-wide text-white/70">Your score</p><p className="font-display text-5xl font-extrabold">{res.score}/{res.total}</p></div>
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600"><p className="flex items-center gap-2 font-extrabold text-slate-800">{Ic.spark({cls:"h-4 w-4 text-indigo-500"})} What the AI noticed</p><p className="mt-1">{res.summary}</p></div>
+          {res.gaps.length>0&&<div><p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Knowledge gaps</p><div className="mt-2 space-y-2">{res.gaps.map(g=>(
+            <div key={g.id} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-white p-3"><span className={`mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase ${sev(g.severity)}`}>{g.severity}</span>
+              <div><p className="text-sm font-extrabold text-slate-800">{g.concept}</p><p className="text-xs text-slate-500">{g.recommendation}</p></div></div>))}</div></div>}</div>}
+        {stage==="plan"&&plan&&<div className="space-y-4"><div className="flex items-center gap-2">{Ic.list({cls:"h-5 w-5 text-indigo-500"})}<p className="font-extrabold">{plan.title}</p></div>
+          {plan.items.map(it=>(<button key={it.id} onClick={()=>toggle(it.id)} className="flex w-full items-start gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left hover:border-indigo-200">
+            <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${it.done?"border-emerald-500 bg-emerald-500 text-white":"border-slate-300"}`}>{it.done&&Ic.check({cls:"h-3.5 w-3.5"})}</span>
+            <div className="flex-1"><p className={`text-sm font-extrabold ${it.done?"text-slate-400 line-through":"text-slate-800"}`}>{it.title}</p><p className="text-xs text-slate-500">{it.detail}</p><p className="mt-1 text-[11px] font-bold text-indigo-400">~{it.minutes} min · {it.concept}</p></div></button>))}</div>}
+      </div>
+      <div className="border-t border-slate-100 p-4">
+        {stage==="quiz"&&<button onClick={submit} disabled={!all||busy} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 px-5 py-3 font-extrabold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">{busy?"Checking…":"Submit answers"} {Ic.arrow({cls:"h-4 w-4"})}</button>}
+        {stage==="result"&&<button onClick={build} disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 px-5 py-3 font-extrabold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">{busy?"Building…":"Get my next steps"} {Ic.arrow({cls:"h-4 w-4"})}</button>}
+        {stage==="plan"&&<button onClick={onClose} className="w-full rounded-2xl bg-slate-900 px-5 py-3 font-extrabold text-white">Done — back to tutor</button>}
+      </div>
+    </div></div>);
+}
+
+/* ================= PARENT ================= */
+const CHILDREN=[
+  {id:1,name:"Aarav Sharma",grade:10,board:"cbse",progress:{mastery:62,accuracy:71,open_gaps:1,streak_days:4,trend:[48,52,55,58,60,61,62]},gaps:[{id:1,concept:"Application",topic_name:"Polynomials",severity:"medium"}],assessments:[{id:1,topic_name:"Polynomials",score:2,total:3},{id:2,topic_name:"Trigonometric Ratios",score:3,total:3}]},
+  {id:2,name:"Diya Sharma",grade:8,board:"cbse",progress:{mastery:78,accuracy:84,open_gaps:0,streak_days:9,trend:[60,64,68,70,73,76,78]},gaps:[],assessments:[{id:3,topic_name:"Life Processes",score:3,total:3}]},
+];
+function Spark({data,color="#6366f1"}){const w=260,h=70,max=Math.max(...data),min=Math.min(...data),rng=max-min||1;
+  const pts=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-min)/rng)*h}`).join(" ");
+  return(<svg viewBox={`0 0 ${w} ${h}`} className="w-full h-20"><polyline points={pts} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>);}
+function ParentApp({user,onLogout}){
+  const [child,setChild]=useState(null);
+  return(<div className="min-h-screen"><Backdrop/><Header user={user} onLogout={onLogout}/>
+    <div className="mx-auto max-w-6xl px-5 py-8">{child?<ChildReport child={child} onBack={()=>setChild(null)}/>:(<>
+      <h1 className="text-3xl font-extrabold tracking-tight">Family dashboard</h1><p className="text-slate-500">Track how your children are learning.</p>
+      <div className="mt-6 grid gap-5 sm:grid-cols-2">{CHILDREN.map(c=>(
+        <button key={c.id} onClick={()=>setChild(c)} className="text-left"><Card className="p-6 transition-all hover:-translate-y-1 hover:shadow-xl">
+          <div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-2xl">🧑‍🎓</div>
+            <div><p className="text-lg font-extrabold">{c.name}</p><p className="text-sm text-slate-400">Class {c.grade} · {c.board.toUpperCase()}</p></div></div>{Ic.chevron({cls:"h-5 w-5 text-slate-300"})}</div>
+          <div className="mt-5 grid grid-cols-4 gap-2 text-center">{[["Mastery",c.progress.mastery+"%"],["Accuracy",c.progress.accuracy+"%"],["Gaps",c.progress.open_gaps],["Streak",c.progress.streak_days]].map(([l,v])=>(
+            <div key={l} className="rounded-2xl bg-slate-50 py-2"><p className="text-lg font-extrabold">{v}</p><p className="text-[10px] font-bold uppercase text-slate-400">{l}</p></div>))}</div></Card></button>))}</div>
+    </>)}</div></div>);
+}
+function ChildReport({child,onBack}){const p=child.progress;const sev=s=>({high:"bg-rose-100 text-rose-600",medium:"bg-amber-100 text-amber-600",low:"bg-emerald-100 text-emerald-600"}[s]);
+  return(<div><button onClick={onBack} className="mb-5 inline-flex items-center gap-2 text-sm font-extrabold text-slate-500 hover:text-indigo-600">{Ic.back({cls:"h-4 w-4"})} All children</button>
+    <h1 className="text-3xl font-extrabold tracking-tight">{child.name}</h1><p className="text-slate-500">Class {child.grade} · {child.board.toUpperCase()}</p>
+    <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4"><Stat icon={Ic.brain} tintName="indigo" label="Mastery" value={p.mastery+"%"}/><Stat icon={Ic.target} tintName="emerald" label="Accuracy" value={p.accuracy+"%"}/><Stat icon={Ic.list} tintName="amber" label="Open gaps" value={p.open_gaps}/><Stat icon={Ic.flame} tintName="rose" label="Streak" value={p.streak_days+"d"}/></div>
+    <Card className="mt-6 p-5"><p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Mastery over time</p><Spark data={p.trend}/></Card>
+    <div className="mt-6 grid gap-5 lg:grid-cols-2">
+      <Card className="p-5"><p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Open knowledge gaps</p><div className="mt-3 space-y-2">
+        {child.gaps.length===0&&<p className="text-sm text-slate-400">No open gaps — great work!</p>}
+        {child.gaps.map(g=>(<div key={g.id} className="flex items-center justify-between rounded-2xl border border-slate-100 p-3"><div><p className="text-sm font-extrabold">{g.concept}</p><p className="text-xs text-slate-400">{g.topic_name}</p></div><span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase ${sev(g.severity)}`}>{g.severity}</span></div>))}</div></Card>
+      <Card className="p-5"><p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Recent assessments</p><div className="mt-3 space-y-2">
+        {child.assessments.map(a=>(<div key={a.id} className="flex items-center justify-between rounded-2xl border border-slate-100 p-3"><p className="text-sm font-extrabold">{a.topic_name}</p><span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-extrabold text-indigo-600">{a.score}/{a.total}</span></div>))}</div></Card>
+    </div></div>);
+}
+
+/* ================= ADMIN ================= */
+const USERS0=[
+  {id:1,name:"Admin User",email:"admin@tuto.ai",role:"admin",grade:null,active:true},
+  {id:2,name:"Aarav Sharma",email:"student@tuto.ai",role:"student",grade:10,active:true},
+  {id:3,name:"Diya Sharma",email:"student2@tuto.ai",role:"student",grade:8,active:true},
+  {id:4,name:"Mr. Sharma",email:"parent@tuto.ai",role:"parent",grade:null,active:true},
+  {id:5,name:"Riya Patel",email:"riya@example.com",role:"student",grade:9,active:false},
+];
+function AdminApp({user,onLogout}){
+  const [tab,setTab]=useState("overview"),[users,setUsers]=useState(USERS0),[role,setRole]=useState(""),[q,setQ]=useState("");
+  const stats={students:users.filter(u=>u.role==="student").length,parents:users.filter(u=>u.role==="parent").length,subjects:SUBJECTS.length,chats:128,assessments:64,avg:2.4};
+  const cards=[["Students",stats.students,Ic.grad,"indigo"],["Parents",stats.parents,Ic.users,"emerald"],["Subjects",stats.subjects,Ic.book,"amber"],["Chat sessions",stats.chats,Ic.chat,"sky"],["Assessments",stats.assessments,Ic.clip,"rose"],["Avg score",stats.avg,Ic.target,"violet"]];
+  const signups=[3,5,2,6,4,7,5];
+  const filtered=users.filter(u=>(!role||u.role===role)&&(!q||u.name.toLowerCase().includes(q.toLowerCase())||u.email.includes(q.toLowerCase())));
+  const toggle=id=>setUsers(us=>us.map(u=>u.id===id?{...u,active:!u.active}:u));
+  return(<div className="min-h-screen"><Backdrop/><Header user={user} onLogout={onLogout} right={
+    <div className="hidden gap-1 rounded-2xl bg-white/70 p-1 ring-1 ring-slate-200 sm:flex">{["overview","users"].map(t=>(<button key={t} onClick={()=>setTab(t)} className={`rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize ${tab===t?"bg-indigo-500 text-white":"text-slate-500"}`}>{t}</button>))}</div>}/>
+    <div className="mx-auto max-w-6xl px-5 py-8">{tab==="overview"?(<>
+      <h1 className="text-3xl font-extrabold tracking-tight">Platform overview</h1><p className="text-slate-500">A live snapshot of Everything AI Tutor.</p>
+      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">{cards.map(([l,v,ic,tn])=>{const t=tint(tn);return(
+        <Card key={l} className="p-4"><div className={`grid h-10 w-10 place-items-center rounded-2xl ${t.soft} ${t.text}`}>{ic({cls:"h-5 w-5"})}</div><p className="mt-3 text-2xl font-extrabold">{v}</p><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{l}</p></Card>);})}</div>
+      <Card className="mt-6 p-5"><p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Signups by day</p>
+        <div className="mt-4 flex items-end gap-3 h-40">{signups.map((v,i)=>(<div key={i} className="flex flex-1 flex-col items-center gap-2"><div className="w-full rounded-t-xl bg-gradient-to-t from-indigo-500 to-violet-400" style={{height:`${v/7*100}%`}}/><span className="text-xs font-bold text-slate-400">{["M","T","W","T","F","S","S"][i]}</span></div>))}</div></Card>
+    </>):(<>
+      <h1 className="text-3xl font-extrabold tracking-tight">Users</h1>
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">{Ic.search({cls:"h-4 w-4"})}</span>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search name or email…" className="w-full rounded-2xl border border-slate-200 bg-white/80 py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200"/></div>
+        <select value={role} onChange={e=>setRole(e.target.value)} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-extrabold outline-none"><option value="">All roles</option><option value="student">Students</option><option value="parent">Parents</option><option value="admin">Admins</option></select></div>
+      <Card className="mt-5 overflow-hidden"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-extrabold uppercase tracking-wide text-slate-400">
+        <tr><th className="px-5 py-3">Name</th><th className="px-5 py-3">Role</th><th className="px-5 py-3">Class</th><th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead>
+        <tbody>{filtered.map(u=>(<tr key={u.id} className="border-t border-slate-100">
+          <td className="px-5 py-3"><p className="font-extrabold text-slate-800">{u.name}</p><p className="text-xs text-slate-400">{u.email}</p></td>
+          <td className="px-5 py-3"><span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-extrabold capitalize text-indigo-600">{u.role}</span></td>
+          <td className="px-5 py-3 text-slate-500">{u.grade?`Class ${u.grade}`:"—"}</td>
+          <td className="px-5 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${u.active?"bg-emerald-50 text-emerald-600":"bg-rose-50 text-rose-600"}`}>{u.active?"Active":"Disabled"}</span></td>
+          <td className="px-5 py-3 text-right"><button onClick={()=>toggle(u.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:border-indigo-300 hover:text-indigo-600">{Ic.power({cls:"h-3.5 w-3.5"})} {u.active?"Disable":"Enable"}</button></td></tr>))}</tbody></table></Card>
+    </>)}</div></div>);
+}
+
+/* ================= ROOT ================= */
+function App(){
+  const [user,setUser]=useState(null);
+  if(!user) return <Auth onLogin={setUser}/>;
+  const logout=()=>setUser(null);
+  if(user.role==="student") return <StudentApp user={user} onLogout={logout}/>;
+  if(user.role==="parent")  return <ParentApp user={user} onLogout={logout}/>;
+  return <AdminApp user={user} onLogout={logout}/>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

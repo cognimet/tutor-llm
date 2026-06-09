@@ -1,0 +1,35 @@
+# One-command full stack: Laravel API + React (Vite) frontend.
+# Usage:
+#   1) put your key in .env  (copy .env.example -> .env)
+#   2) docker compose up --build
+#   3) open http://localhost:5173
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /app/storage/db/database.sqlite
+      FRONTEND_URL: http://localhost:5173
+      # Real key comes from the root .env (gitignored). Leave blank to use mock AI.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MOCK: ${GEMINI_MOCK:-false}
+    volumes:
+      # Persist only the SQLite DB file's directory (keeps migrations intact).
+      - backend_db:/app/storage/db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+    depends_on:
+      - backend
+
+volumes:
+  backend_db:

@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Nunito", system-ui, sans-serif;
+}
+body {
+  @apply bg-gradient-to-b from-slate-50 to-indigo-50/40 text-slate-900 antialiased;
+}
+h1, h2, h3, .font-display {
+  font-family: "Baloo 2", cursive;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: #c7d2fe; border-radius: 9px;
+  border: 3px solid transparent; background-clip: content-box;
+}
+
+/* ---------------------------------------------------------------------------
+   Tutor chat: rich Markdown rendering (no @tailwindcss/typography dependency)
+--------------------------------------------------------------------------- */
+.md { @apply text-[0.925rem] leading-relaxed; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { @apply my-2.5; }
+.md strong { @apply font-extrabold text-slate-900; }
+.md em { @apply italic; }
+.md a { @apply font-bold text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-700; }
+.md ul { @apply my-2.5 list-disc space-y-1.5 pl-5; }
+.md ol { @apply my-2.5 list-decimal space-y-1.5 pl-5; }
+.md li { @apply pl-1 marker:text-indigo-400; }
+.md li > ul, .md li > ol { @apply my-1.5; }
+.md h1 { @apply mb-2 mt-4 text-lg font-extrabold text-slate-900; }
+.md h2 { @apply mb-2 mt-4 text-base font-extrabold text-slate-900; }
+.md h3 { @apply mb-1.5 mt-3 text-sm font-extrabold uppercase tracking-wide text-slate-500; }
+.md blockquote { @apply my-3 border-l-4 border-indigo-200 bg-indigo-50/50 py-1 pl-4 text-slate-600; }
+.md code { @apply rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-indigo-700; }
+.md pre { @apply my-3 overflow-x-auto rounded-2xl bg-slate-900 p-4 text-[0.85em] leading-relaxed; }
+.md pre code { @apply bg-transparent p-0 text-slate-100; }
+.md hr { @apply my-4 border-slate-200; }
+
+/* Fenced code blocks: header bar (language + copy) over a dark body. */
+.md-code { @apply my-3 overflow-hidden rounded-2xl bg-slate-900 ring-1 ring-slate-800; }
+.md-code-bar { @apply flex items-center justify-between border-b border-white/10 bg-slate-800/70 px-3 py-1.5; }
+.md-code-lang { @apply font-mono text-[0.7rem] font-bold uppercase tracking-wider text-slate-400; }
+.md-code-copy { @apply rounded-md px-2 py-0.5 font-sans text-[0.7rem] font-bold text-slate-300 transition-colors hover:bg-white/10 hover:text-white; }
+.md-code-copy.is-copied { @apply text-emerald-400; }
+.md-code pre { @apply my-0 rounded-none bg-transparent p-4; }
+.md table { @apply my-3 w-full border-collapse overflow-hidden rounded-xl text-left text-[0.85em]; }
+.md th { @apply border border-slate-200 bg-slate-50 px-3 py-2 font-extrabold text-slate-700; }
+.md td { @apply border border-slate-200 px-3 py-2; }
+.md .katex-display { @apply my-3 overflow-x-auto overflow-y-hidden py-1; }
+
+/* Streaming caret */
+.md-stream > :last-child::after {
+  content: "▍";
+  @apply ml-0.5 inline-block animate-pulse text-indigo-400;
+}
+
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.msg-in { animation: msg-in 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* "Tutor is thinking…" three-dot loader (before the first token arrives). */
+.thinking { @apply inline-flex items-center gap-1; }
+.thinking i {
+  width: 6px; height: 6px; border-radius: 9999px;
+  @apply bg-indigo-400;
+  animation: think-bounce 1.2s ease-in-out infinite;
+}
+.thinking i:nth-child(2) { animation-delay: 0.15s; }
+.thinking i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes think-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30%           { transform: translateY(-4px); opacity: 1; }
+}
+
+/* Mobile history drawer slide-in (from left). */
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+.drawer-in { animation: drawer-in 0.26s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Admin detail drawer slide-in (from right). */
+@keyframes drawer-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.drawer-in-right { animation: drawer-right 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-in, .drawer-in, .drawer-in-right, .thinking i, .md-stream > :last-child::after { animation: none; }
+}
