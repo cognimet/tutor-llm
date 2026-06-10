@@ -311,6 +311,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const searchRef = useRef(null);
   const menuRef = useRef(null);
   const prevLen = useRef(0);
+  const autoFired = useRef(false); // guards one-shot task auto-run
 
   const loadSessions = useCallback(async () => {
     try {
@@ -346,6 +347,15 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     return () => { alive = false; abortRef.current?.abort(); stopSpeaking(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.topic_id, ctx.topic_name]);
+
+  // Opened from a next-step task: once the session is ready, run the task —
+  // auto-ask the tutor to deliver it, or open the mini-assessment for a quiz.
+  useEffect(() => {
+    if (booting || !sessionId || autoFired.current) return;
+    if (ctx.autoAssess) { autoFired.current = true; setAssessing(true); }
+    else if (ctx.initialMessage) { autoFired.current = true; send(ctx.initialMessage); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booting, sessionId]);
 
   // Keep pinned to the latest message while near the bottom.
   useEffect(() => {
