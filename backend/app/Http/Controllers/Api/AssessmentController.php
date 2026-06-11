@@ -31,7 +31,17 @@ class AssessmentController extends Controller
         $user = $request->user();
         $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $data['count'] ?? 3);
 
-        abort_if(empty($questions), 422, 'Could not generate an assessment. Please try again.');
+        // Free-tier models occasionally rate-limit or return malformed JSON;
+        // one immediate retry rescues most transient failures.
+        if (empty($questions)) {
+            $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $data['count'] ?? 3);
+        }
+
+        abort_if(
+            empty($questions), 422,
+            'The AI couldn\'t produce a quiz just now — it may be rate-limited. '
+            . 'Wait a few seconds and try again.'
+        );
 
         $assessment = $user->assessments()->create([
             'topic_id'        => $data['topic_id'] ?? null,
@@ -98,7 +108,7 @@ class AssessmentController extends Controller
                 ]);
 
                 $results[] = [
-                    'concept'    => $q->concept,
+                    'concept'    => (string) ($q->concept ?: 'General'),
                     'question'   => $q->question,
                     'is_correct' => $correct,
                 ];

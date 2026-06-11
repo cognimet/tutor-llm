@@ -47,9 +47,9 @@ class MindService
     /* ----------------------------- mastery ---------------------------- */
 
     /** Record one observation for a concept. Outcome in [0,1]; EWMA alpha 0.4. */
-    public function observe(User $user, string $topic, string $concept, float $outcome, float $alpha = 0.4): void
+    public function observe(User $user, string $topic, ?string $concept, float $outcome, float $alpha = 0.4): void
     {
-        $concept = trim($concept);
+        $concept = trim((string) $concept);
         if ($concept === '' || mb_strlen($concept) > 160) {
             return;
         }

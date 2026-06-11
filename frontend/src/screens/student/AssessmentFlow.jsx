@@ -12,14 +12,20 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const a = await assessmentApi.generate({ topic_name: topicName, topic_id: topicId, chat_session_id: sessionId, count: 3 });
-        setAssessment(a); setStage("quiz");
-      } catch { setError("Couldn't generate a quiz. Please try again."); setStage("error"); }
-    })();
-  }, []);
+  const loadQuiz = async () => {
+    setStage("loading");
+    setError("");
+    try {
+      const a = await assessmentApi.generate({ topic_name: topicName, topic_id: topicId, chat_session_id: sessionId, count: 3 });
+      setAssessment(a); setStage("quiz");
+    } catch (err) {
+      // Surface the backend's reason (e.g. rate-limited AI, out of credits).
+      setError(err?.response?.data?.message || "Couldn't generate a quiz. Please try again.");
+      setStage("error");
+    }
+  };
+
+  useEffect(() => { loadQuiz(); }, []);
 
   const submit = async () => {
     setBusy(true);
@@ -27,13 +33,15 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose 
       const payload = assessment.questions.map((q) => ({ question_id: q.id, selected_index: answers[q.id] ?? -1 }));
       const res = await assessmentApi.submit(assessment.id, payload);
       setResult(res); setStage("result");
-    } catch { setError("Submission failed."); } finally { setBusy(false); }
+    } catch (err) {
+      setError(err?.response?.data?.message || "Submission failed. Please try again.");
+    } finally { setBusy(false); }
   };
 
   const buildPlan = async () => {
     setBusy(true);
     try { setPlan(await planApi.generate(topicName)); setStage("plan"); }
-    catch { setError("Couldn't build a plan."); } finally { setBusy(false); }
+    catch (err) { setError(err?.response?.data?.message || "Couldn't build a plan."); } finally { setBusy(false); }
   };
 
   const toggle = async (item) => {
@@ -60,10 +68,21 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose 
 
         <div className="flex-1 overflow-y-auto px-5 py-5">
           {stage === "loading" && <Centered><Loader2 className="h-6 w-6 animate-spin text-indigo-500" /> Generating your quiz…</Centered>}
-          {stage === "error" && <Centered>{error}</Centered>}
+          {stage === "error" && (
+            <Centered>
+              <span>{error}</span>
+              <button onClick={loadQuiz}
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2.5 text-sm font-extrabold text-white shadow-md transition-transform active:scale-95">
+                <Sparkles className="h-4 w-4" /> Try again
+              </button>
+            </Centered>
+          )}
 
           {stage === "quiz" && assessment && (
             <div className="space-y-6">
+              {error && (
+                <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-600">{error}</p>
+              )}
               {assessment.questions.map((q, qi) => (
                 <div key={q.id}>
                   <p className="font-extrabold text-slate-800">{qi + 1}. {q.question}</p>

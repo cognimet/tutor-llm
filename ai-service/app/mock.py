@@ -69,6 +69,16 @@ def json(system: str, user: str, fallback: dict) -> dict:
             ],
         }
 
+    if '"concept_tags"' in low:  # chat-turn signal extraction (the tutor's mind)
+        return {
+            "concept_tags": [f"{topic} — core idea"],
+            "mastery_signal": 0.3,
+            "detected_misconception": None,
+            "resolved_misconception": None,
+            "next_step": f"Try one practice question on {topic}, then take a quick check.",
+            "memory_facts": {},
+        }
+
     if '"questions"' in low or "multiple-choice" in low:
         return {
             "questions": [
@@ -76,27 +86,36 @@ def json(system: str, user: str, fallback: dict) -> dict:
                     "concept": f"{topic} — definition",
                     "type": "mcq",
                     "stem": f"Which statement best defines the core idea of {topic}?",
+                    "question": f"Which statement best defines the core idea of {topic}?",
                     "options": ["The correct definition", "A close but wrong idea",
                                 "An unrelated idea", "A common misconception"],
                     "answer_key": "The correct definition",
+                    "correct_index": 0,
+                    "explanation": "It matches the definition exactly.",
                     "difficulty": "easy",
                 },
                 {
                     "concept": f"{topic} — application",
                     "type": "mcq",
                     "stem": f"Apply {topic} to a simple example. What is the result?",
+                    "question": f"Apply {topic} to a simple example. What is the result?",
                     "options": ["Right answer", "Off-by-one error",
                                 "Wrong formula", "Unit mistake"],
                     "answer_key": "Right answer",
+                    "correct_index": 0,
+                    "explanation": "Careful application gives this result.",
                     "difficulty": "medium",
                 },
                 {
                     "concept": f"{topic} — reasoning",
                     "type": "mcq",
                     "stem": f"Why does {topic} behave this way?",
+                    "question": f"Why does {topic} behave this way?",
                     "options": ["Correct reasoning", "Reversed cause and effect",
                                 "Irrelevant reason", "Partial reason"],
                     "answer_key": "Correct reasoning",
+                    "correct_index": 0,
+                    "explanation": "This is the underlying principle.",
                     "difficulty": "hard",
                 },
             ]

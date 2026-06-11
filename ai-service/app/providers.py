@@ -22,7 +22,12 @@ from .schemas import Usage
 log = logging.getLogger("ai.providers")
 
 _TRANSIENT = {429, 500, 502, 503, 529}
-_MAX_ATTEMPTS = 3
+_MAX_ATTEMPTS = 5
+# 429s on free-tier gateways (OpenRouter) are per-minute limits — quick
+# sub-second retries just burn attempts. Back off properly and honor
+# Retry-After when the server sends one.
+_BACKOFF_429 = [2, 5, 10, 15]
+_BACKOFF_5XX = [1, 2, 4, 8]
 _MAX_TOKENS = 2048
 
 
@@ -49,13 +54,23 @@ async def _post_with_retry(url: str, payload: dict, headers: dict, timeout: int)
                 if r.status_code == 200:
                     return r.json()
                 if r.status_code in _TRANSIENT and attempt < _MAX_ATTEMPTS:
-                    await asyncio.sleep(attempt * 0.8)
+                    if r.status_code == 429:
+                        retry_after = r.headers.get("retry-after")
+                        try:
+                            wait = min(20.0, float(retry_after)) if retry_after else _BACKOFF_429[attempt - 1]
+                        except ValueError:
+                            wait = _BACKOFF_429[attempt - 1]
+                    else:
+                        wait = _BACKOFF_5XX[attempt - 1]
+                    log.warning("LLM %s (attempt %s/%s) — retrying in %.1fs",
+                                r.status_code, attempt, _MAX_ATTEMPTS, wait)
+                    await asyncio.sleep(wait)
                     continue
                 log.warning("LLM error %s: %s", r.status_code, r.text[:300])
                 return {}
             except httpx.HTTPError as e:
                 if attempt < _MAX_ATTEMPTS:
-                    await asyncio.sleep(attempt * 0.8)
+                    await asyncio.sleep(_BACKOFF_5XX[attempt - 1])
                     continue
                 log.error("LLM request failed: %s", e)
                 return {}
