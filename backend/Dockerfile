@@ -10,6 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Composer.
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+# Composer 2.9+ refuses to install packages with open security advisories.
+# laravel/framework ^11.31 (the Laravel 11 skeleton) currently has advisories
+# that are only fixed in Laravel 12, so the policy must be relaxed for this
+# local dev image — otherwise create-project fails with "requirements could
+# not be resolved" (PKSA-... advisories).
+RUN composer config --global policy.advisories.block false
+
 WORKDIR /app
 
 # Scaffold a fresh Laravel app + Sanctum once at build time (cached — runs

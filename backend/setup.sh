@@ -7,6 +7,12 @@ set -e
 OVERLAY="$(pwd)"
 APP_DIR="$OVERLAY/.laravel"
 
+# Composer 2.9+ blocks packages with open security advisories; the Laravel 11
+# skeleton currently trips this (fixed only in Laravel 12). Relax the policy in
+# a repo-local COMPOSER_HOME so we don't touch the user's global config.
+export COMPOSER_HOME="$OVERLAY/.composer"
+composer config --global policy.advisories.block false 2>/dev/null || true
+
 echo "==> Creating Laravel 11 skeleton (requires PHP 8.2+ and Composer)…"
 COMPOSER_NO_AUDIT=1 composer create-project "laravel/laravel:^11.0" "$APP_DIR" --no-interaction
 
