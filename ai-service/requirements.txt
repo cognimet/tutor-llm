@@ -7,3 +7,5 @@ qdrant-client==1.11.3
 fastembed>=0.4,<1.0
 tenacity==9.0.0
 python-multipart==0.0.12
+pytesseract==0.3.13
+pillow>=10.0,<12.0

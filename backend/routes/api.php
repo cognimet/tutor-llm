@@ -38,6 +38,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tutor/sessions', [TutorController::class, 'sessions']);
         Route::post('/tutor/sessions', [TutorController::class, 'startSession']);
         Route::get('/tutor/sessions/{session}', [TutorController::class, 'show']);
+        Route::patch('/tutor/sessions/{session}', [TutorController::class, 'update']);   // rename
+        Route::get('/tutor/sessions/{session}/mind', [TutorController::class, 'mind']);  // "shows its mind" panel
+        // Snap-a-doubt: photo -> OCR text (client then sends it as a message)
+        Route::post('/tutor/snap', [TutorController::class, 'snap'])
+            ->middleware('token.gate:snap');
         // AI-triggering routes pass the token gate (quota check + 402 upsell)
         // BEFORE the AI call; real usage is metered after via TokenMeter.
         Route::post('/tutor/sessions/{session}/send', [TutorController::class, 'send'])

@@ -4,12 +4,14 @@ import {
   Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Plus, MessageSquare,
   ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
+  Brain, Mic, MicOff, Camera,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
 import { tutorApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
 import Markdown from "../../ui/Markdown.jsx";
 import AssessmentFlow from "./AssessmentFlow.jsx";
+import TutorMind from "./TutorMind.jsx";
 
 const STARTERS = (t) => [
   { icon: "💡", label: `Explain "${t}" simply` },
@@ -277,7 +279,7 @@ function SessionList({ sessions, sessionId, onPick, t, searchRef }) {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-extrabold text-slate-700">
-                        {s.topic_name || s.title}
+                        {s.title || s.topic_name}
                       </span>
                       <span className="block truncate text-[11px] text-slate-400">
                         {s.messages_count ?? 0} msgs · {relTime(s.last_message_at)}
@@ -316,6 +318,11 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [menuOpen, setMenuOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [copiedTranscript, setCopiedTranscript] = useState(false);
+  const [mind, setMind] = useState(null);            // the tutor's live "mind"
+  const [mindOpen, setMindOpen] = useState(true);    // right panel (desktop xl)
+  const [mindSheet, setMindSheet] = useState(false); // bottom sheet (mobile)
+  const [snapBusy, setSnapBusy] = useState(false);   // OCR upload in flight
+  const [listening, setListening] = useState(false); // voice-to-text active
 
   const scrollRef = useRef(null);
   const taRef = useRef(null);
@@ -323,6 +330,8 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const searchRef = useRef(null);
   const menuRef = useRef(null);
   const prevLen = useRef(0);
+  const fileRef = useRef(null);   // snap-a-doubt file input
+  const recRef = useRef(null);    // SpeechRecognition instance
 
   const loadSessions = useCallback(async () => {
     try {
@@ -330,6 +339,12 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       setSessions(await tutorApi.sessions(params));
     } catch { /* ignore */ }
   }, [ctx.topic_id]);
+
+  // Pull the tutor's live "mind" (mastery, misconceptions, memory, next step).
+  const loadMind = useCallback(async (id) => {
+    if (!id) return;
+    try { setMind(await tutorApi.mind(id)); } catch { /* ignore */ }
+  }, []);
 
   const stopSpeaking = useCallback(() => {
     try { window.speechSynthesis?.cancel(); } catch { /* */ }
@@ -350,6 +365,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
         setSessionId(s.id);
         setMessages(s.messages || []);
         setInput(loadDraft(s.id));
+        loadMind(s.id);
       } finally {
         if (alive) setBooting(false);
       }
@@ -464,6 +480,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
 
     return streamSSE(path, body, {
       onDelta: (text) => setLast((last) => ({ ...last, content: last.content + text })),
+      onMind: (payload) => setMind(payload),
       onDone: (meta) => {
         setLast((last) => ({ ...last, id: meta.id, created_at: meta.created_at, pending: false }));
         setStreaming(false);
@@ -491,6 +508,58 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     saveDraft(sessionId, "");
     if (taRef.current) taRef.current.style.height = "auto";
     runStream(`/tutor/sessions/${sessionId}/stream`, { message: value, mode });
+  };
+
+  // Snap-a-doubt: photo -> OCR -> auto-send through the normal tutor flow.
+  const onSnapFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || streaming || snapBusy || !sessionId) return;
+    setSnapBusy(true);
+    try {
+      const { text } = await tutorApi.snap(file);
+      send(
+        "I snapped this problem from my book \u2014 please solve it step by step, teaching me as you go:\n\n" +
+        text
+      );
+    } catch (err) {
+      const msg = err?.response?.data?.message ||
+        "I couldn't read that photo. Try a clearer, well-lit shot.";
+      setMessages((m) => [...m, { role: "tutor", content: `\u26a0\ufe0f ${msg}`, error: true }]);
+    } finally {
+      setSnapBusy(false);
+    }
+  };
+
+  // Voice-to-text via the browser's SpeechRecognition (no backend needed).
+  const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const voiceSupported = !!SR;
+  const toggleVoice = () => {
+    if (!voiceSupported) return;
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "en-IN";
+    rec.interimResults = true;
+    rec.continuous = true;
+    let finalSoFar = input ? input.replace(/\s+$/, "") + " " : "";
+    rec.onresult = (ev) => {
+      let interim = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const tr = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finalSoFar += tr + " ";
+        else interim += tr;
+      }
+      setInput((finalSoFar + interim).trimStart());
+      autoGrow(taRef.current);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
   };
 
   const regenerate = () => {
@@ -532,6 +601,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       setSessionId(s.id);
       setMessages(s.messages || []);
       setInput(loadDraft(s.id));
+      loadMind(s.id);
       setCtx((c) => ({
         ...c,
         topic_id: s.topic_id ?? c.topic_id,
@@ -557,12 +627,25 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       setSessionId(s.id);
       setMessages(s.messages || []);
       setInput(loadDraft(s.id));
+      loadMind(s.id);
       loadSessions();
     } finally { setBooting(false); }
   };
 
   const copy = async (text, id) => {
     try { await navigator.clipboard.writeText(text); setCopiedId(id); setTimeout(() => setCopiedId(null), 1500); } catch { /* */ }
+  };
+
+  // Rename the active chat (shows in the recent-chats list).
+  const renameChat = async () => {
+    setMenuOpen(false);
+    const current = sessions.find((x) => x.id === sessionId);
+    const title = window.prompt("Rename this chat:", current?.title || ctx.topic_name || "");
+    if (!title || !title.trim()) return;
+    try {
+      await tutorApi.rename(sessionId, title.trim());
+      loadSessions();
+    } catch { /* ignore */ }
   };
 
   const copyTranscript = async () => {
@@ -630,7 +713,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
 
   return (
     <div className="flex h-[calc(100vh-57px)] flex-col">
-      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-5 overflow-hidden px-4 py-5">
+      <div className="mx-auto flex w-full max-w-[88rem] flex-1 gap-5 overflow-hidden px-4 py-5">
         {/* Context + history rail (desktop) */}
         <aside className="hidden w-72 shrink-0 flex-col gap-4 lg:flex">
           <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-extrabold text-slate-500 hover:text-indigo-600">
@@ -680,6 +763,16 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             <button onClick={() => setDrawerOpen(true)} title="Chat history" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 hover:text-indigo-600 lg:hidden">
               <History className="h-5 w-5" />
             </button>
+            {/* Tutor's mind: side panel on desktop, bottom sheet on mobile */}
+            <button
+              onClick={() => (window.matchMedia("(min-width: 1280px)").matches ? setMindOpen((v) => !v) : setMindSheet(true))}
+              title="Tutor's mind"
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 transition-colors ${
+                mindOpen ? "bg-indigo-50 text-indigo-600 ring-indigo-200" : "text-slate-500 ring-slate-200 hover:text-indigo-600"
+              }`}
+            >
+              <Brain className="h-5 w-5" />
+            </button>
             <button onClick={() => setAssessing(true)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br ${t.grad} px-3 py-2 text-xs font-extrabold text-white shadow-md`}>
               <ClipboardCheck className="h-4 w-4" /> <span className="hidden sm:inline">Check understanding</span><span className="sm:hidden">Quiz</span>
             </button>
@@ -694,6 +787,9 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                 <div className="msg-in absolute right-0 top-11 z-20 w-56 overflow-hidden rounded-2xl border border-slate-100 bg-white p-1.5 shadow-xl">
                   <button onClick={newChat} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50">
                     <Plus className="h-4 w-4 text-slate-400" /> New chat
+                  </button>
+                  <button onClick={renameChat} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50">
+                    <Pencil className="h-4 w-4 text-slate-400" /> Rename chat
                   </button>
                   <button onClick={copyTranscript} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50">
                     {copiedTranscript ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4 text-slate-400" />}
@@ -815,6 +911,30 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
               ))}
             </div>
             <div className="flex items-end gap-2 rounded-3xl bg-white p-2 shadow-sm ring-1 ring-slate-200 transition-shadow focus-within:ring-2 focus-within:ring-indigo-300">
+              {/* Snap-a-doubt: photo -> OCR -> tutor solves it teaching-style */}
+              <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onSnapFile} />
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={streaming || snapBusy}
+                title="Snap a doubt (photo of a problem)"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-40"
+              >
+                {snapBusy
+                  ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
+                  : <Camera className="h-5 w-5" />}
+              </button>
+              {voiceSupported && (
+                <button
+                  onClick={toggleVoice}
+                  disabled={streaming}
+                  title={listening ? "Stop listening" : "Speak your question"}
+                  className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl transition-colors disabled:opacity-40 ${
+                    listening ? "bg-rose-50 text-rose-500 ring-1 ring-rose-200 animate-pulse" : "text-slate-400 hover:bg-slate-50 hover:text-indigo-600"
+                  }`}
+                >
+                  {listening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                </button>
+              )}
               <textarea ref={taRef} rows={1} value={input}
                 onChange={(e) => { setInput(e.target.value); autoGrow(e.target); }}
                 onKeyDown={(e) => {
@@ -843,7 +963,35 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             </p>
           </div>
         </main>
+
+        {/* RIGHT panel: the tutor's live mind (spec \u00a76) \u2014 collapsible */}
+        {mindOpen && (
+          <aside className="hidden w-72 shrink-0 flex-col gap-3 overflow-y-auto pr-0.5 xl:flex">
+            <p className="flex items-center gap-2 px-1 text-sm font-extrabold text-slate-500">
+              <Brain className="h-4 w-4 text-indigo-500" /> Tutor’s mind
+            </p>
+            <TutorMind mind={mind} />
+          </aside>
+        )}
       </div>
+
+      {/* Mobile "tutor's mind" bottom sheet */}
+      {mindSheet && (
+        <div className="fixed inset-0 z-40 xl:hidden">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMindSheet(false)} />
+          <div className="drawer-in absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-3xl bg-gradient-to-b from-slate-50 to-indigo-50/60 p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="flex items-center gap-2 text-sm font-extrabold text-slate-700">
+                <Brain className="h-4 w-4 text-indigo-500" /> Tutor’s mind
+              </p>
+              <button onClick={() => setMindSheet(false)} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <TutorMind mind={mind} />
+          </div>
+        </div>
+      )}
 
       {/* Mobile history drawer */}
       {drawerOpen && (
@@ -873,7 +1021,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           topicName={ctx.topic_name}
           topicId={ctx.topic_id}
           sessionId={sessionId}
-          onClose={() => { setAssessing(false); onProgressChange?.(); }}
+          onClose={() => { setAssessing(false); loadMind(sessionId); onProgressChange?.(); }}
         />
       )}
     </div>

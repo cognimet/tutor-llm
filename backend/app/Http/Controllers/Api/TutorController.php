@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
+use App\Services\AiClient;
+use App\Services\MindService;
 use App\Services\ProgressService;
+use App\Services\TokenMeter;
 use App\Services\TutorService;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -15,6 +18,9 @@ class TutorController extends Controller
     public function __construct(
         protected TutorService $tutor,
         protected ProgressService $progress,
+        protected MindService $mindService,
+        protected AiClient $ai,
+        protected TokenMeter $meter,
     ) {}
 
     // List the student's chat sessions (most recent first).
@@ -82,6 +88,52 @@ class TutorController extends Controller
     {
         $this->authorizeSession($request, $session);
         return response()->json(['session' => $session->load('messages')]);
+    }
+
+    // Rename a chat (shown in the session list; topic scoping is unchanged).
+    public function update(Request $request, ChatSession $session)
+    {
+        $this->authorizeSession($request, $session);
+
+        $data = $request->validate(['title' => ['required', 'string', 'max:160']]);
+        $session->update(['title' => $data['title']]);
+
+        return response()->json(['session' => $session]);
+    }
+
+    // The tutor's "mind" for this session's topic: live mastery, misconceptions,
+    // memory, next step (Chat Page Spec §6).
+    public function mind(Request $request, ChatSession $session)
+    {
+        $this->authorizeSession($request, $session);
+
+        return response()->json([
+            'mind' => $this->mindService->mind($request->user(), $session->topic_name ?? $session->title, $session),
+        ]);
+    }
+
+    // Snap-a-doubt (architecture doc): problem photo -> OCR -> text, which the
+    // client then sends through the normal tutor pipeline.
+    public function snap(Request $request)
+    {
+        $request->validate([
+            'image' => ['required', 'image', 'mimes:jpeg,png,webp,gif', 'max:8192'],
+        ]);
+
+        $user = $request->user();
+        $b64 = base64_encode(file_get_contents($request->file('image')->getRealPath()));
+
+        $text = $this->ai->ocr($b64);
+        $this->meter->record($user, 'snap', $this->ai->lastUsage ?: ['model' => 'tesseract'], ['kind' => 'ocr']);
+
+        if (trim($text) === '') {
+            return response()->json([
+                'text' => '',
+                'message' => "I couldn't read any text in that photo. Try a clearer, well-lit shot.",
+            ], 422);
+        }
+
+        return response()->json(['text' => $text]);
     }
 
     // Send a message and get the AI tutor's reply (non-streaming JSON).
@@ -219,6 +271,16 @@ class TutorController extends Controller
             $this->progress->recordActivity($user, topicsStudied: 0, questionsAnswered: 0);
 
             $emit('done', ['id' => $message->id, 'created_at' => $message->created_at->toIso8601String()]);
+
+            // After the reply is delivered, extract structured signals (cheap
+            // grade-routed call) and push the refreshed "mind" to the panel.
+            try {
+                $this->tutor->extractSignals($user, $topic, $prompt, $full, $session->id);
+                $emit('mind', ['mind' => $this->mindService->mind($user, $topic, $session)]);
+            } catch (\Throwable $e) {
+                // The mind is an enhancement — never let it break a chat turn.
+                \Illuminate\Support\Facades\Log::warning('mind update failed', ['error' => $e->getMessage()]);
+            }
         });
 
         $response->headers->set('Content-Type', 'text/event-stream');

@@ -255,6 +255,32 @@ async def retrieve(query: str, topic: str | None = None, k: int | None = None) -
         return []
 
 
+async def status() -> dict:
+    """Vector-store status for health/debugging: enabled, collection, points."""
+    out = {
+        "enabled": bool(settings.qdrant_url),
+        "collection": settings.qdrant_collection,
+        "embedder": embed_provider(),
+        "dim": embed_dim(),
+        "points": None,
+    }
+    if not settings.qdrant_url:
+        return out
+    try:
+        client = _client()
+        try:
+            if await client.collection_exists(settings.qdrant_collection):
+                info = await client.get_collection(settings.qdrant_collection)
+                out["points"] = info.points_count
+            else:
+                out["points"] = 0
+        finally:
+            await client.close()
+    except Exception as e:  # noqa: BLE001
+        out["error"] = str(e)
+    return out
+
+
 def as_context(chunks: list[str]) -> str:
     if not chunks:
         return ""

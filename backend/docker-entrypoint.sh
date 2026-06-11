@@ -25,6 +25,7 @@ env_put REDIS_HOST     "${REDIS_HOST:-redis}"
 env_put REDIS_PORT     "${REDIS_PORT:-6379}"
 env_put AI_SERVICE_URL "${AI_SERVICE_URL:-http://ai-service:8001}"
 env_put AI_SERVICE_KEY "${AI_SERVICE_KEY:-dev-internal-key}"
+env_put AI_SERVICE_TIMEOUT "${AI_SERVICE_TIMEOUT:-180}"
 env_put FRONTEND_URL   "${FRONTEND_URL:-http://localhost:5173}"
 
 # Generate app key if missing.

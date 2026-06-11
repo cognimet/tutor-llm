@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Assessment;
+use App\Services\MindService;
 use App\Services\ProgressService;
 use App\Services\TutorService;
 use Illuminate\Http\Request;
@@ -14,6 +15,7 @@ class AssessmentController extends Controller
     public function __construct(
         protected TutorService $tutor,
         protected ProgressService $progress,
+        protected MindService $mind,
     ) {}
 
     // Generate a mini-assessment for a topic (AI).
@@ -109,6 +111,11 @@ class AssessmentController extends Controller
             'completed_at' => now(),
         ]);
 
+        // Concept-level EWMA mastery from hard evidence (alpha 0.4).
+        foreach ($results as $r) {
+            $this->mind->observe($user, $assessment->topic_name, $r['concept'], $r['is_correct'] ? 1.0 : 0.0);
+        }
+
         // AI gap detection.
         $detection = $this->tutor->detectGaps($user, $assessment->topic_name, $results);
 
@@ -136,6 +143,7 @@ class AssessmentController extends Controller
             'total'   => $assessment->total,
             'summary' => $detection['summary'],
             'gaps'    => $user->knowledgeGaps()->where('assessment_id', $assessment->id)->get(),
+            'mind'    => $this->mind->mind($user, $assessment->topic_name),
             'review'  => $assessment->questions->map(fn ($q) => [
                 'question'      => $q->question,
                 'options'       => $q->options,

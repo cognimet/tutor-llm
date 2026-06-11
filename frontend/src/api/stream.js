@@ -7,10 +7,10 @@ const BASE = import.meta.env.VITE_API_URL || "/api";
  *
  * @param {string} path                e.g. `/tutor/sessions/5/stream`
  * @param {object|null} body           JSON body (null for regenerate)
- * @param {object} handlers            { onDelta(text), onDone(meta), onError(msg) }
+ * @param {object} handlers            { onDelta(text), onDone(meta), onMind(payload), onError(msg) }
  * @param {AbortSignal} [signal]       to support a Stop button
  */
-export async function streamSSE(path, body, { onDelta, onDone, onError }, signal) {
+export async function streamSSE(path, body, { onDelta, onDone, onMind, onError }, signal) {
   let res;
   try {
     res = await fetch(`${BASE}${path}`, {
@@ -60,7 +60,7 @@ export async function streamSSE(path, body, { onDelta, onDone, onError }, signal
       while ((sep = buffer.indexOf("\n\n")) !== -1) {
         const frame = buffer.slice(0, sep);
         buffer = buffer.slice(sep + 2);
-        handleFrame(frame, { onDelta, onDone, onError });
+        handleFrame(frame, { onDelta, onDone, onMind, onError });
       }
     }
   } catch (e) {
@@ -68,7 +68,7 @@ export async function streamSSE(path, body, { onDelta, onDone, onError }, signal
   }
 }
 
-function handleFrame(frame, { onDelta, onDone, onError }) {
+function handleFrame(frame, { onDelta, onDone, onMind, onError }) {
   let event = "message";
   const dataLines = [];
   for (const line of frame.split("\n")) {
@@ -90,5 +90,6 @@ function handleFrame(frame, { onDelta, onDone, onError }) {
     // A chat turn just consumed credits — refresh any mounted meter.
     window.dispatchEvent(new CustomEvent("usage:refresh"));
   }
+  else if (event === "mind") onMind?.(payload.mind ?? payload);  // live "tutor's mind" refresh
   else if (event === "error") onError?.(payload.message ?? "Something went wrong.");
 }

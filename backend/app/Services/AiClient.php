@@ -45,23 +45,34 @@ class AiClient
      * @param ?string $topic  when set, the AI service injects RAG curriculum
      *                        context for that topic before generating.
      */
-    public function text(string $system, string $user, ?string $topic = null): string
+    public function text(string $system, string $user, ?string $topic = null, ?string $action = null): string
     {
         $data = $this->post('/ai/text', array_filter([
-            'system' => $system, 'user' => $user, 'topic' => $topic,
+            'system' => $system, 'user' => $user, 'topic' => $topic, 'action' => $action,
         ], fn ($v) => $v !== null));
         $this->captureUsage($data);
         return (string) ($data['text'] ?? '');
     }
 
-    public function json(string $system, string $user, array $fallback = [], ?string $topic = null): array
+    public function json(string $system, string $user, array $fallback = [], ?string $topic = null, ?string $action = null): array
     {
         $data = $this->post('/ai/json', array_filter([
-            'system' => $system, 'user' => $user, 'fallback' => $fallback, 'topic' => $topic,
+            'system' => $system, 'user' => $user, 'fallback' => $fallback, 'topic' => $topic, 'action' => $action,
         ], fn ($v) => $v !== null));
         $this->captureUsage($data);
         $out = $data['data'] ?? $fallback;
         return is_array($out) ? $out : $fallback;
+    }
+
+    /** OCR a problem photo (snap-a-doubt). Returns the extracted text ('' on failure). */
+    public function ocr(string $imageBase64, string $languages = 'eng+hin'): string
+    {
+        $data = $this->post('/ai/ocr', [
+            'image_base64' => $imageBase64,
+            'languages' => $languages,
+        ]);
+        $this->captureUsage($data);
+        return (string) ($data['text'] ?? '');
     }
 
     /**

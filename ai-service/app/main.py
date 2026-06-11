@@ -157,6 +157,49 @@ async def embed_delete_topic(req: DeleteTopicRequest, authorization: str | None 
     return {"ok": True}
 
 
+# ── OCR (snap-a-doubt): photo -> text -> the normal tutor pipeline ─────
+class OcrRequest(BaseModel):
+    image_base64: str               # raw base64 (no data: prefix)
+    languages: str = "eng+hin"      # tesseract language pack(s)
+
+
+@app.post("/ai/ocr")
+async def ai_ocr(req: OcrRequest, authorization: str | None = Header(None)):
+    """Extract text from a problem photo (architecture doc: OCR/vision -> text
+    -> same pipeline). Local tesseract: deterministic, free, offline."""
+    _auth(authorization)
+    import base64
+    import io
+    try:
+        from PIL import Image, ImageOps
+        import pytesseract
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=501, detail=f"OCR not available: {e}")
+
+    try:
+        raw = base64.b64decode(req.image_base64, validate=False)
+        img = Image.open(io.BytesIO(raw))
+        # Light preprocessing: orientation fix + grayscale helps handwriting/photos.
+        img = ImageOps.exif_transpose(img).convert("L")
+        text = pytesseract.image_to_string(img, lang=req.languages) or ""
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"Could not read the image: {e}")
+
+    text = "\n".join(line.rstrip() for line in text.splitlines()).strip()
+    # OCR is local — no LLM tokens consumed.
+    usage = Usage(model="tesseract", mock=False)
+    return {"text": text, "usage": usage.model_dump()}
+
+
+@app.get("/ai/rag/status")
+async def rag_status(authorization: str | None = Header(None)):
+    """Vector-store health: is RAG live and how many chunks are indexed?"""
+    _auth(authorization)
+    return await rag.status()
+
+
 @app.post("/ai/chat/turn", response_model=ChatTurnResponse)
 async def chat_turn(req: ChatTurnRequest, authorization: str | None = Header(None)):
     _auth(authorization)

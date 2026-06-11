@@ -18,7 +18,11 @@ class TutorService
     // TokenMeter records every AI call (ledger + counters) using the real
     // usage AiClient captures. TutorService is the single funnel for AI, so
     // metering here covers chat, assessments, gaps, and plans automatically.
-    public function __construct(protected AiClient $ai, protected TokenMeter $meter) {}
+    public function __construct(
+        protected AiClient $ai,
+        protected TokenMeter $meter,
+        protected MindService $mind,
+    ) {}
 
     public function isMock(): bool
     {
@@ -65,6 +69,57 @@ class TutorService
         return $reply;
     }
 
+    /**
+     * Second, cheap call after a tutor turn: extract structured signals that
+     * feed the tutor's "mind" — concept tags, mastery signal, misconceptions
+     * (detected AND resolved), a next step, and durable memory facts about the
+     * student. Routed to the cheap `grade` model. Applied via MindService.
+     */
+    public function extractSignals(User $student, string $topic, string $message, string $reply, ?int $sessionId = null): array
+    {
+        $system =
+            'You analyse one tutoring exchange and return ONLY JSON with keys: '
+            . 'concept_tags (array of 1-3 short concept names this turn touched), '
+            . 'mastery_signal (number in [-1,1]: how well the STUDENT is doing — '
+            . '-1 lost, 0 neutral/unknown, 1 has clearly got it), '
+            . 'detected_misconception (short string ONLY if the student\'s message reveals a genuine '
+            . 'misconception, else null), '
+            . 'resolved_misconception (short string ONLY if this exchange clearly fixed a previous '
+            . 'misunderstanding, else null), '
+            . 'next_step (one short sentence: what the student should do next, or null), '
+            . 'memory_facts (object of 0-2 DURABLE facts about the student worth remembering across '
+            . 'sessions — e.g. learning_style, struggles_with, likes_examples_about; {} if none. '
+            . 'Never store transient facts.)';
+
+        $user = 'Topic: "' . $topic . '". Student said: "' . mb_substr($message, 0, 500)
+            . '". Tutor replied: "' . mb_substr($reply, 0, 800) . '". Return the JSON.';
+
+        $data = $this->ai->json($system, $user, [], null, 'grade');
+        $this->meter($student, 'grade', ['topic' => $topic, 'kind' => 'chat_signals']);
+
+        if (! is_array($data) || empty($data)) {
+            return [];
+        }
+
+        // Apply to the mind.
+        $tags = array_values(array_filter((array) ($data['concept_tags'] ?? []), 'is_string'));
+        $this->mind->observeChatSignal($student, $topic, $tags, $data['mastery_signal'] ?? null);
+        if (! empty($data['detected_misconception']) && is_string($data['detected_misconception'])) {
+            $this->mind->detectMisconception($student, $topic, $data['detected_misconception'], $sessionId);
+        }
+        if (! empty($data['resolved_misconception']) && is_string($data['resolved_misconception'])) {
+            $this->mind->resolveMisconception($student, $topic, $data['resolved_misconception']);
+        }
+        if (! empty($data['next_step']) && is_string($data['next_step'])) {
+            $this->mind->setNextStep($student, $topic, $data['next_step']);
+        }
+        if (! empty($data['memory_facts']) && is_array($data['memory_facts'])) {
+            $this->mind->remember($student, $data['memory_facts']);
+        }
+
+        return $data;
+    }
+
     /** Mode-specific pedagogy rules for the tutor chat. */
     protected function modeRules(string $mode): string
     {
@@ -94,6 +149,7 @@ class TutorService
     protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach'): array
     {
         $system = $this->tutorPersona($student)
+            . $this->mind->promptContext($student, $topic)
             . "\nYou are tutoring strictly within this topic: \"{$topic}\" "
             . "(Chapter: {$chapter}, Subject: {$subject}). "
             . "If the student drifts off this topic, gently steer them back.\n"

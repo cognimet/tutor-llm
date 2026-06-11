@@ -37,6 +37,18 @@ export const tutorApi = {
   send: (id, message) => api.post(`/tutor/sessions/${id}/send`, { message }).then((r) => r.data.message),
   feedback: (messageId, rating) =>
     api.post(`/tutor/messages/${messageId}/feedback`, { rating }).then((r) => r.data),
+  // Rename a chat (shown in the session list).
+  rename: (id, title) => api.patch(`/tutor/sessions/${id}`, { title }).then((r) => r.data.session),
+  // The tutor's live "mind": mastery, misconceptions, memory, next step.
+  mind: (id) => api.get(`/tutor/sessions/${id}/mind`).then((r) => r.data.mind),
+  // Snap-a-doubt: photo -> OCR text (then send it as a normal message).
+  snap: (file) => {
+    const form = new FormData();
+    form.append("image", file);
+    return api.post("/tutor/snap", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }).then((r) => r.data);
+  },
 };
 
 // --- Student: assessment + gaps ---

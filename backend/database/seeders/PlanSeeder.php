@@ -22,6 +22,7 @@ class PlanSeeder extends Seeder
             'gap'        => 1,
             'plan'       => 1,
             'notes'      => 5,
+            'snap'       => 2,   // snap-a-doubt OCR (local tesseract, cheap)
         ];
 
         Plan::updateOrCreate(['key' => 'free'], [
