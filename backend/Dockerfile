@@ -28,6 +28,11 @@ RUN composer create-project "laravel/laravel:^11.0" /app --no-interaction
 RUN composer require laravel/sanctum --no-interaction
 RUN php artisan install:api --no-interaction || true
 RUN test -f /app/vendor/autoload.php  # fail the build early if vendor is missing
+# install:api publishes the Sanctum migration with a BUILD-TIME timestamp,
+# which makes every rebuild look like a brand-new migration to an existing
+# database (-> "Duplicate table: personal_access_tokens"). Drop the published
+# copy; the overlay ships a fixed-name, guarded version instead.
+RUN rm -f /app/database/migrations/*_create_personal_access_tokens_table.php
 RUN cp -R /overlay/app/. /app/app/ \
     && cp -R /overlay/routes/. /app/routes/ \
     && cp -R /overlay/database/migrations/. /app/database/migrations/ \

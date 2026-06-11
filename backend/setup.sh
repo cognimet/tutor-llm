@@ -16,6 +16,9 @@ COMPOSER_NO_AUDIT=1 composer require laravel/sanctum --no-interaction
 php artisan install:api --no-interaction || true
 
 echo "==> Overlaying application files…"
+# Drop the timestamped Sanctum migration published by install:api — the
+# overlay ships a fixed-name, guarded version (avoids duplicate-table errors).
+rm -f "$APP_DIR/database/migrations/"*_create_personal_access_tokens_table.php
 cp -R "$OVERLAY/app/." "$APP_DIR/app/"
 cp -R "$OVERLAY/routes/." "$APP_DIR/routes/"
 cp -R "$OVERLAY/database/migrations/." "$APP_DIR/database/migrations/"
