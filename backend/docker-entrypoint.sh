@@ -9,6 +9,28 @@ DB_DIR="$(dirname "$DB_PATH")"
 mkdir -p "$DB_DIR"
 touch "$DB_PATH"
 
+# IMPORTANT: `php artisan serve` strips nearly every environment variable when
+# spawning its PHP workers (ServeCommand only passes a small whitelist through,
+# so .env edits reload). Runtime env from docker-compose therefore NEVER
+# reaches request handling — artisan CLI commands see it, HTTP requests don't.
+# Symptom if unfixed: migrate/seed writes one SQLite file, requests read the
+# empty skeleton DB at database/database.sqlite -> "Invalid credentials."
+# Fix: persist the runtime config into .env, which the workers DO read.
+env_put() {
+  if grep -q "^$1=" .env 2>/dev/null; then
+    sed -i "s|^$1=.*|$1=$2|" .env
+  else
+    echo "$1=$2" >> .env
+  fi
+}
+env_put DB_CONNECTION "${DB_CONNECTION:-sqlite}"
+env_put DB_DATABASE   "$DB_PATH"
+env_put AI_SERVICE_URL "${AI_SERVICE_URL:-}"
+env_put GEMINI_API_KEY "${GEMINI_API_KEY:-}"
+env_put GEMINI_MODEL   "${GEMINI_MODEL:-gemini-2.5-flash}"
+env_put GEMINI_MOCK    "${GEMINI_MOCK:-false}"
+env_put FRONTEND_URL   "${FRONTEND_URL:-http://localhost:5173}"
+
 # Generate app key if missing.
 if ! grep -q "APP_KEY=base64" .env 2>/dev/null; then
   php artisan key:generate --force
