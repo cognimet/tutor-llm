@@ -6,6 +6,8 @@ import { Users, GraduationCap, BookOpen, MessageCircle, ClipboardCheck, Search, 
 import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 import CurriculumManager from "./CurriculumManager.jsx";
 import UserDrawer from "./UserDrawer.jsx";
+import CreditsPanel from "./CreditsPanel.jsx";
+import GapAnalytics from "./GapAnalytics.jsx";
 
 export default function AdminPanel() {
   const { user, logout } = useAuth();
@@ -20,7 +22,7 @@ export default function AdminPanel() {
       <Backdrop />
       <AppHeader user={user} onLogout={logout} right={
         <div className="hidden gap-1 rounded-2xl bg-white/70 p-1 ring-1 ring-slate-200 sm:flex">
-          {["overview", "users", "curriculum"].map((t) => (
+          {["overview", "users", "curriculum", "credits", "gaps"].map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize ${tab === t ? "bg-indigo-500 text-white" : "text-slate-500"}`}>{t}</button>
           ))}
         </div>
@@ -29,6 +31,8 @@ export default function AdminPanel() {
         {tab === "overview"
           ? (loading ? <Spinner label="Loading admin console…" /> : <Overview data={data} />)
           : tab === "users" ? <UsersTab />
+          : tab === "credits" ? <CreditsPanel />
+          : tab === "gaps" ? <GapAnalytics />
           : <CurriculumManager />}
       </div>
     </div>

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AdminContentController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AdminCurriculumController;
+use App\Http\Controllers\Api\AdminGapController;
 use App\Http\Controllers\Api\AdminUsageController;
 use App\Http\Controllers\Api\AssessmentController;
 use App\Http\Controllers\Api\AuthController;
@@ -76,6 +77,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/children', [ParentController::class, 'children']);
         Route::get('/children/{child}/report', [ParentController::class, 'childReport']);
         Route::get('/children/{child}/usage', [UsageController::class, 'child']);
+        Route::get('/children/{child}/gaps', [ParentController::class, 'childGaps']);
         Route::post('/children/link', [ParentController::class, 'linkChild']);
     });
 
@@ -89,6 +91,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/users/{parent}/unlink-child/{student}', [AdminController::class, 'unlinkChild']);
         Route::patch('/users/{user}/active', [AdminController::class, 'setActive']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
+
+        // --- Gap analytics (cohort weak spots, students at risk) ---
+        Route::get('/gaps', [AdminGapController::class, 'overview']);
 
         // --- AI usage & billing (raw tokens + ₹ visible only here) ---
         Route::get('/usage', [AdminUsageController::class, 'overview']);

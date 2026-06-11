@@ -80,6 +80,7 @@ export const usageApi = {
 export const parentApi = {
   children: () => api.get("/parent/children").then((r) => r.data.children),
   report: (childId) => api.get(`/parent/children/${childId}/report`).then((r) => r.data),
+  gaps: (childId) => api.get(`/parent/children/${childId}/gaps`).then((r) => r.data),
   linkChild: (child_email, relationship) =>
     api.post("/parent/children/link", { child_email, relationship }).then((r) => r.data),
 };
@@ -96,4 +97,23 @@ export const adminApi = {
     api.post(`/admin/users/${parentId}/link-child`, { child_email: childEmail, relationship }).then((r) => r.data),
   unlinkChild: (parentId, studentId) =>
     api.delete(`/admin/users/${parentId}/unlink-child/${studentId}`).then((r) => r.data),
+};
+
+// --- Admin: AI usage & billing (credit control; tokens + ₹ admin-only) ---
+export const adminUsageApi = {
+  overview: (days = 30) => api.get("/admin/usage", { params: { days } }).then((r) => r.data),
+  userLedger: (userId) => api.get(`/admin/users/${userId}/usage`).then((r) => r.data),
+  setUserPlan: (userId, plan_key) =>
+    api.patch(`/admin/users/${userId}/plan`, { plan_key }).then((r) => r.data),
+  grantCredits: (userId, payload) =>
+    api.post(`/admin/users/${userId}/grant-credits`, payload).then((r) => r.data),
+  plans: () => api.get("/admin/plans").then((r) => r.data),
+  updatePlan: (planId, payload) => api.patch(`/admin/plans/${planId}`, payload).then((r) => r.data),
+  modelRates: () => api.get("/admin/model-rates").then((r) => r.data),
+  addModelRate: (payload) => api.post("/admin/model-rates", payload).then((r) => r.data),
+};
+
+// --- Admin: gap analytics ---
+export const adminGapApi = {
+  overview: (days = 30) => api.get("/admin/gaps", { params: { days } }).then((r) => r.data),
 };
