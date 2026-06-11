@@ -1,9 +1,19 @@
-# One-command full stack: Laravel API + React (Vite) frontend.
+# One-command full stack: Laravel API + Python AI service + React (Vite) frontend.
 # Usage:
 #   1) put your key in .env  (copy .env.example -> .env)
 #   2) docker compose up --build
 #   3) open http://localhost:5173
 services:
+  ai-service:
+    build: ./ai-service
+    ports:
+      - "8001:8001"
+    environment:
+      # Real key comes from the root .env (gitignored). Leave blank to use mock AI.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MOCK: ${GEMINI_MOCK:-false}
+
   backend:
     build: ./backend
     ports:
@@ -14,13 +24,17 @@ services:
       DB_CONNECTION: sqlite
       DB_DATABASE: /app/storage/db/database.sqlite
       FRONTEND_URL: http://localhost:5173
-      # Real key comes from the root .env (gitignored). Leave blank to use mock AI.
+      # All LLM calls go through the Python AI service (architecture doc).
+      AI_SERVICE_URL: http://ai-service:8001
+      # Legacy direct-Gemini fallback (used only if AI_SERVICE_URL is unset/down).
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GEMINI_MOCK: ${GEMINI_MOCK:-false}
     volumes:
       # Persist only the SQLite DB file's directory (keeps migrations intact).
       - backend_db:/app/storage/db
+    depends_on:
+      - ai-service
 
   frontend:
     build: ./frontend

@@ -23,8 +23,7 @@ RUN cp -R /overlay/app/. /app/app/ \
     && cp -R /overlay/routes/. /app/routes/ \
     && cp -R /overlay/database/migrations/. /app/database/migrations/ \
     && cp -R /overlay/database/seeders/. /app/database/seeders/ \
-    && cp /overlay/config/gemini.php /app/config/gemini.php \
-    && cp /overlay/config/cors.php /app/config/cors.php \
+    && cp /overlay/config/*.php /app/config/ \
     && cp /overlay/bootstrap/app.php /app/bootstrap/app.php \
     && cp /overlay/.env.example /app/.env \
     && cp /overlay/docker-entrypoint.sh /app/docker-entrypoint.sh \

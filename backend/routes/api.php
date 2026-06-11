@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminBillingController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AdminCurriculumController;
 use App\Http\Controllers\Api\AssessmentController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Api\LearningPlanController;
 use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\TutorController;
+use App\Http\Controllers\Api\UsageController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -35,29 +37,35 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tutor/sessions', [TutorController::class, 'sessions']);
         Route::post('/tutor/sessions', [TutorController::class, 'startSession']);
         Route::get('/tutor/sessions/{session}', [TutorController::class, 'show']);
-        Route::post('/tutor/sessions/{session}/send', [TutorController::class, 'send']);
-        Route::post('/tutor/sessions/{session}/stream', [TutorController::class, 'stream']);
-        Route::post('/tutor/sessions/{session}/regenerate', [TutorController::class, 'regenerate']);
+        Route::get('/tutor/sessions/{session}/mind', [TutorController::class, 'mind']);   // "shows its mind" panel
+        Route::patch('/tutor/sessions/{session}/mode', [TutorController::class, 'setMode']);
+        Route::post('/tutor/sessions/{session}/send', [TutorController::class, 'send'])->middleware('tokens:chat');
+        Route::post('/tutor/sessions/{session}/stream', [TutorController::class, 'stream'])->middleware('tokens:chat');
+        Route::post('/tutor/sessions/{session}/regenerate', [TutorController::class, 'regenerate'])->middleware('tokens:chat');
         Route::post('/tutor/messages/{message}/feedback', [TutorController::class, 'feedback']);
 
         // Mini-assessment + gap detection
-        Route::post('/assessments/generate', [AssessmentController::class, 'generate']);
-        Route::post('/assessments/{assessment}/submit', [AssessmentController::class, 'submit']);
+        Route::post('/assessments/generate', [AssessmentController::class, 'generate'])->middleware('tokens:assess_gen');
+        Route::post('/assessments/{assessment}/submit', [AssessmentController::class, 'submit'])->middleware('tokens:grade');
         Route::get('/assessments/history', [AssessmentController::class, 'history']);
 
         // Learning plans (light next-steps)
         Route::get('/plans', [LearningPlanController::class, 'index']);
-        Route::post('/plans/generate', [LearningPlanController::class, 'generate']);
+        Route::post('/plans/generate', [LearningPlanController::class, 'generate'])->middleware('tokens:plan');
         Route::patch('/plans/items/{item}/toggle', [LearningPlanController::class, 'toggleItem']);
 
         // Progress snapshot
         Route::get('/progress', [ProgressController::class, 'summary']);
+
+        // Credit meter (credits, never raw tokens — token spec §7)
+        Route::get('/usage', [UsageController::class, 'summary']);
     });
 
     // --- Parent features ---
     Route::middleware('role:parent')->prefix('parent')->group(function () {
         Route::get('/children', [ParentController::class, 'children']);
         Route::get('/children/{child}/report', [ParentController::class, 'childReport']);
+        Route::get('/children/{child}/usage', [ParentController::class, 'childUsage']);
         Route::post('/children/link', [ParentController::class, 'linkChild']);
     });
 
@@ -71,6 +79,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/users/{parent}/unlink-child/{student}', [AdminController::class, 'unlinkChild']);
         Route::patch('/users/{user}/active', [AdminController::class, 'setActive']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
+
+        // --- AI usage & billing (token spec §6) ---
+        Route::get('/usage', [AdminBillingController::class, 'usage']);
+        Route::get('/plans', [AdminBillingController::class, 'plans']);
+        Route::post('/plans', [AdminBillingController::class, 'storePlan']);
+        Route::patch('/plans/{plan}', [AdminBillingController::class, 'updatePlan']);
+        Route::get('/model-rates', [AdminBillingController::class, 'modelRates']);
+        Route::post('/model-rates', [AdminBillingController::class, 'storeModelRate']);
+        Route::post('/users/{user}/grant-credits', [AdminBillingController::class, 'grantCredits']);
 
         // --- Curriculum management (Stage → Track → Level → Subject → Chapter → Topic) ---
         Route::prefix('curriculum')->group(function () {

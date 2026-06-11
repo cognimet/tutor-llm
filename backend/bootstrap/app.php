@@ -8,6 +8,7 @@
 error_reporting(error_reporting() & ~E_DEPRECATED);
 
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\TokenGate;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register the role alias used by route definitions.
         $middleware->alias([
             'role' => EnsureRole::class,
+            'tokens' => TokenGate::class, // pre-call credit gate (token spec §3.1)
         ]);
 
         // NOTE: This SPA authenticates with Bearer tokens (see frontend
