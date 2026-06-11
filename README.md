@@ -1,16 +1,17 @@
 # Everything AI Tutor — Full-Stack MVP
 
-A working full-stack build of the AI Tutor: **Laravel API + React (Vite) frontend + Google Gemini-powered AI**, with three roles — **Admin, Student, Parent**.
+A working full-stack build of the AI Tutor: **Laravel API + Python (FastAPI) AI service + React (Vite) frontend + Google Gemini**, with three roles — **Admin, Student, Parent**. Architecture follows the spec docs in this repo (`AI_Tutor_MASTER_PROMPT.md`, `AI_Tutor_Architecture.md`, `AI_Tutor_Chat_Page_Spec.md`, `AI_Tutor_Token_Management.md`).
 
-The MVP delivers the core learning loop from the vision doc:
+The MVP delivers the core adaptive loop from the vision doc:
 
-> **Ask → AI explains → Mini-assessment → Gap detection → Learning plan → Progress**
+> **Learn → Assess → Gap analysis → Re-teach the gaps → Re-assess → Mastery**
 
 ## Repository layout
 
 ```
 AI Tutor MVP/
-├── backend/        Laravel 11 API (overlay files + setup.sh)
+├── ai-service/     Python FastAPI AI service — ALL LLM calls live here
+├── backend/        Laravel 11 API (overlay files + setup.sh) — system of record
 ├── frontend/       React + Vite SPA (Tailwind, role-based)
 ├── preview.html    Standalone design preview (no build needed)
 └── README.md       ← you are here
@@ -24,21 +25,38 @@ AI Tutor MVP/
 
 | Role | Capabilities |
 |------|--------------|
-| **Student** | Topic-wise AI tutor chat, mini-assessments, AI gap detection, personalized next-step plans, progress snapshot. |
-| **Parent**  | Link children by email, view each child's mastery/accuracy/gaps, mastery-over-time chart, recent assessments. |
-| **Admin**   | Platform stats, signups chart, user management (search/filter, enable/disable), curriculum management. |
+| **Student** | Hero tutor chat (3-pane: tutor modes · conversation · live "tutor's mind" panel), mini-assessments, concept-level EWMA mastery, live misconception tracking, adaptive re-teach loop, next-step plans, AI credit meter, progress snapshot. |
+| **Parent**  | Link children by email, child mastery/accuracy/gaps, plain-language AI weekly summary, child AI-usage (credits) view, recent assessments. |
+| **Admin**   | Platform stats, user management, curriculum management, AI usage & billing (token ledger, ₹ cost, plans editor, model rates, credit grants). |
 
 ---
 
-## The learning loop (how the AI works)
+## Architecture (per `AI_Tutor_Architecture.md`)
 
-1. **Tutor chat** — `TutorService::explain()` builds a pedagogical, topic-scoped prompt (step-by-step, examples, common mistakes, a comprehension check) and calls Gemini.
-2. **Mini-assessment** — `generateAssessment()` asks Gemini for diagnostic MCQs (JSON), each probing a sub-concept with a misconception distractor.
-3. **Gap detection** — on submit, wrong answers are sent back to Gemini (`detectGaps()`) which returns concepts + severity + recommendations, persisted as `knowledge_gaps`.
-4. **Learning plan** — `buildLearningPlan()` turns open gaps into 3–4 short next-step tasks. Completing a task can auto-resolve the matching gap and nudge mastery.
-5. **Progress** — `ProgressService` keeps a rolling daily snapshot (mastery, accuracy, streak) shown to students and parents.
+```
+React SPA ── HTTPS/JSON ──> Laravel API (system of record, orchestration, token gate)
+                                │ REST (internal)
+                                ▼
+                       Python AI service (FastAPI)
+                       chat · assess · grade · gap · plan · report
+                                │
+                                ▼
+                            Gemini (or mock)
+```
 
-If `GEMINI_API_KEY` is missing or `GEMINI_MOCK=true`, the backend returns deterministic mock responses so the **entire flow runs with zero external calls**.
+- **All LLM calls live in the Python service** (`ai-service/`). Laravel never calls a model directly when `AI_SERVICE_URL` is set; without it, Laravel falls back to its built-in Gemini client so bare `php artisan serve` still works.
+- Every AI response returns **real token counts**, which Laravel meters into a `token_ledger` (cost) and per-student credit counters (quota).
+
+## The adaptive loop (how the AI works)
+
+1. **Tutor chat** — each turn goes through `/ai/chat/turn` with the student's memory, concept mastery and open misconceptions. The model returns the reply **plus structured meta** (concept tags, detected/resolved misconception, mastery signal, next step) that drives the live "tutor's mind" panel. Modes: Teach / Socratic / Quiz / Exam-drill / ELI10.
+2. **Mini-assessment** — `/ai/assessment/generate` produces diagnostic MCQs (misconception distractors); attempt 2+ targets the open gaps with fresh questions.
+3. **Concept mastery** — every answer updates an EWMA score per concept (α≈0.4). A topic is mastered only when **every** concept passes (≥80%, confidence ≥2) — never an average.
+4. **Gap analysis** — wrong answers go to `/ai/gap/analyze`, which returns gaps **with root cause** (the broken prerequisite), persisted as `knowledge_gaps`.
+5. **Re-teach loop** — the chat session state machine (`learning → assessing → mastered | relearning`) seeds attempt n+1 with the last gap so the tutor re-teaches it *differently*; auto-relearn caps at 3 attempts.
+6. **Token management** — a `TokenGate` middleware enforces daily/monthly credit quotas per plan (402 + upsell when spent); a post-call meter writes real tokens + ₹ cost to the ledger. Students see **credits, never raw tokens**.
+
+If `GEMINI_API_KEY` is missing or `GEMINI_MOCK=true`, both the AI service and the Laravel fallback return deterministic mock responses so the **entire flow runs with zero external calls**.
 
 ---
 
@@ -120,21 +138,31 @@ GET  /api/me                                         (current user)
 GET  /api/curriculum                                 (subject→chapter→topic tree)
 
 # Student (role:student)
-POST /api/tutor/sessions            start a topic-scoped chat
-POST /api/tutor/sessions/{id}/send  send a message → AI reply
-POST /api/assessments/generate      AI mini-assessment
-POST /api/assessments/{id}/submit   score + AI gap detection
-POST /api/plans/generate            AI next-step plan
-GET  /api/progress                  progress snapshot
+POST /api/tutor/sessions                start a topic-scoped chat (resumes by default)
+POST /api/tutor/sessions/{id}/stream    send a message → streamed AI reply + live mind
+GET  /api/tutor/sessions/{id}/mind      "tutor's mind": mastery, misconceptions, next step
+PATCH /api/tutor/sessions/{id}/mode     Teach | Socratic | Quiz | Exam | ELI10
+POST /api/assessments/generate          AI mini-assessment (gap-targeted on retry)
+POST /api/assessments/{id}/submit       score + EWMA mastery + AI gap detection
+POST /api/plans/generate                AI next-step plan
+GET  /api/progress | /api/usage         progress snapshot · credit meter
 
 # Parent (role:parent)
 GET  /api/parent/children
-GET  /api/parent/children/{child}/report
+GET  /api/parent/children/{child}/report   includes plain-language AI summary
+GET  /api/parent/children/{child}/usage    child AI credits (never raw tokens)
 POST /api/parent/children/link
 
 # Admin (role:admin)
 GET  /api/admin/stats | /api/admin/users
-PATCH /api/admin/users/{user}/active
+GET  /api/admin/usage                      tokens, credits, ₹ cost, top consumers
+GET/POST/PATCH /api/admin/plans            plan editor (limits, weights) — no redeploy
+GET/POST /api/admin/model-rates            provider pricing
+POST /api/admin/users/{id}/grant-credits   top-ups with audit trail
+
+# Internal: Laravel -> AI service (ai-service/, port 8001)
+POST /ai/chat/turn  /ai/assessment/generate  /ai/assessment/grade
+POST /ai/gap/analyze  /ai/plan/build  /ai/report/parent
 ```
 
 Auth is token-based (Laravel Sanctum). Role access is enforced by the `role:` middleware.

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\LearningPlan;
 use App\Models\LearningPlanItem;
 use App\Services\ProgressService;
+use App\Services\TokenMeter;
 use App\Services\TutorService;
 use Illuminate\Http\Request;
 
@@ -14,6 +15,7 @@ class LearningPlanController extends Controller
     public function __construct(
         protected TutorService $tutor,
         protected ProgressService $progress,
+        protected TokenMeter $meter,
     ) {}
 
     public function index(Request $request)
@@ -40,6 +42,9 @@ class LearningPlanController extends Controller
             ->toArray();
 
         $built = $this->tutor->buildLearningPlan($user, $data['topic_name'], $gaps);
+        if (! empty($built['usage'])) {
+            $this->meter->meter($user, 'plan', $built['usage']);
+        }
 
         $plan = $user->learningPlans()->create([
             'title'      => $built['title'],

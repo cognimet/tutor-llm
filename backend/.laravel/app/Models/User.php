@@ -69,4 +69,8 @@ class User extends Authenticatable
     public function knowledgeGaps()     { return $this->hasMany(KnowledgeGap::class); }
     public function learningPlans()     { return $this->hasMany(LearningPlan::class); }
     public function progressSnapshots() { return $this->hasMany(ProgressSnapshot::class); }
+    public function subscriptions()     { return $this->hasMany(Subscription::class); }
+    public function tokenLedger()       { return $this->hasMany(TokenLedger::class); }
+    public function conceptMasteries()  { return $this->hasMany(ConceptMastery::class); }
+    public function misconceptions()    { return $this->hasMany(Misconception::class); }
 }

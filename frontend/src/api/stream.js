@@ -7,10 +7,10 @@ const BASE = import.meta.env.VITE_API_URL || "/api";
  *
  * @param {string} path                e.g. `/tutor/sessions/5/stream`
  * @param {object|null} body           JSON body (null for regenerate)
- * @param {object} handlers            { onDelta(text), onDone(meta), onError(msg) }
+ * @param {object} handlers            { onDelta(text), onMind(payload), onDone(meta), onError(msg), onQuota(payload) }
  * @param {AbortSignal} [signal]       to support a Stop button
  */
-export async function streamSSE(path, body, { onDelta, onDone, onError }, signal) {
+export async function streamSSE(path, body, { onDelta, onMind, onDone, onError, onQuota }, signal) {
   let res;
   try {
     res = await fetch(`${BASE}${path}`, {
@@ -25,6 +25,15 @@ export async function streamSSE(path, body, { onDelta, onDone, onError }, signal
     });
   } catch (e) {
     if (e.name !== "AbortError") onError?.("Couldn't reach the tutor. Please try again.");
+    return;
+  }
+
+  // Out of credits: the TokenGate blocks with 402 + an upsell payload.
+  if (res.status === 402) {
+    let payload = null;
+    try { payload = await res.json(); } catch { /* */ }
+    if (onQuota && payload) onQuota(payload);
+    else onError?.(payload?.message || "You've used today's AI credits.");
     return;
   }
 
@@ -48,7 +57,7 @@ export async function streamSSE(path, body, { onDelta, onDone, onError }, signal
       while ((sep = buffer.indexOf("\n\n")) !== -1) {
         const frame = buffer.slice(0, sep);
         buffer = buffer.slice(sep + 2);
-        handleFrame(frame, { onDelta, onDone, onError });
+        handleFrame(frame, { onDelta, onMind, onDone, onError });
       }
     }
   } catch (e) {
@@ -56,7 +65,7 @@ export async function streamSSE(path, body, { onDelta, onDone, onError }, signal
   }
 }
 
-function handleFrame(frame, { onDelta, onDone, onError }) {
+function handleFrame(frame, { onDelta, onMind, onDone, onError }) {
   let event = "message";
   const dataLines = [];
   for (const line of frame.split("\n")) {
@@ -73,6 +82,7 @@ function handleFrame(frame, { onDelta, onDone, onError }) {
   }
 
   if (event === "delta") onDelta?.(payload.text ?? "");
+  else if (event === "mind") onMind?.(payload);
   else if (event === "done") onDone?.(payload);
   else if (event === "error") onError?.(payload.message ?? "Something went wrong.");
 }

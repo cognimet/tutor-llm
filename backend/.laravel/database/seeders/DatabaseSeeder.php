@@ -3,6 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\Level;
+use App\Models\ModelRate;
+use App\Models\Plan;
 use App\Models\ProgressSnapshot;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -13,6 +15,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(CurriculumSeeder::class);
+        $this->seedPlansAndRates();
 
         // Resolve a couple of CBSE levels to scope the demo students.
         $cbseClass10 = Level::whereHas('track', fn ($q) => $q->where('slug', 'cbse'))
@@ -72,5 +75,52 @@ class DatabaseSeeder extends Seeder
                 'gaps_closed' => rand(0, 2),
             ]);
         }
+    }
+
+    /**
+     * Default plans + model rates (token spec §5/§6). All admin-editable;
+     * weights are a product lever — generous on chat, gate expensive actions.
+     */
+    protected function seedPlansAndRates(): void
+    {
+        $weights = ['chat' => 1, 'assess_gen' => 3, 'grade' => 1, 'gap' => 1, 'plan' => 1, 'report' => 2];
+
+        Plan::firstOrCreate(['name' => 'Free'], [
+            'price_inr' => 0,
+            'daily_credit_limit' => 30,
+            'monthly_credit_limit' => 600,
+            'per_action_weights' => $weights,
+            'features' => ['1 chapter unlocked', 'Daily AI credits', 'Mini-assessments'],
+        ]);
+
+        Plan::firstOrCreate(['name' => 'Plus'], [
+            'price_inr' => 499,
+            'daily_credit_limit' => 200,
+            'monthly_credit_limit' => 5000,
+            'per_action_weights' => $weights,
+            'features' => ['Full subject', 'Unlimited learning loop', 'Priority AI'],
+        ]);
+
+        Plan::firstOrCreate(['name' => 'Family'], [
+            'price_inr' => 899,
+            'daily_credit_limit' => 200,
+            'monthly_credit_limit' => 5000,
+            'per_action_weights' => $weights,
+            'features' => ['Up to 3 children', 'Full parent reporting', 'Everything in Plus'],
+        ]);
+
+        // Indicative Gemini Flash pricing in INR per 1k tokens (admin-editable).
+        ModelRate::firstOrCreate(['model' => 'gemini-2.5-flash'], [
+            'input_rate_per_1k' => 0.025,
+            'output_rate_per_1k' => 0.21,
+            'currency' => 'INR',
+            'effective_from' => now(),
+        ]);
+        ModelRate::firstOrCreate(['model' => 'mock'], [
+            'input_rate_per_1k' => 0,
+            'output_rate_per_1k' => 0,
+            'currency' => 'INR',
+            'effective_from' => now(),
+        ]);
     }
 }
