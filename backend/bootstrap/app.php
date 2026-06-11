@@ -24,7 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register the role alias used by route definitions.
         $middleware->alias([
             'role' => EnsureRole::class,
-            'tokens' => TokenGate::class, // pre-call credit gate (token spec §3.1)
+            'token.gate' => TokenGate::class,
         ]);
 
         // NOTE: This SPA authenticates with Bearer tokens (see frontend

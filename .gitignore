@@ -1,3 +1,18 @@
+# Root secrets for docker-compose
+.env
+
+# Backend
+backend/.laravel
+backend/vendor
+backend/.env
+
+# Frontend
+frontend/node_modules
+frontend/dist
+
+.DS_Store
+
+# Python
 __pycache__/
 *.pyc
 ai-service/.venv/

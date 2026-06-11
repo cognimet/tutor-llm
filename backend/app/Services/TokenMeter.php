@@ -11,165 +11,138 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Token management (AI_Tutor_Token_Management.md).
+ * Token metering & quota enforcement.
  *
- * Two control points, both mandatory:
- *   gate()  — pre-call: check plan quota, block with an upsell payload (402).
- *   meter() — post-call: write the token_ledger row with REAL token counts
- *             from the AI service and bump live usage counters.
+ * Two layers, kept separate by design:
+ *   - real LLM tokens (from the AI service's `usage`) -> token_ledger + cost_inr
+ *   - student-facing credits (abstract units)         -> plans + usage_counters
  *
- * Students see credits, never raw tokens. Credits are decoupled from real
- * cost (cost_inr) so models can be swapped without changing user plans.
+ * Flow: TokenGate middleware calls check() BEFORE the AI call (block + upsell
+ * if over quota); TutorService calls record() AFTER with real usage. Counters
+ * live in the DB for the MVP (atomic upsert+increment); mirror to Redis later
+ * for the hot path without changing callers.
  */
 class TokenMeter
 {
-    /** The student's active plan (active subscription, else the Free plan). */
+    /** Resolve the user's plan (null plan_id => the 'free' plan). */
     public function planFor(User $user): Plan
     {
-        $plan = $user->subscriptions()
-            ->where('status', 'active')
-            ->latest('id')
-            ->with('plan')
-            ->first()?->plan;
+        if ($user->plan_id && ($plan = Plan::find($user->plan_id))) {
+            return $plan;
+        }
 
-        return $plan
-            ?? Plan::where('name', 'Free')->first()
-            ?? new Plan([
-                'name' => 'Free', 'daily_credit_limit' => 30, 'monthly_credit_limit' => 600,
-            ]);
+        return Plan::where('key', 'free')->firstOrFail();
     }
 
     /**
-     * Pre-call gate. Returns null when allowed, or a quota_exceeded payload
-     * the controller should send back with HTTP 402.
+     * Can this user afford this action right now?
+     *
+     * @return array{allowed: bool, reason: ?string, summary: array}
      */
-    public function gate(User $user, string $action): ?array
+    public function check(User $user, string $action): array
     {
-        if (! $user->isStudent()) {
-            return null; // only student actions are credit-metered
-        }
-
         $plan = $this->planFor($user);
         $weight = $plan->weightFor($action);
+        $summary = $this->summary($user, $plan);
 
-        $daily = $this->counter($user, 'daily_credits', now()->toDateString());
-        $monthly = $this->counter($user, 'monthly_credits', now()->format('Y-m'));
-        $bonus = $this->activeGrantBalance($user);
-
-        if ($daily + $weight > $plan->daily_credit_limit + $bonus) {
-            return $this->blockedPayload($plan, 'daily', $daily);
+        if ($summary['daily']['used'] + $weight > $summary['daily']['limit']) {
+            return ['allowed' => false, 'reason' => 'daily_limit', 'summary' => $summary];
         }
-        if ($monthly + $weight > $plan->monthly_credit_limit + $bonus) {
-            return $this->blockedPayload($plan, 'monthly', $monthly);
+        if ($summary['monthly']['used'] + $weight > $summary['monthly']['limit']) {
+            return ['allowed' => false, 'reason' => 'monthly_limit', 'summary' => $summary];
         }
 
-        return null;
+        return ['allowed' => true, 'reason' => null, 'summary' => $summary];
     }
 
     /**
-     * Post-call meter: compute credits + real cost, write the ledger,
-     * bump the live counters. $usage = {prompt_tokens, completion_tokens, model}.
+     * Record a completed AI call: write the ledger row, bump counters.
+     *
+     * @param array $usage  ['model','prompt_tokens','completion_tokens','total_tokens','mock'] from AiClient
      */
-    public function meter(User $user, string $action, array $usage, ?int $chatSessionId = null): void
+    public function record(User $user, string $action, array $usage, array $meta = []): void
     {
         $plan = $this->planFor($user);
         $credits = $plan->weightFor($action);
 
         $prompt = (int) ($usage['prompt_tokens'] ?? 0);
         $completion = (int) ($usage['completion_tokens'] ?? 0);
-        $model = (string) ($usage['model'] ?? '');
+        $model = $usage['model'] ?? null;
 
         $cost = 0.0;
-        if ($rate = ModelRate::latestFor($model)) {
+        if ($model && ($rate = ModelRate::current($model))) {
             $cost = ($prompt / 1000) * (float) $rate->input_rate_per_1k
                   + ($completion / 1000) * (float) $rate->output_rate_per_1k;
         }
 
         TokenLedger::create([
             'user_id' => $user->id,
-            'chat_session_id' => $chatSessionId,
             'action_type' => $action,
-            'model' => $model ?: null,
+            'model' => $model,
             'prompt_tokens' => $prompt,
             'completion_tokens' => $completion,
+            'total_tokens' => (int) ($usage['total_tokens'] ?? $prompt + $completion),
             'credits_charged' => $credits,
             'cost_inr' => round($cost, 4),
+            'mock' => (bool) ($usage['mock'] ?? false),
+            'meta' => $meta ?: null,
+            'created_at' => now(),
         ]);
 
-        $this->bump($user, 'daily_credits', now()->toDateString(), $credits);
-        $this->bump($user, 'monthly_credits', now()->format('Y-m'), $credits);
+        $this->increment($user, 'daily_credits', now()->toDateString(), $credits);
+        $this->increment($user, 'monthly_credits', now()->format('Y-m'), $credits);
     }
 
-    /** Student-facing meter widget payload: credits, never raw tokens (§7). */
-    public function summary(User $user): array
+    /** Usage summary for meters and dashboards. */
+    public function summary(User $user, ?Plan $plan = null): array
     {
-        $plan = $this->planFor($user);
-        $daily = $this->counter($user, 'daily_credits', now()->toDateString());
-        $monthly = $this->counter($user, 'monthly_credits', now()->format('Y-m'));
-        $bonus = $this->activeGrantBalance($user);
+        $plan ??= $this->planFor($user);
+
+        $dailyUsed = $this->counter($user, 'daily_credits', now()->toDateString());
+        $monthlyUsed = $this->counter($user, 'monthly_credits', now()->format('Y-m'));
+
+        // Non-expired grants made this month raise the monthly ceiling.
+        $grants = (float) CreditGrant::where('user_id', $user->id)
+            ->where('created_at', '>=', now()->startOfMonth())
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->sum('amount');
 
         return [
-            'plan' => $plan->name,
+            'plan' => ['key' => $plan->key, 'name' => $plan->name],
             'daily' => [
-                'used' => round($daily, 1),
-                'limit' => $plan->daily_credit_limit + $bonus,
-                'resets_at' => now()->endOfDay()->toIso8601String(),
+                'used' => $dailyUsed,
+                'limit' => (float) $plan->daily_credit_limit,
+                'remaining' => max(0, $plan->daily_credit_limit - $dailyUsed),
+                'resets' => now()->endOfDay()->toIso8601String(),
             ],
             'monthly' => [
-                'used' => round($monthly, 1),
-                'limit' => $plan->monthly_credit_limit + $bonus,
+                'used' => $monthlyUsed,
+                'limit' => (float) $plan->monthly_credit_limit + $grants,
+                'remaining' => max(0, $plan->monthly_credit_limit + $grants - $monthlyUsed),
+                'granted' => $grants,
             ],
-            'bonus_credits' => $bonus,
         ];
     }
 
-    /* ------------------------------------------------------------------ */
+    /* ------------------------------ internals ------------------------------ */
 
     protected function counter(User $user, string $metric, string $period): float
     {
         return (float) UsageCounter::where('user_id', $user->id)
             ->where('metric', $metric)
             ->where('period_key', $period)
-            ->value('value');
+            ->value('value') ?? 0.0;
     }
 
-    protected function bump(User $user, string $metric, string $period, float $by): void
+    protected function increment(User $user, string $metric, string $period, float $by): void
     {
-        // Atomic upsert-and-increment (works on SQLite + Postgres).
+        // Atomic upsert + increment (works on Postgres and SQLite).
         DB::transaction(function () use ($user, $metric, $period, $by) {
             $row = UsageCounter::lockForUpdate()->firstOrCreate(
                 ['user_id' => $user->id, 'metric' => $metric, 'period_key' => $period],
                 ['value' => 0],
             );
-            $row->update(['value' => (float) $row->value + $by]);
+            $row->increment('value', $by);
         });
-    }
-
-    protected function activeGrantBalance(User $user): float
-    {
-        return (float) CreditGrant::where('user_id', $user->id)
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->sum('amount');
-    }
-
-    protected function blockedPayload(Plan $plan, string $period, float $used): array
-    {
-        $msg = $period === 'daily'
-            ? "You've used today's AI learning credits. Come back tomorrow — or upgrade for more."
-            : "You've reached this month's AI credit limit. Upgrade to keep the streak going.";
-
-        return [
-            'error' => 'quota_exceeded',
-            'period' => $period,
-            'message' => $msg,
-            'plan' => $plan->name,
-            'used' => round($used, 1),
-            'upsell' => [
-                'title' => 'Keep learning without limits',
-                'options' => Plan::where('is_active', true)
-                    ->where('name', '!=', $plan->name)
-                    ->get(['name', 'price_inr', 'daily_credit_limit', 'monthly_credit_limit']),
-            ],
-        ];
     }
 }

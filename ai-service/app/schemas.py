@@ -1,98 +1,151 @@
-"""Request/response contracts for the internal Laravel -> AI service API.
+"""Request/response contracts shared across endpoints.
 
-Mirrors PART H of AI_Tutor_MASTER_PROMPT.md. Every response carries `usage`
-(real prompt/completion tokens + model) so Laravel can meter cost
-(AI_Tutor_Token_Management.md §3.2).
+Every AI response carries a `usage` block (token counts + model) so the
+Laravel token-metering layer can record real cost on each call.
 """
-from typing import Any, Optional
-
 from pydantic import BaseModel, Field
 
 
+# ── Usage / metering ───────────────────────────────────────────────────
 class Usage(BaseModel):
+    model: str
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    model: str = ""
+    total_tokens: int = 0
+    mock: bool = False
+
+
+# ── Chat ───────────────────────────────────────────────────────────────
+class ChatMessage(BaseModel):
+    role: str  # "user" | "tutor"
+    content: str
 
 
 class StudentContext(BaseModel):
-    """Everything the tutor knows about the student (memory + mastery)."""
-    name: str = "Student"
-    curriculum_path: Optional[str] = None   # "School · CBSE · Class 10 · Science"
-    board: Optional[str] = None
-    grade: Optional[str] = None
-    language: str = "en"                    # en | hi | hinglish
-    memory: dict[str, Any] = Field(default_factory=dict)        # student_memory key/values
-    concept_mastery: list[dict] = Field(default_factory=list)   # [{concept, score, confidence}]
-    open_misconceptions: list[str] = Field(default_factory=list)
-
-
-class HistoryMessage(BaseModel):
-    role: str       # user | tutor
-    content: str
+    name: str | None = None
+    level: str | None = None           # e.g. "Class 10"
+    learning_style: str | None = None  # visual | reading | mixed
+    language: str = "English"
+    memory: dict = Field(default_factory=dict)        # weak/strong topics, prefs
+    concept_mastery: dict = Field(default_factory=dict)  # concept -> 0..1
 
 
 class ChatTurnRequest(BaseModel):
     student: StudentContext = Field(default_factory=StudentContext)
+    subject: str
+    chapter: str
     topic: str
-    chapter: str = ""
-    subject: str = ""
-    mode: str = "teach"      # teach | socratic | quiz | exam | eli10 | answer
-    attempt_no: int = 1
-    last_gap: Optional[str] = None       # re-teach differently on attempt 2+
-    history: list[HistoryMessage] = Field(default_factory=list)
+    mode: str = "teach"  # teach | socratic | quiz | exam | eli10
+    history: list[ChatMessage] = Field(default_factory=list)
     message: str
-    context_chunks: list[str] = Field(default_factory=list)  # RAG chunks from Laravel
-    stream: bool = False
-
-
-class ChatTurnMeta(BaseModel):
-    """The tutor's structured 'mind' for the live right panel (spec D6/D9)."""
-    concept_tags: list[str] = Field(default_factory=list)
-    detected_misconception: Optional[str] = None
-    resolved_misconception: Optional[str] = None
-    mastery_signal: Optional[float] = None   # -1..1 how well the student is doing this turn
-    difficulty_delta: int = 0                # -1 easier, 0 same, +1 harder
-    next_step: Optional[str] = None
-    suggested_render: str = "text"           # text | quiz | flashcards | canvas
+    attempt_no: int = 1
 
 
 class ChatTurnResponse(BaseModel):
     reply: str
-    meta: ChatTurnMeta = Field(default_factory=ChatTurnMeta)
-    usage: Usage = Field(default_factory=Usage)
+    concept_tags: list[str] = Field(default_factory=list)
+    detected_misconception: str | None = None
+    difficulty_delta: int = 0  # -1 easier, 0 same, +1 harder
+    suggested_render: str = "text"  # text | canvas | quiz | flashcard | mindmap
+    next_step: str | None = None
+    usage: Usage
 
 
+# ── Assessment ─────────────────────────────────────────────────────────
 class AssessmentGenerateRequest(BaseModel):
     student: StudentContext = Field(default_factory=StudentContext)
+    subject: str
+    chapter: str
     topic: str
     count: int = 3
-    concepts: list[str] = Field(default_factory=list)   # target weak concepts, if any
-    difficulty: str = "auto"                            # easy | medium | hard | auto
-    attempt_no: int = 1
+
+
+class Question(BaseModel):
+    concept: str
+    type: str = "mcq"
+    stem: str
+    options: list[str] = Field(default_factory=list)
+    answer_key: str
+    difficulty: str = "medium"
+
+
+class AssessmentGenerateResponse(BaseModel):
+    questions: list[Question]
+    usage: Usage
+
+
+class GradeItem(BaseModel):
+    concept: str
+    stem: str
+    correct_answer: str
+    student_answer: str
+    type: str = "mcq"
 
 
 class AssessmentGradeRequest(BaseModel):
-    student: StudentContext = Field(default_factory=StudentContext)
     topic: str
-    items: list[dict] = Field(default_factory=list)
-    # each: {question, concept, type, answer_key, raw_answer}
+    items: list[GradeItem]
 
 
+class GradedItem(BaseModel):
+    concept: str
+    is_correct: bool
+    partial_score: float = 0.0
+    feedback: str = ""
+    detected_misconception: str | None = None
+
+
+class AssessmentGradeResponse(BaseModel):
+    graded: list[GradedItem]
+    usage: Usage
+
+
+# ── Gap analysis ───────────────────────────────────────────────────────
 class GapAnalyzeRequest(BaseModel):
-    student: StudentContext = Field(default_factory=StudentContext)
     topic: str
-    results: list[dict] = Field(default_factory=list)
-    # each: {concept, question, is_correct, raw_answer?}
+    results: list[dict]  # [{concept, is_correct, student_answer, ...}]
 
 
+class Gap(BaseModel):
+    concept: str
+    severity: str = "medium"  # low | medium | high
+    misconception: str | None = None
+    recommendation: str = ""
+
+
+class GapAnalyzeResponse(BaseModel):
+    gaps: list[Gap]
+    summary: str = ""
+    usage: Usage
+
+
+# ── Study plan ─────────────────────────────────────────────────────────
 class PlanBuildRequest(BaseModel):
-    student: StudentContext = Field(default_factory=StudentContext)
     topic: str
     gaps: list[dict] = Field(default_factory=list)
 
 
-class ParentReportRequest(BaseModel):
-    student: StudentContext = Field(default_factory=StudentContext)
-    period: str = "weekly"
-    stats: dict[str, Any] = Field(default_factory=dict)
+class PlanItem(BaseModel):
+    title: str
+    detail: str = ""
+    concept: str | None = None
+
+
+class PlanBuildResponse(BaseModel):
+    title: str = "Your next steps"
+    items: list[PlanItem]
+    usage: Usage
+
+
+# ── Notes ingestion (multimodal) ───────────────────────────────────────
+class NotesIngestRequest(BaseModel):
+    student_id: int
+    text: str  # already OCR'd text (Laravel/worker does OCR upload first)
+    topic: str | None = None
+
+
+class NotesIngestResponse(BaseModel):
+    summary: str
+    flashcards: list[dict]  # [{front, back}]
+    chunks_indexed: int = 0
+    usage: Usage

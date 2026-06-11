@@ -24,10 +24,14 @@ api.interceptors.request.use((config) => {
 });
 
 // On 401, clear token so the app falls back to the auth screen.
+// On 402 (out of AI credits), nudge any mounted credit meter to refresh.
 api.interceptors.response.use(
   (r) => r,
   (error) => {
     if (error.response?.status === 401) setToken(null);
+    if (error.response?.status === 402) {
+      window.dispatchEvent(new CustomEvent("usage:refresh"));
+    }
     return Promise.reject(error);
   }
 );

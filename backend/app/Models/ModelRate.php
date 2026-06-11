@@ -6,14 +6,18 @@ use Illuminate\Database\Eloquent\Model;
 
 class ModelRate extends Model
 {
-    protected $fillable = ['model', 'input_rate_per_1k', 'output_rate_per_1k', 'currency', 'effective_from'];
+    protected $fillable = [
+        'model', 'input_rate_per_1k', 'output_rate_per_1k', 'currency', 'effective_from',
+    ];
 
-    protected $casts = ['effective_from' => 'datetime'];
+    protected $casts = ['effective_from' => 'date'];
 
-    /** Latest effective rate row for a model. */
-    public static function latestFor(?string $model): ?self
+    /** Latest effective rate row for a model, or null. */
+    public static function current(string $model): ?self
     {
-        if (! $model) return null;
-        return static::where('model', $model)->orderByDesc('effective_from')->orderByDesc('id')->first();
+        return static::where('model', $model)
+            ->where('effective_from', '<=', now()->toDateString())
+            ->orderByDesc('effective_from')
+            ->first();
     }
 }

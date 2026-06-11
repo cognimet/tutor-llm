@@ -5,23 +5,45 @@ namespace App\Http\Middleware;
 use App\Services\TokenMeter;
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Pre-call credit gate (token spec §3.1). Attach to every AI-triggering route:
- *   Route::post(...)->middleware('tokens:chat')
- * Blocks with 402 quota_exceeded + an upsell payload when the plan is spent.
+ * Pre-call quota gate. Applied to AI-triggering routes as `token.gate:{action}`
+ * (e.g. token.gate:chat). Blocks with 402 + an upsell payload BEFORE the
+ * expensive AI call is made; actual usage is recorded after the call by
+ * TutorService via TokenMeter::record().
  */
 class TokenGate
 {
     public function __construct(protected TokenMeter $meter) {}
 
-    public function handle(Request $request, Closure $next, string $action = 'chat')
+    public function handle(Request $request, Closure $next, string $action = 'chat'): Response
     {
-        $blocked = $this->meter->gate($request->user(), $action);
+        $user = $request->user();
 
-        if ($blocked !== null) {
-            return response()->json($blocked, 402);
+        // Only students consume credits; admin/parent actions are not gated.
+        if (! $user || $user->role !== 'student') {
+            return $next($request);
         }
+
+        $check = $this->meter->check($user, $action);
+
+        if (! $check['allowed']) {
+            $daily = $check['reason'] === 'daily_limit';
+
+            return response()->json([
+                'error' => 'quota_exceeded',
+                'reason' => $check['reason'],
+                'message' => $daily
+                    ? "You've used today's AI learning credits. Come back tomorrow — or upgrade for more."
+                    : "You've reached this month's AI learning limit. Upgrade your plan to keep going.",
+                'usage' => $check['summary'],
+                'upgrade' => ['plan' => 'plus'],
+            ], 402);
+        }
+
+        // Stash the action so downstream code can read it if useful.
+        $request->attributes->set('token_action', $action);
 
         return $next($request);
     }

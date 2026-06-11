@@ -1,18 +1,74 @@
-# One-command full stack: Laravel API + Python AI service + React (Vite) frontend.
+# Full stack: Laravel API + Python AI service + Postgres + Redis + Qdrant + React.
 # Usage:
-#   1) put your key in .env  (copy .env.example -> .env)
+#   1) cp .env.example .env   (paste your Gemini key, or leave AI_MOCK=true)
 #   2) docker compose up --build
 #   3) open http://localhost:5173
+#
+# Architecture: Laravel owns data + orchestration and calls the Python AI
+# service (which owns all LLM/RAG work) over internal REST. Postgres is the
+# system of record; Redis backs cache/queue + token counters; Qdrant stores
+# curriculum embeddings for RAG.
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aitutor
+      POSTGRES_USER: aitutor
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-aitutor}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aitutor"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
   ai-service:
     build: ./ai-service
     ports:
       - "8001:8001"
     environment:
-      # Real key comes from the root .env (gitignored). Leave blank to use mock AI.
+      # Multi-provider: set AI_PROVIDER (gemini|openai|anthropic|auto) and the
+      # matching key. "auto" picks the first provider with a key set.
+      # OPENAI_BASE_URL also enables OpenAI-compatible gateways (OpenRouter).
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
-      GEMINI_MOCK: ${GEMINI_MOCK:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MOCK: ${AI_MOCK:-false}
+      # Model routing: AI_MODEL = single-model switch (overrides the three
+      # per-action routes below). Leave all empty for provider defaults.
+      AI_MODEL: ${AI_MODEL:-}
+      AI_MODEL_CHAT: ${AI_MODEL_CHAT:-}
+      AI_MODEL_STRUCTURED: ${AI_MODEL_STRUCTURED:-}
+      AI_MODEL_GRADE: ${AI_MODEL_GRADE:-}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: curriculum
+      # Embeddings: "auto" prefers local fastembed (free, no API key, no 404s).
+      # Override with gemini/openai/mock if desired.
+      EMBED_BACKEND: ${EMBED_BACKEND:-auto}
+      # Cache the fastembed model between restarts (downloaded once on first use).
+      FASTEMBED_CACHE_PATH: /models
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key}
+    volumes:
+      - fastembed_cache:/models
+    depends_on:
+      - qdrant
 
   backend:
     build: ./backend
@@ -21,20 +77,25 @@ services:
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
-      DB_CONNECTION: sqlite
-      DB_DATABASE: /app/storage/db/database.sqlite
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: aitutor
+      DB_USERNAME: aitutor
+      DB_PASSWORD: ${DB_PASSWORD:-aitutor}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
       FRONTEND_URL: http://localhost:5173
-      # All LLM calls go through the Python AI service (architecture doc).
+      # AI now comes from the Python service, not Gemini directly.
       AI_SERVICE_URL: http://ai-service:8001
-      # Legacy direct-Gemini fallback (used only if AI_SERVICE_URL is unset/down).
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
-      GEMINI_MOCK: ${GEMINI_MOCK:-false}
-    volumes:
-      # Persist only the SQLite DB file's directory (keeps migrations intact).
-      - backend_db:/app/storage/db
+      AI_SERVICE_KEY: ${INTERNAL_API_KEY:-dev-internal-key}
     depends_on:
-      - ai-service
+      postgres:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+      redis:
+        condition: service_started
 
   frontend:
     build: ./frontend
@@ -42,8 +103,15 @@ services:
       - "5173:5173"
     environment:
       VITE_PROXY_TARGET: http://backend:8000
+    # Bind-mount the source so Vite hot-reloads edits without a rebuild.
+    # The anonymous volume keeps the image's node_modules (not the host's).
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
 
 volumes:
-  backend_db:
+  pg_data:
+  qdrant_data:
+  fastembed_cache:

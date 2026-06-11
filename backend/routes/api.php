@@ -1,8 +1,9 @@
 <?php
 
-use App\Http\Controllers\Api\AdminBillingController;
+use App\Http\Controllers\Api\AdminContentController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AdminCurriculumController;
+use App\Http\Controllers\Api\AdminUsageController;
 use App\Http\Controllers\Api\AssessmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CurriculumController;
@@ -37,35 +38,39 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tutor/sessions', [TutorController::class, 'sessions']);
         Route::post('/tutor/sessions', [TutorController::class, 'startSession']);
         Route::get('/tutor/sessions/{session}', [TutorController::class, 'show']);
-        Route::get('/tutor/sessions/{session}/mind', [TutorController::class, 'mind']);   // "shows its mind" panel
-        Route::patch('/tutor/sessions/{session}/mode', [TutorController::class, 'setMode']);
-        Route::post('/tutor/sessions/{session}/send', [TutorController::class, 'send'])->middleware('tokens:chat');
-        Route::post('/tutor/sessions/{session}/stream', [TutorController::class, 'stream'])->middleware('tokens:chat');
-        Route::post('/tutor/sessions/{session}/regenerate', [TutorController::class, 'regenerate'])->middleware('tokens:chat');
+        // AI-triggering routes pass the token gate (quota check + 402 upsell)
+        // BEFORE the AI call; real usage is metered after via TokenMeter.
+        Route::post('/tutor/sessions/{session}/send', [TutorController::class, 'send'])
+            ->middleware('token.gate:chat');
+        Route::post('/tutor/sessions/{session}/stream', [TutorController::class, 'stream'])
+            ->middleware('token.gate:chat');
+        Route::post('/tutor/sessions/{session}/regenerate', [TutorController::class, 'regenerate'])
+            ->middleware('token.gate:chat');
         Route::post('/tutor/messages/{message}/feedback', [TutorController::class, 'feedback']);
 
         // Mini-assessment + gap detection
-        Route::post('/assessments/generate', [AssessmentController::class, 'generate'])->middleware('tokens:assess_gen');
-        Route::post('/assessments/{assessment}/submit', [AssessmentController::class, 'submit'])->middleware('tokens:grade');
+        Route::post('/assessments/generate', [AssessmentController::class, 'generate'])
+            ->middleware('token.gate:assess_gen');
+        Route::post('/assessments/{assessment}/submit', [AssessmentController::class, 'submit'])
+            ->middleware('token.gate:gap');
         Route::get('/assessments/history', [AssessmentController::class, 'history']);
 
         // Learning plans (light next-steps)
         Route::get('/plans', [LearningPlanController::class, 'index']);
-        Route::post('/plans/generate', [LearningPlanController::class, 'generate'])->middleware('tokens:plan');
+        Route::post('/plans/generate', [LearningPlanController::class, 'generate'])
+            ->middleware('token.gate:plan');
         Route::patch('/plans/items/{item}/toggle', [LearningPlanController::class, 'toggleItem']);
 
-        // Progress snapshot
+        // Progress snapshot + credit meter
         Route::get('/progress', [ProgressController::class, 'summary']);
-
-        // Credit meter (credits, never raw tokens — token spec §7)
-        Route::get('/usage', [UsageController::class, 'summary']);
+        Route::get('/usage', [UsageController::class, 'me']);
     });
 
     // --- Parent features ---
     Route::middleware('role:parent')->prefix('parent')->group(function () {
         Route::get('/children', [ParentController::class, 'children']);
         Route::get('/children/{child}/report', [ParentController::class, 'childReport']);
-        Route::get('/children/{child}/usage', [ParentController::class, 'childUsage']);
+        Route::get('/children/{child}/usage', [UsageController::class, 'child']);
         Route::post('/children/link', [ParentController::class, 'linkChild']);
     });
 
@@ -80,14 +85,23 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/users/{user}/active', [AdminController::class, 'setActive']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
 
-        // --- AI usage & billing (token spec §6) ---
-        Route::get('/usage', [AdminBillingController::class, 'usage']);
-        Route::get('/plans', [AdminBillingController::class, 'plans']);
-        Route::post('/plans', [AdminBillingController::class, 'storePlan']);
-        Route::patch('/plans/{plan}', [AdminBillingController::class, 'updatePlan']);
-        Route::get('/model-rates', [AdminBillingController::class, 'modelRates']);
-        Route::post('/model-rates', [AdminBillingController::class, 'storeModelRate']);
-        Route::post('/users/{user}/grant-credits', [AdminBillingController::class, 'grantCredits']);
+        // --- AI usage & billing (raw tokens + ₹ visible only here) ---
+        Route::get('/usage', [AdminUsageController::class, 'overview']);
+        Route::get('/users/{user}/usage', [AdminUsageController::class, 'userLedger']);
+        Route::patch('/users/{user}/plan', [AdminUsageController::class, 'setUserPlan']);
+        Route::post('/users/{user}/grant-credits', [AdminUsageController::class, 'grantCredits']);
+        Route::get('/plans', [AdminUsageController::class, 'plans']);
+        Route::patch('/plans/{plan}', [AdminUsageController::class, 'updatePlan']);
+        Route::get('/model-rates', [AdminUsageController::class, 'modelRates']);
+        Route::post('/model-rates', [AdminUsageController::class, 'storeModelRate']);
+
+        // --- Curriculum content (RAG knowledge base) ---
+        Route::get('/topics/{topic}/content', [AdminContentController::class, 'index']);
+        Route::post('/topics/{topic}/content', [AdminContentController::class, 'store']);
+        Route::patch('/content/{chunk}', [AdminContentController::class, 'update']);
+        Route::delete('/content/{chunk}', [AdminContentController::class, 'destroy']);
+        Route::post('/topics/{topic}/reindex', [AdminContentController::class, 'reindexTopic']);
+        Route::post('/rag/reindex', [AdminContentController::class, 'reindexAll']);
 
         // --- Curriculum management (Stage → Track → Level → Subject → Chapter → Topic) ---
         Route::prefix('curriculum')->group(function () {

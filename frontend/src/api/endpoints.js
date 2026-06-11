@@ -35,16 +35,8 @@ export const tutorApi = {
   start: (payload) => api.post("/tutor/sessions", payload).then((r) => r.data.session),
   show: (id) => api.get(`/tutor/sessions/${id}`).then((r) => r.data.session),
   send: (id, message) => api.post(`/tutor/sessions/${id}/send`, { message }).then((r) => r.data.message),
-  // "Shows its mind" panel: live mastery, misconceptions, memory, next step.
-  mind: (id) => api.get(`/tutor/sessions/${id}/mind`).then((r) => r.data),
-  setMode: (id, mode) => api.patch(`/tutor/sessions/${id}/mode`, { mode }).then((r) => r.data.session),
   feedback: (messageId, rating) =>
     api.post(`/tutor/messages/${messageId}/feedback`, { rating }).then((r) => r.data),
-};
-
-// --- Student: credit meter (credits, never raw tokens) ---
-export const usageApi = {
-  summary: () => api.get("/usage").then((r) => r.data.usage),
 };
 
 // --- Student: assessment + gaps ---
@@ -66,11 +58,16 @@ export const progressApi = {
   summary: () => api.get("/progress").then((r) => r.data),
 };
 
+// --- AI usage / credits (students see credits, never raw tokens) ---
+export const usageApi = {
+  me: () => api.get("/usage").then((r) => r.data),
+  child: (childId) => api.get(`/parent/children/${childId}/usage`).then((r) => r.data),
+};
+
 // --- Parent ---
 export const parentApi = {
   children: () => api.get("/parent/children").then((r) => r.data.children),
   report: (childId) => api.get(`/parent/children/${childId}/report`).then((r) => r.data),
-  usage: (childId) => api.get(`/parent/children/${childId}/usage`).then((r) => r.data),
   linkChild: (child_email, relationship) =>
     api.post("/parent/children/link", { child_email, relationship }).then((r) => r.data),
 };
@@ -87,16 +84,4 @@ export const adminApi = {
     api.post(`/admin/users/${parentId}/link-child`, { child_email: childEmail, relationship }).then((r) => r.data),
   unlinkChild: (parentId, studentId) =>
     api.delete(`/admin/users/${parentId}/unlink-child/${studentId}`).then((r) => r.data),
-};
-
-// --- Admin: AI usage & billing (token spec §6) ---
-export const adminBillingApi = {
-  usage: (days = 30) => api.get("/admin/usage", { params: { days } }).then((r) => r.data),
-  plans: () => api.get("/admin/plans").then((r) => r.data.plans),
-  createPlan: (payload) => api.post("/admin/plans", payload).then((r) => r.data.plan),
-  updatePlan: (id, payload) => api.patch(`/admin/plans/${id}`, payload).then((r) => r.data.plan),
-  modelRates: () => api.get("/admin/model-rates").then((r) => r.data.rates),
-  addModelRate: (payload) => api.post("/admin/model-rates", payload).then((r) => r.data.rate),
-  grantCredits: (userId, payload) =>
-    api.post(`/admin/users/${userId}/grant-credits`, payload).then((r) => r.data.grant),
 };

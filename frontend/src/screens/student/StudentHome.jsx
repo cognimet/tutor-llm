@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from "react";
-import { Search, ChevronRight, ArrowLeft, MessageCircle, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X, Check, ArrowRight, Clock, Play, ClipboardCheck } from "lucide-react";
+import { Search, ChevronRight, ArrowLeft, MessageCircle, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X } from "lucide-react";
 import { Card, Button } from "../../ui/components.jsx";
 import { tint } from "../../ui/tints.js";
 import CurriculumPicker from "../../ui/CurriculumPicker.jsx";
 
-export default function StudentHome({ user, path, subjects, progress, plans = [], onOpenTopic, onOpenPlans, onTogglePlanItem, onStartTask, onSetLevel }) {
+export default function StudentHome({ user, path, subjects, progress, onOpenTopic, onSetLevel }) {
   const [active, setActive] = useState(null);
   const [q, setQ] = useState("");
   const [picking, setPicking] = useState(false);
@@ -20,15 +20,6 @@ export default function StudentHome({ user, path, subjects, progress, plans = []
   }, [subject, q]);
 
   const p = progress?.progress;
-
-  // Flatten open next-step tasks across all active plans for the home preview.
-  const openItems = useMemo(
-    () =>
-      (plans || [])
-        .flatMap((pl) => (pl.items || []).map((it) => ({ ...it, topic_name: pl.topic_name })))
-        .filter((it) => it.status !== "done"),
-    [plans],
-  );
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-8">
@@ -67,45 +58,6 @@ export default function StudentHome({ user, path, subjects, progress, plans = []
                 {g.concept} · {g.topic_name}
               </span>
             ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Light next-steps preview — the persistent home for plan tasks. */}
-      {openItems.length > 0 && (
-        <Card className="mt-6 p-5">
-          <div className="flex items-center justify-between gap-3">
-            <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500">
-              <ListChecks className="h-4 w-4 text-indigo-500" /> Your next steps
-            </p>
-            <button onClick={onOpenPlans} className="inline-flex items-center gap-1 text-xs font-extrabold text-indigo-600 hover:text-indigo-700">
-              View all{openItems.length > 3 ? ` (${openItems.length})` : ""} <ArrowRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div className="mt-3 space-y-2">
-            {openItems.slice(0, 3).map((item) => {
-              const isQuiz = /\b(quiz|re-?take|assessment|test|mock)\b/i.test(item.title || "");
-              return (
-                <div key={item.id}
-                  className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-white p-3.5 transition-all hover:border-indigo-200">
-                  <button onClick={() => onTogglePlanItem?.(item)} title="Mark as done"
-                    className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 border-slate-300 transition-colors hover:border-indigo-400">
-                    {item.status === "done" && <Check className="h-3.5 w-3.5 text-emerald-500" strokeWidth={3} />}
-                  </button>
-                  <button onClick={() => onStartTask?.(item, item.topic_name)} className="flex-1 text-left">
-                    <p className="text-sm font-extrabold text-slate-800">{item.title}</p>
-                    <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-400">
-                      <Clock className="h-3 w-3" /> ~{item.estimated_minutes} min{item.topic_name ? ` · ${item.topic_name}` : ""}
-                    </p>
-                  </button>
-                  <button onClick={() => onStartTask?.(item, item.topic_name)}
-                    className="mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-1.5 text-xs font-extrabold text-indigo-600 transition-colors hover:bg-indigo-500 hover:text-white">
-                    {isQuiz ? <ClipboardCheck className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                    {isQuiz ? "Quiz" : "Start"}
-                  </button>
-                </div>
-              );
-            })}
           </div>
         </Card>
       )}

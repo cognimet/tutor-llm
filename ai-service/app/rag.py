@@ -1,0 +1,266 @@
+"""RAG over the curriculum vector store (Qdrant).
+
+Grounds tutor turns and generated questions in vetted curriculum chunks to
+prevent off-syllabus hallucination. Degrades gracefully: if Qdrant is not
+configured, retrieval returns [] and the caller proceeds ungrounded.
+
+Embedding backends (EMBED_BACKEND = auto|local|gemini|openai|mock):
+  - local   -> fastembed, in-process, no API key, no external call (default)
+               BAAI/bge-small-en-v1.5 (384-dim)
+  - gemini  -> text-embedding-004 (768-dim)
+  - openai  -> text-embedding-3-small (1536-dim), NATIVE OpenAI only
+  - mock    -> deterministic hash vector, so topic-filtered retrieval still
+               works offline even with nothing configured.
+
+"auto" prefers local fastembed (most robust — works with OpenRouter LLMs,
+which don't serve embeddings, and needs no Google key). The collection is
+created with the active embedder's dimension; if you switch backends, the
+collection is auto-recreated and content re-indexed on the next index run.
+"""
+import hashlib
+import logging
+import struct
+
+import httpx
+
+from .config import settings
+
+log = logging.getLogger("ai.rag")
+
+_GEMINI_EMBED_MODEL = "text-embedding-004"      # 768-dim
+_OPENAI_EMBED_MODEL = "text-embedding-3-small"  # 1536-dim
+_LOCAL_DIM = 384                                # BAAI/bge-small-en-v1.5
+_MOCK_DIM = 768
+
+_local_model = None  # lazily-loaded fastembed instance
+
+
+def _fastembed_available() -> bool:
+    try:
+        import fastembed  # noqa: F401
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def embed_provider() -> str:
+    """Which embedding backend is active: local | gemini | openai | mock."""
+    choice = (settings.embed_backend or "auto").lower()
+    if choice in ("local", "gemini", "openai", "mock"):
+        if choice == "local" and not _fastembed_available():
+            log.warning("EMBED_BACKEND=local but fastembed not installed; using mock")
+            return "mock"
+        return choice
+    # auto
+    if settings.ai_mock:
+        return "mock"
+    if _fastembed_available():
+        return "local"
+    openai_native = bool(settings.openai_api_key) and "api.openai.com" in settings.openai_base_url
+    if openai_native:
+        return "openai"
+    if settings.gemini_api_key:
+        return "gemini"
+    return "mock"
+
+
+def embed_dim() -> int:
+    return {"local": _LOCAL_DIM, "openai": 1536, "gemini": 768, "mock": _MOCK_DIM}[embed_provider()]
+
+
+def _embed_local(text: str) -> list[float] | None:
+    global _local_model
+    try:
+        if _local_model is None:
+            from fastembed import TextEmbedding
+            _local_model = TextEmbedding(model_name=settings.embed_local_model)
+            log.info("loaded local embedder %s", settings.embed_local_model)
+        vec = next(iter(_local_model.embed([text])))
+        return vec.tolist()
+    except Exception as e:  # noqa: BLE001
+        log.warning("local embed failed: %s", e)
+        return None
+
+
+def _mock_vector(text: str, dim: int | None = None) -> list[float]:
+    """Deterministic pseudo-embedding from a hash, normalised to unit length."""
+    dim = dim or embed_dim()
+    vals: list[float] = []
+    counter = 0
+    while len(vals) < dim:
+        h = hashlib.sha256(f"{text}:{counter}".encode()).digest()
+        # 8 floats per 32-byte digest (4 bytes each, mapped to [-1, 1]).
+        for i in range(0, 32, 4):
+            n = struct.unpack("<I", h[i:i + 4])[0]
+            vals.append((n / 0xFFFFFFFF) * 2 - 1)
+        counter += 1
+    vals = vals[:dim]
+    norm = sum(v * v for v in vals) ** 0.5 or 1.0
+    return [v / norm for v in vals]
+
+
+async def _embed_gemini(text: str) -> list[float] | None:
+    url = f"{settings.gemini_base_url.rstrip('/')}/models/{_GEMINI_EMBED_MODEL}:embedContent"
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.post(url, json={"content": {"parts": [{"text": text}]}},
+                                  headers={"x-goog-api-key": settings.gemini_api_key})
+            if r.status_code == 200:
+                return r.json().get("embedding", {}).get("values")
+            log.warning("gemini embed error %s", r.status_code)
+    except httpx.HTTPError as e:
+        log.warning("gemini embed failed: %s", e)
+    return None
+
+
+async def _embed_openai(text: str) -> list[float] | None:
+    url = f"{settings.openai_base_url.rstrip('/')}/embeddings"
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.post(url, json={"model": _OPENAI_EMBED_MODEL, "input": text},
+                                  headers={"Authorization": f"Bearer {settings.openai_api_key}"})
+            if r.status_code == 200:
+                data = r.json().get("data", [])
+                if data:
+                    return data[0].get("embedding")
+            log.warning("openai embed error %s", r.status_code)
+    except httpx.HTTPError as e:
+        log.warning("openai embed failed: %s", e)
+    return None
+
+
+async def embed(text: str) -> list[float]:
+    """Return an embedding from the active backend; mock vector as last resort."""
+    backend = embed_provider()
+    vec = None
+    if backend == "local":
+        vec = _embed_local(text)
+    elif backend == "openai":
+        vec = await _embed_openai(text)
+    elif backend == "gemini":
+        vec = await _embed_gemini(text)
+    return vec or _mock_vector(text)  # never block ingestion on an embed hiccup
+
+
+def _client():
+    from qdrant_client import AsyncQdrantClient
+    return AsyncQdrantClient(url=settings.qdrant_url)
+
+
+async def ensure_collection() -> None:
+    """Create the collection, recreating it if the embedder's dim changed."""
+    if not settings.qdrant_url:
+        return
+    from qdrant_client import models as qm
+    dim = embed_dim()
+    client = _client()
+    try:
+        exists = await client.collection_exists(settings.qdrant_collection)
+        if exists:
+            # If the existing collection's dimension no longer matches the
+            # active embedder (e.g. switched gemini-768 -> local-384), drop and
+            # recreate so indexing/retrieval don't fail on a size mismatch.
+            info = await client.get_collection(settings.qdrant_collection)
+            current = info.config.params.vectors.size
+            if current == dim:
+                return
+            log.warning("collection dim %s != embedder dim %s — recreating", current, dim)
+            await client.delete_collection(settings.qdrant_collection)
+        await client.create_collection(
+            collection_name=settings.qdrant_collection,
+            vectors_config=qm.VectorParams(size=dim, distance=qm.Distance.COSINE),
+        )
+        log.info("created qdrant collection %s (dim=%s, embedder=%s)",
+                 settings.qdrant_collection, dim, embed_provider())
+    finally:
+        await client.close()
+
+
+async def index(points: list[dict]) -> int:
+    """Embed and upsert curriculum chunks.
+
+    Each point: {id:int, topic:str, type:str, body:str, ...payload}. Returns the
+    number indexed. No-op (0) if Qdrant isn't configured.
+    """
+    if not settings.qdrant_url or not points:
+        return 0
+    from qdrant_client import models as qm
+    await ensure_collection()
+    client = _client()
+    try:
+        structs = []
+        for p in points:
+            body = p.get("body", "")
+            vector = await embed(f"{p.get('topic','')}: {body}")
+            structs.append(qm.PointStruct(
+                id=int(p["id"]),
+                vector=vector,
+                payload={
+                    "topic": p.get("topic"),
+                    "type": p.get("type"),
+                    "body": body,
+                    "chunk_id": int(p["id"]),
+                },
+            ))
+        await client.upsert(collection_name=settings.qdrant_collection, points=structs)
+        return len(structs)
+    finally:
+        await client.close()
+
+
+async def delete_topic(topic: str) -> None:
+    """Remove all chunks for a topic (used before re-indexing it)."""
+    if not settings.qdrant_url:
+        return
+    from qdrant_client import models as qm
+    client = _client()
+    try:
+        await client.delete(
+            collection_name=settings.qdrant_collection,
+            points_selector=qm.FilterSelector(filter=qm.Filter(must=[
+                qm.FieldCondition(key="topic", match=qm.MatchValue(value=topic))
+            ])),
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning("qdrant delete_topic failed: %s", e)
+    finally:
+        await client.close()
+
+
+async def retrieve(query: str, topic: str | None = None, k: int | None = None) -> list[str]:
+    """Return up to k curriculum chunk bodies relevant to the query.
+
+    Returns [] (not an error) when retrieval is unavailable so the tutor still
+    works without a populated vector store.
+    """
+    if not settings.qdrant_url:
+        return []
+    k = k or settings.rag_top_k
+    try:
+        from qdrant_client import models as qm
+        vector = await embed(query if not topic else f"{topic}: {query}")
+        client = _client()
+        flt = None
+        if topic:
+            flt = qm.Filter(must=[qm.FieldCondition(
+                key="topic", match=qm.MatchValue(value=topic))])
+        res = await client.query_points(
+            collection_name=settings.qdrant_collection,
+            query=vector, limit=k, query_filter=flt, with_payload=True,
+        )
+        await client.close()
+        return [p.payload.get("body", "") for p in res.points if p.payload]
+    except Exception as e:  # noqa: BLE001 — never let RAG break a chat turn
+        log.warning("qdrant retrieve failed: %s", e)
+        return []
+
+
+def as_context(chunks: list[str]) -> str:
+    if not chunks:
+        return ""
+    joined = "\n---\n".join(c.strip() for c in chunks if c.strip())
+    return (
+        "\n\nUse ONLY the following curriculum material as your source of truth. "
+        "If it doesn't cover the question, say so briefly and teach from first principles:\n"
+        f"<curriculum>\n{joined}\n</curriculum>\n"
+    )

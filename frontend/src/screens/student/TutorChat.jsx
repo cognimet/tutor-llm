@@ -3,15 +3,13 @@ import {
   ArrowLeft, Send, Square, Lightbulb, ClipboardCheck, Sparkles,
   Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Plus, MessageSquare,
   ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
-  Pencil, MoreVertical, Download, Keyboard, ArrowDown, Brain,
-  GraduationCap, HelpCircle, Target, FileQuestion, Baby, Zap,
+  Pencil, MoreVertical, Download, Keyboard, ArrowDown,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
 import { tutorApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
 import Markdown from "../../ui/Markdown.jsx";
 import AssessmentFlow from "./AssessmentFlow.jsx";
-import TutorMind from "./TutorMind.jsx";
 
 const STARTERS = (t) => [
   { icon: "💡", label: `Explain "${t}" simply` },
@@ -20,23 +18,23 @@ const STARTERS = (t) => [
   { icon: "🎯", label: `Quiz me with one quick question` },
 ];
 
-// Contextual follow-ups shown after the tutor finishes a reply (quick chips).
+// Contextual follow-ups shown after the tutor finishes a reply.
 const FOLLOWUPS = [
-  { icon: "💡", label: "Give me a hint" },
   { icon: "🪄", label: "Explain that more simply" },
   { icon: "➕", label: "Show me another example" },
-  { icon: "🔥", label: "Make it harder" },
   { icon: "❓", label: "Why is that true?" },
   { icon: "🎯", label: "Quiz me on this" },
+  { icon: "📝", label: "Give me exam tips for this" },
+  { icon: "🗒️", label: "Summarise this as revision notes" },
 ];
 
-// Tutor modes (Chat Page Spec §5): how the tutor behaves, not what it covers.
+// Tutor modes — change how the tutor teaches (sent with each message).
 const MODES = [
-  { id: "teach", label: "Teach me", icon: GraduationCap, hint: "Step-by-step explanations" },
-  { id: "socratic", label: "Socratic", icon: HelpCircle, hint: "Guides with questions only" },
-  { id: "quiz", label: "Quiz me", icon: Target, hint: "One question at a time" },
-  { id: "exam", label: "Exam drill", icon: FileQuestion, hint: "Board-exam style + tips" },
-  { id: "eli10", label: "ELI10", icon: Baby, hint: "Super-simple analogies" },
+  { id: "teach",    label: "Teach",    icon: "📘", hint: "Step-by-step explanations" },
+  { id: "socratic", label: "Socratic", icon: "🤔", hint: "Guides with questions only" },
+  { id: "quiz",     label: "Quiz",     icon: "🎯", hint: "Drills you with questions" },
+  { id: "exam",     label: "Exam",     icon: "📝", hint: "Board-exam coaching" },
+  { id: "eli10",    label: "Simple",   icon: "🧒", hint: "Explain like I'm 10" },
 ];
 
 /* ----------------------------------------------------------------- helpers */
@@ -305,6 +303,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [mode, setMode] = useState("teach");
   const [streaming, setStreaming] = useState(false);
   const [assessing, setAssessing] = useState(false);
   const [sessions, setSessions] = useState([]);
@@ -317,12 +316,6 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [menuOpen, setMenuOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [copiedTranscript, setCopiedTranscript] = useState(false);
-  const [mode, setMode] = useState("teach");          // tutor mode (spec §5)
-  const [mind, setMind] = useState(null);             // "shows its mind" panel data
-  const [usage, setUsage] = useState(null);           // credit meter
-  const [mindOpen, setMindOpen] = useState(true);     // right panel (desktop)
-  const [mindSheet, setMindSheet] = useState(false);  // right panel (mobile sheet)
-  const [quota, setQuota] = useState(null);           // 402 upsell payload
 
   const scrollRef = useRef(null);
   const taRef = useRef(null);
@@ -330,7 +323,6 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const searchRef = useRef(null);
   const menuRef = useRef(null);
   const prevLen = useRef(0);
-  const autoFired = useRef(false); // guards one-shot task auto-run
 
   const loadSessions = useCallback(async () => {
     try {
@@ -338,16 +330,6 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       setSessions(await tutorApi.sessions(params));
     } catch { /* ignore */ }
   }, [ctx.topic_id]);
-
-  // Pull the tutor's live "mind" (mastery, misconceptions, next step) + credits.
-  const loadMind = useCallback(async (id) => {
-    if (!id) return;
-    try {
-      const data = await tutorApi.mind(id);
-      setMind(data.mind);
-      setUsage(data.usage);
-    } catch { /* ignore */ }
-  }, []);
 
   const stopSpeaking = useCallback(() => {
     try { window.speechSynthesis?.cancel(); } catch { /* */ }
@@ -368,8 +350,6 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
         setSessionId(s.id);
         setMessages(s.messages || []);
         setInput(loadDraft(s.id));
-        setMode(s.mode || "teach");
-        loadMind(s.id);
       } finally {
         if (alive) setBooting(false);
       }
@@ -378,15 +358,6 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     return () => { alive = false; abortRef.current?.abort(); stopSpeaking(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.topic_id, ctx.topic_name]);
-
-  // Opened from a next-step task: once the session is ready, run the task —
-  // auto-ask the tutor to deliver it, or open the mini-assessment for a quiz.
-  useEffect(() => {
-    if (booting || !sessionId || autoFired.current) return;
-    if (ctx.autoAssess) { autoFired.current = true; setAssessing(true); }
-    else if (ctx.initialMessage) { autoFired.current = true; send(ctx.initialMessage); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [booting, sessionId]);
 
   // Keep pinned to the latest message while near the bottom.
   useEffect(() => {
@@ -493,26 +464,11 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
 
     return streamSSE(path, body, {
       onDelta: (text) => setLast((last) => ({ ...last, content: last.content + text })),
-      // Live "mind" refresh: mastery, misconceptions, next step + credit meter.
-      onMind: (payload) => {
-        if (payload.mind) setMind(payload.mind);
-        if (payload.usage) setUsage(payload.usage);
-      },
       onDone: (meta) => {
         setLast((last) => ({ ...last, id: meta.id, created_at: meta.created_at, pending: false }));
         setStreaming(false);
         loadSessions();
         onProgressChange?.();
-      },
-      onQuota: (payload) => {
-        // Out of credits: drop the pending bubble and raise the upsell wall.
-        setMessages((m) => {
-          const copy = [...m];
-          if (copy.length && copy[copy.length - 1].pending) copy.pop();
-          return copy;
-        });
-        setQuota(payload);
-        setStreaming(false);
       },
       onError: (msg) => {
         setLast((last) => ({
@@ -537,13 +493,6 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     runStream(`/tutor/sessions/${sessionId}/stream`, { message: value, mode });
   };
 
-  // Switch tutor mode (Teach / Socratic / Quiz / Exam / ELI10).
-  const switchMode = (next) => {
-    if (next === mode || streaming) return;
-    setMode(next);
-    if (sessionId) tutorApi.setMode(sessionId, next).catch(() => { /* ignore */ });
-  };
-
   const regenerate = () => {
     if (streaming || !sessionId) return;
     stopSpeaking();
@@ -553,7 +502,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       if (copy.length && copy[copy.length - 1].role === "tutor") copy.pop();
       return copy;
     });
-    runStream(`/tutor/sessions/${sessionId}/regenerate`, null);
+    runStream(`/tutor/sessions/${sessionId}/regenerate`, { mode });
   };
 
   // Stop generating but keep whatever streamed so far (drop an empty bubble).
@@ -583,8 +532,6 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       setSessionId(s.id);
       setMessages(s.messages || []);
       setInput(loadDraft(s.id));
-      setMode(s.mode || "teach");
-      loadMind(s.id);
       setCtx((c) => ({
         ...c,
         topic_id: s.topic_id ?? c.topic_id,
@@ -605,13 +552,11 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     try {
       const s = await tutorApi.start({
         topic_id: ctx.topic_id, topic_name: ctx.topic_name,
-        chapter_name: ctx.chapter_name, subject_name: ctx.subject_name,
-        mode, fresh: true,
+        chapter_name: ctx.chapter_name, subject_name: ctx.subject_name, fresh: true,
       });
       setSessionId(s.id);
       setMessages(s.messages || []);
       setInput(loadDraft(s.id));
-      loadMind(s.id);
       loadSessions();
     } finally { setBooting(false); }
   };
@@ -685,8 +630,8 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
 
   return (
     <div className="flex h-[calc(100vh-57px)] flex-col">
-      <div className="mx-auto flex w-full max-w-[88rem] flex-1 gap-5 overflow-hidden px-4 py-5">
-        {/* LEFT rail: modes + topic + history (spec §2) */}
+      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-5 overflow-hidden px-4 py-5">
+        {/* Context + history rail (desktop) */}
         <aside className="hidden w-72 shrink-0 flex-col gap-4 lg:flex">
           <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-extrabold text-slate-500 hover:text-indigo-600">
             <ArrowLeft className="h-4 w-4" /> Topics
@@ -705,42 +650,15 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             </button>
           </div>
 
-          {/* Tutor modes (spec §5): Teach / Socratic / Quiz / Exam / ELI10 */}
-          <div className="rounded-3xl border border-white/60 bg-white/75 p-3 backdrop-blur-sm">
-            <p className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-400">Tutor mode</p>
-            <div className="mt-1 space-y-1">
-              {MODES.map((m) => {
-                const Icon = m.icon;
-                const active = mode === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => switchMode(m.id)}
-                    disabled={streaming}
-                    title={m.hint}
-                    className={`flex w-full items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left transition-colors disabled:opacity-50 ${
-                      active ? `${t.soft} ring-1 ${t.ring}` : "hover:bg-white"
-                    }`}
-                  >
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-xl ${
-                      active ? `bg-gradient-to-br ${t.grad} text-white` : "bg-slate-100 text-slate-400"
-                    }`}>
-                      <Icon className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className={`block text-xs font-extrabold ${active ? "text-slate-800" : "text-slate-600"}`}>{m.label}</span>
-                      <span className="block truncate text-[10px] font-bold text-slate-400">{m.hint}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Recent chats */}
           <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/60 bg-white/60 p-3 backdrop-blur-sm">
             <p className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-400">Recent chats</p>
             <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} searchRef={searchRef} />
+          </div>
+
+          <div className="rounded-3xl border border-white/60 bg-white/60 p-4 text-sm text-slate-500 backdrop-blur-sm">
+            <p className="flex items-center gap-2 font-extrabold text-slate-700"><Lightbulb className="h-4 w-4 text-amber-500" /> Tip</p>
+            <p className="mt-1.5 text-xs">Ask “why”, not just “what”. The tutor explains the reasoning with worked steps and math.</p>
           </div>
         </aside>
 
@@ -761,16 +679,6 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             </span>
             <button onClick={() => setDrawerOpen(true)} title="Chat history" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 hover:text-indigo-600 lg:hidden">
               <History className="h-5 w-5" />
-            </button>
-            {/* Tutor's mind toggle: panel on desktop, bottom sheet on mobile */}
-            <button
-              onClick={() => (window.matchMedia("(min-width: 1280px)").matches ? setMindOpen((v) => !v) : setMindSheet(true))}
-              title="Tutor's mind"
-              className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 transition-colors ${
-                mindOpen ? "bg-indigo-50 text-indigo-600 ring-indigo-200" : "text-slate-500 ring-slate-200 hover:text-indigo-600"
-              }`}
-            >
-              <Brain className="h-5 w-5" />
             </button>
             <button onClick={() => setAssessing(true)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br ${t.grad} px-3 py-2 text-xs font-extrabold text-white shadow-md`}>
               <ClipboardCheck className="h-4 w-4" /> <span className="hidden sm:inline">Check understanding</span><span className="sm:hidden">Quiz</span>
@@ -891,28 +799,21 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             </div>
           )}
 
-          {/* Out-of-credits wall (token spec §7): never a dead end. */}
-          {quota && (
-            <div className="mx-4 mb-3 rounded-3xl border border-amber-200 bg-amber-50 p-4 sm:mx-5">
-              <p className="flex items-center gap-2 text-sm font-extrabold text-amber-800">
-                <Zap className="h-4 w-4" /> {quota.message}
-              </p>
-              {quota.upsell?.options?.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {quota.upsell.options.map((p) => (
-                    <span key={p.name} className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-slate-600 ring-1 ring-amber-200">
-                      {p.name} · ₹{p.price_inr}/mo · {p.daily_credit_limit} daily credits
-                    </span>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => setQuota(null)} className="mt-2 text-xs font-extrabold text-amber-700 underline underline-offset-2">
-                Okay, got it
-              </button>
-            </div>
-          )}
-
           <div className="border-t border-slate-100 p-3">
+            {/* Tutor mode selector — changes how the tutor teaches. */}
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Mode</span>
+              {MODES.map((m) => (
+                <button key={m.id} onClick={() => setMode(m.id)} title={m.hint}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold transition-all ${
+                    mode === m.id
+                      ? `bg-gradient-to-br ${t.grad} text-white shadow-sm`
+                      : "border border-slate-200 bg-white/80 text-slate-500 hover:border-indigo-300 hover:text-indigo-600"
+                  }`}>
+                  <span>{m.icon}</span> {m.label}
+                </button>
+              ))}
+            </div>
             <div className="flex items-end gap-2 rounded-3xl bg-white p-2 shadow-sm ring-1 ring-slate-200 transition-shadow focus-within:ring-2 focus-within:ring-indigo-300">
               <textarea ref={taRef} rows={1} value={input}
                 onChange={(e) => { setInput(e.target.value); autoGrow(e.target); }}
@@ -942,35 +843,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             </p>
           </div>
         </main>
-
-        {/* RIGHT panel: the tutor's live mind (spec §6) — collapsible */}
-        {mindOpen && (
-          <aside className="hidden w-72 shrink-0 flex-col gap-3 overflow-y-auto pr-0.5 xl:flex">
-            <p className="flex items-center gap-2 px-1 text-sm font-extrabold text-slate-500">
-              <Brain className="h-4 w-4 text-indigo-500" /> Tutor’s mind
-            </p>
-            <TutorMind mind={mind} usage={usage} />
-          </aside>
-        )}
       </div>
-
-      {/* Mobile "tutor's mind" bottom sheet */}
-      {mindSheet && (
-        <div className="fixed inset-0 z-40 xl:hidden">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMindSheet(false)} />
-          <div className="drawer-in absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-3xl bg-gradient-to-b from-slate-50 to-indigo-50/60 p-4 shadow-2xl">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="flex items-center gap-2 text-sm font-extrabold text-slate-700">
-                <Brain className="h-4 w-4 text-indigo-500" /> Tutor’s mind
-              </p>
-              <button onClick={() => setMindSheet(false)} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <TutorMind mind={mind} usage={usage} />
-          </div>
-        </div>
-      )}
 
       {/* Mobile history drawer */}
       {drawerOpen && (
@@ -1000,7 +873,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           topicName={ctx.topic_name}
           topicId={ctx.topic_id}
           sessionId={sessionId}
-          onClose={() => { setAssessing(false); loadMind(sessionId); onProgressChange?.(); }}
+          onClose={() => { setAssessing(false); onProgressChange?.(); }}
         />
       )}
     </div>

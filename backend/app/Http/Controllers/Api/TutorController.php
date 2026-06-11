@@ -5,25 +5,20 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
-use App\Services\MasteryService;
 use App\Services\ProgressService;
-use App\Services\TokenMeter;
 use App\Services\TutorService;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TutorController extends Controller
 {
-    public const MODES = ['teach', 'socratic', 'quiz', 'exam', 'eli10'];
-
     public function __construct(
         protected TutorService $tutor,
         protected ProgressService $progress,
-        protected MasteryService $mastery,
-        protected TokenMeter $meter,
     ) {}
 
     // List the student's chat sessions (most recent first).
+    // Accepts an optional ?topic_id= query param to scope results to one topic.
     public function sessions(Request $request)
     {
         $sessions = $request->user()->chatSessions()
@@ -36,7 +31,9 @@ class TutorController extends Controller
         return response()->json(['sessions' => $sessions]);
     }
 
-    // Open a topic-scoped session, resuming the existing one when possible.
+    // Open a topic-scoped session, resuming the existing one when possible so we
+    // don't orphan an empty session on every visit. Pass fresh=true to force a
+    // brand-new chat for the topic.
     public function startSession(Request $request)
     {
         $data = $request->validate([
@@ -44,7 +41,6 @@ class TutorController extends Controller
             'topic_name'   => ['required', 'string', 'max:160'],
             'chapter_name' => ['nullable', 'string', 'max:160'],
             'subject_name' => ['nullable', 'string', 'max:160'],
-            'mode'         => ['nullable', 'in:' . implode(',', self::MODES)],
             'fresh'        => ['nullable', 'boolean'],
         ]);
 
@@ -59,7 +55,6 @@ class TutorController extends Controller
                 ->first();
 
             if ($existing) {
-                // Resume exactly where the student left off (spec D8).
                 return response()->json(['session' => $existing->load('messages')]);
             }
         }
@@ -70,11 +65,10 @@ class TutorController extends Controller
             'topic_name'      => $data['topic_name'],
             'chapter_name'    => $data['chapter_name'] ?? null,
             'subject_name'    => $data['subject_name'] ?? null,
-            'mode'            => $data['mode'] ?? 'teach',
-            'state'           => 'learning',
             'last_message_at' => now(),
         ]);
 
+        // Seed a friendly opening message.
         $session->messages()->create([
             'role' => 'tutor',
             'content' => "Hi! I'm your tutor for **{$session->topic_name}**. "
@@ -90,29 +84,6 @@ class TutorController extends Controller
         return response()->json(['session' => $session->load('messages')]);
     }
 
-    // The "shows its mind" panel payload: live mastery, misconceptions,
-    // memory, next step (Chat Page Spec §6) + the student's credit meter.
-    public function mind(Request $request, ChatSession $session)
-    {
-        $this->authorizeSession($request, $session);
-
-        return response()->json([
-            'mind' => $this->mastery->mind($request->user(), $session->topic_name ?? $session->title, $session),
-            'usage' => $this->meter->summary($request->user()),
-        ]);
-    }
-
-    // Switch tutor mode (Teach / Socratic / Quiz / Exam / ELI10).
-    public function setMode(Request $request, ChatSession $session)
-    {
-        $this->authorizeSession($request, $session);
-
-        $data = $request->validate(['mode' => ['required', 'in:' . implode(',', self::MODES)]]);
-        $session->update(['mode' => $data['mode']]);
-
-        return response()->json(['session' => $session]);
-    }
-
     // Send a message and get the AI tutor's reply (non-streaming JSON).
     public function send(Request $request, ChatSession $session)
     {
@@ -120,24 +91,28 @@ class TutorController extends Controller
 
         $data = $request->validate([
             'message' => ['required', 'string', 'max:4000'],
-            'mode'    => ['nullable', 'in:' . implode(',', self::MODES)],
+            'mode'    => ['nullable', 'in:teach,socratic,quiz,exam,eli10'],
         ]);
 
         $user = $request->user();
-        $this->applyMode($session, $data['mode'] ?? null);
 
         $session->messages()->create(['role' => 'user', 'content' => $data['message']]);
 
-        $out = $this->tutor->turn($user, $this->turnContext($session), $this->historyFor($session), $data['message']);
+        $reply = $this->tutor->explain(
+            $user,
+            $session->topic_name ?? $session->title,
+            $session->chapter_name ?? '',
+            $session->subject_name ?? '',
+            $this->historyFor($session),
+            $data['message'],
+            $data['mode'] ?? 'teach',
+        );
 
-        $message = $this->finishTurn($session, $user, $out);
-        abort_if(! $message, 503, 'The tutor is briefly unavailable. Please try again.');
+        $message = $session->messages()->create(['role' => 'tutor', 'content' => $reply]);
+        $session->update(['last_message_at' => now()]);
+        $this->progress->recordActivity($user, topicsStudied: 0, questionsAnswered: 0);
 
-        return response()->json([
-            'message' => $message,
-            'mind' => $this->mastery->mind($user, $session->topic_name ?? $session->title, $session->fresh()),
-            'usage' => $this->meter->summary($user),
-        ]);
+        return response()->json(['message' => $message]);
     }
 
     // Send a message and stream the AI tutor's reply over SSE.
@@ -147,23 +122,25 @@ class TutorController extends Controller
 
         $data = $request->validate([
             'message' => ['required', 'string', 'max:4000'],
-            'mode'    => ['nullable', 'in:' . implode(',', self::MODES)],
+            'mode'    => ['nullable', 'in:teach,socratic,quiz,exam,eli10'],
         ]);
 
         $user = $request->user();
-        $this->applyMode($session, $data['mode'] ?? null);
         $session->messages()->create(['role' => 'user', 'content' => $data['message']]);
 
-        return $this->streamReply($session, $user, $data['message']);
+        return $this->streamReply($session, $user, $data['message'], $data['mode'] ?? 'teach');
     }
 
-    // Discard the last tutor reply and stream a fresh answer.
+    // Discard the last tutor reply and stream a fresh answer to the last question.
     public function regenerate(Request $request, ChatSession $session): StreamedResponse
     {
         $this->authorizeSession($request, $session);
 
+        $mode = $request->validate(['mode' => ['nullable', 'in:teach,socratic,quiz,exam,eli10']])['mode'] ?? 'teach';
         $user = $request->user();
 
+        // reorder() clears the relation's default orderBy('id') so we truly get
+        // the most recent message, not the oldest.
         $last = $session->messages()->reorder('id', 'desc')->first();
         if ($last && $last->role === 'tutor') {
             $last->delete();
@@ -172,7 +149,7 @@ class TutorController extends Controller
         $lastUser = $session->messages()->where('role', 'user')->reorder('id', 'desc')->first();
         abort_unless($lastUser, 422, 'Nothing to regenerate yet.');
 
-        return $this->streamReply($session, $user, $lastUser->content);
+        return $this->streamReply($session, $user, $lastUser->content, $mode);
     }
 
     // Record 👍 / 👎 feedback on a tutor message.
@@ -194,17 +171,19 @@ class TutorController extends Controller
     /* ------------------------------------------------------------------ */
 
     /**
-     * Stream a tutor reply over SSE. Emits:
-     *   delta {text}     incremental reply text
-     *   mind  {...}      refreshed right-panel payload + credit meter
-     *   done  {id, ...}  saved message id
+     * Stream a tutor reply for $prompt over SSE, persisting the final message.
+     * Emits `delta` events with incremental text and a final `done` event with
+     * the saved message id.
      */
-    protected function streamReply(ChatSession $session, $user, string $prompt): StreamedResponse
+    protected function streamReply(ChatSession $session, $user, string $prompt, string $mode = 'teach'): StreamedResponse
     {
         $history = $this->historyFor($session);
-        $ctx = $this->turnContext($session);
 
-        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $ctx) {
+        $topic   = $session->topic_name ?? $session->title;
+        $chapter = $session->chapter_name ?? '';
+        $subject = $session->subject_name ?? '';
+
+        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $topic, $chapter, $subject, $mode) {
             $emit = function (string $event, array $payload) {
                 echo "event: {$event}\n";
                 echo 'data: ' . json_encode($payload) . "\n\n";
@@ -214,109 +193,48 @@ class TutorController extends Controller
                 @flush();
             };
 
-            $out = $this->tutor->turnStream(
-                $user, $ctx, $history, $prompt,
+            $full = $this->tutor->explainStream(
+                $user, $topic, $chapter, $subject, $history, $prompt,
                 fn (string $delta) => $emit('delta', ['text' => $delta]),
+                $mode,
             );
 
-            if (($out['reply'] ?? '') === '') {
+            // If streaming produced nothing (e.g. transient upstream error),
+            // fall back to the retrying non-streaming path so the student still
+            // gets an answer.
+            if ($full === '') {
+                $full = $this->tutor->explain($user, $topic, $chapter, $subject, $history, $prompt, $mode);
+                if ($full !== '') {
+                    $emit('delta', ['text' => $full]);
+                }
+            }
+
+            if ($full === '') {
                 $emit('error', ['message' => 'The tutor is briefly unavailable. Please try again.']);
                 return;
             }
 
-            $message = $this->finishTurn($session, $user, $out);
-
-            $emit('mind', [
-                'mind' => $this->mastery->mind($user, $session->topic_name ?? $session->title, $session->fresh()),
-                'usage' => $this->meter->summary($user),
-            ]);
+            $message = $session->messages()->create(['role' => 'tutor', 'content' => $full]);
+            $session->update(['last_message_at' => now()]);
+            $this->progress->recordActivity($user, topicsStudied: 0, questionsAnswered: 0);
 
             $emit('done', ['id' => $message->id, 'created_at' => $message->created_at->toIso8601String()]);
         });
 
         $response->headers->set('Content-Type', 'text/event-stream');
         $response->headers->set('Cache-Control', 'no-cache');
-        $response->headers->set('X-Accel-Buffering', 'no');
+        $response->headers->set('X-Accel-Buffering', 'no'); // disable proxy buffering
         $response->headers->set('Connection', 'keep-alive');
 
         return $response;
     }
 
     /**
-     * Persist the tutor message, apply the turn's structured meta (mastery
-     * signal, misconceptions, next step — spec D9), and meter the tokens.
+     * Conversation history as [['role'=>..,'content'=>..], ...].
+     *
+     * The trailing user message is the prompt we pass separately to the tutor,
+     * so we drop it here to avoid sending the same question to the model twice.
      */
-    protected function finishTurn(ChatSession $session, $user, array $out): ?ChatMessage
-    {
-        if (($out['reply'] ?? '') === '') {
-            return null;
-        }
-
-        $meta = $out['meta'] ?? [];
-        $topic = $session->topic_name ?? $session->title;
-
-        $message = $session->messages()->create([
-            'role' => 'tutor',
-            'content' => $out['reply'],
-            'meta' => array_filter([
-                'concept_tags' => $meta['concept_tags'] ?? null,
-                'detected_misconception' => $meta['detected_misconception'] ?? null,
-                'suggested_render' => $meta['suggested_render'] ?? null,
-                'tokens' => ($out['usage']['prompt_tokens'] ?? 0) + ($out['usage']['completion_tokens'] ?? 0),
-            ]),
-        ]);
-
-        // Live mastery + misconception tracking from the turn's meta.
-        $this->mastery->observeChatSignal(
-            $user, $topic,
-            (array) ($meta['concept_tags'] ?? []),
-            isset($meta['mastery_signal']) ? (float) $meta['mastery_signal'] : null,
-        );
-        if (! empty($meta['detected_misconception'])) {
-            $this->mastery->detectMisconception($user, $topic, $meta['detected_misconception'], $session->id);
-        }
-        if (! empty($meta['resolved_misconception'])) {
-            $this->mastery->resolveMisconception($user, $topic, $meta['resolved_misconception']);
-        }
-
-        $updates = ['last_message_at' => now()];
-        if (! empty($meta['next_step'])) {
-            $updates['next_step'] = $meta['next_step'];
-        }
-        if (($meta['suggested_render'] ?? '') === 'quiz' && $session->state === 'learning') {
-            $updates['state'] = 'ready_for_assessment';
-        }
-        $session->update($updates);
-
-        // Post-call meter: real token counts -> ledger + live counters.
-        if (! empty($out['usage'])) {
-            $this->meter->meter($user, 'chat', $out['usage'], $session->id);
-        }
-
-        $this->progress->recordActivity($user, topicsStudied: 0, questionsAnswered: 0);
-
-        return $message;
-    }
-
-    protected function turnContext(ChatSession $session): array
-    {
-        return [
-            'topic' => $session->topic_name ?? $session->title,
-            'chapter' => $session->chapter_name ?? '',
-            'subject' => $session->subject_name ?? '',
-            'mode' => $session->mode ?? 'teach',
-            'attempt_no' => $session->attempt_no ?? 1,
-            'last_gap' => $session->last_gap,
-        ];
-    }
-
-    protected function applyMode(ChatSession $session, ?string $mode): void
-    {
-        if ($mode && $mode !== $session->mode) {
-            $session->update(['mode' => $mode]);
-        }
-    }
-
     protected function historyFor(ChatSession $session): array
     {
         $messages = $session->messages()

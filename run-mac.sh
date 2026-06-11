@@ -25,7 +25,6 @@ say "Checking tools (PHP, Composer, Node)…"
 command -v php      >/dev/null 2>&1 || { say "Installing PHP…";      brew install php; }
 command -v composer >/dev/null 2>&1 || { say "Installing Composer…"; brew install composer; }
 command -v node     >/dev/null 2>&1 || { say "Installing Node…";     brew install node; }
-command -v python3  >/dev/null 2>&1 || { say "Installing Python…";   brew install python; }
 
 echo "  php:      $(php -v | head -1)"
 echo "  composer: $(composer -V)"
@@ -41,14 +40,6 @@ else
   ( cd .laravel && php artisan migrate --force >/dev/null 2>&1 || true )
 fi
 
-# ---------------------------------------------------------------- AI service deps
-cd "$ROOT/ai-service"
-if [ ! -d ".venv" ]; then
-  say "Setting up the Python AI service…"
-  python3 -m venv .venv
-  ./.venv/bin/pip install -q -r requirements.txt
-fi
-
 # ---------------------------------------------------------------- frontend deps
 cd "$ROOT/frontend"
 if [ ! -d "node_modules" ]; then
@@ -58,13 +49,10 @@ fi
 
 # ---------------------------------------------------------------- run both
 say "Starting servers…"
-cleanup() { echo; say "Shutting down…"; kill "$BACK" "$FRONT" "$AI" 2>/dev/null || true; }
+cleanup() { echo; say "Shutting down…"; kill "$BACK" "$FRONT" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 
-( cd "$ROOT/ai-service" && GEMINI_API_KEY="${GEMINI_API_KEY:-}" GEMINI_MOCK="${GEMINI_MOCK:-}" \
-  ./.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 ) & AI=$!
-( cd "$ROOT/backend/.laravel" && AI_SERVICE_URL="${AI_SERVICE_URL:-http://localhost:8001}" \
-  php artisan serve --port=8000 ) & BACK=$!
+( cd "$ROOT/backend/.laravel" && php artisan serve --port=8000 ) & BACK=$!
 ( cd "$ROOT/frontend" && npm run dev ) & FRONT=$!
 
 sleep 5
@@ -76,7 +64,6 @@ cat <<'MSG'
 ✅ Running!
    Frontend : http://localhost:5173
    API      : http://localhost:8000
-   AI svc   : http://localhost:8001
 
    Demo logins (password: password)
      admin@tuto.ai · student@tuto.ai · parent@tuto.ai
