@@ -12,13 +12,19 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
-# Copy the overlay (app code, routes, migrations, seeders, config, env, entrypoint).
-COPY . /overlay
-
-# Scaffold a fresh Laravel app + Sanctum once at build time, then overlay our files.
+# Scaffold a fresh Laravel app + Sanctum once at build time (cached — runs
+# again only if this Dockerfile changes, not on every source edit).
+# NOTE: the `|| true` is scoped to install:api ONLY. If it applied to the whole
+# chain (as it once did), a composer network failure would silently produce an
+# image with no vendor/ directory — and Docker would cache that broken layer.
+# The final `test` guarantees the layer fails loudly if vendor/ is missing.
 RUN composer create-project "laravel/laravel:^11.0" /app --no-interaction \
     && composer require laravel/sanctum --no-interaction \
-    && php artisan install:api --no-interaction || true
+    && (php artisan install:api --no-interaction || true) \
+    && test -f /app/vendor/autoload.php
+
+# Copy the overlay (app code, routes, migrations, seeders, config, env, entrypoint).
+COPY . /overlay
 RUN cp -R /overlay/app/. /app/app/ \
     && cp -R /overlay/routes/. /app/routes/ \
     && cp -R /overlay/database/migrations/. /app/database/migrations/ \
