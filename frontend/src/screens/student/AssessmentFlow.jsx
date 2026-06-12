@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { X, Check, ArrowRight, Sparkles, Target, ListChecks, Loader2 } from "lucide-react";
 import { assessmentApi, planApi } from "../../api/endpoints.js";
 
@@ -11,30 +11,51 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose 
   const [plan, setPlan] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Guards: generate exactly once (React 18 StrictMode runs mount effects
+  // twice in dev, which otherwise creates two assessments), and never let a
+  // second submit fire while one is in flight.
+  const generatedRef = useRef(false);
+  const submittingRef = useRef(false);
 
   const loadQuiz = async () => {
     setStage("loading");
     setError("");
     try {
       const a = await assessmentApi.generate({ topic_name: topicName, topic_id: topicId, chat_session_id: sessionId, count: 3 });
+      if (!a || !Array.isArray(a.questions) || a.questions.length === 0) {
+        throw new Error("The AI returned an empty quiz. Please try again.");
+      }
       setAssessment(a); setStage("quiz");
     } catch (err) {
       // Surface the backend's reason (e.g. rate-limited AI, out of credits).
-      setError(err?.response?.data?.message || "Couldn't generate a quiz. Please try again.");
+      setError(err?.response?.data?.message || err?.message || "Couldn't generate a quiz. Please try again.");
       setStage("error");
     }
   };
 
-  useEffect(() => { loadQuiz(); }, []);
+  const retryQuiz = () => {
+    generatedRef.current = true; // an explicit retry counts as the one run
+    loadQuiz();
+  };
+
+  useEffect(() => {
+    if (generatedRef.current) return;
+    generatedRef.current = true;
+    loadQuiz();
+  }, []);
 
   const submit = async () => {
+    if (submittingRef.current || busy || stage !== "quiz") return;
+    submittingRef.current = true;
     setBusy(true);
+    setError("");
     try {
       const payload = assessment.questions.map((q) => ({ question_id: q.id, selected_index: answers[q.id] ?? -1 }));
       const res = await assessmentApi.submit(assessment.id, payload);
       setResult(res); setStage("result");
     } catch (err) {
       setError(err?.response?.data?.message || "Submission failed. Please try again.");
+      submittingRef.current = false; // allow another attempt only on failure
     } finally { setBusy(false); }
   };
 
@@ -71,7 +92,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose 
           {stage === "error" && (
             <Centered>
               <span>{error}</span>
-              <button onClick={loadQuiz}
+              <button onClick={retryQuiz}
                 className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2.5 text-sm font-extrabold text-white shadow-md transition-transform active:scale-95">
                 <Sparkles className="h-4 w-4" /> Try again
               </button>
@@ -90,8 +111,9 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose 
                     {q.options.map((opt, oi) => {
                       const sel = answers[q.id] === oi;
                       return (
-                        <button key={oi} onClick={() => setAnswers((a) => ({ ...a, [q.id]: oi }))}
-                          className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition-all ${sel ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>
+                        <button key={oi} disabled={busy}
+                          onClick={() => { if (busy) return; setAnswers((a) => ({ ...a, [q.id]: oi })); }}
+                          className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60 ${sel ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>
                           <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${sel ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500"}`}>{"ABCD"[oi]}</span>
                           {opt}
                         </button>

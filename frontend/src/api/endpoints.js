@@ -52,9 +52,12 @@ export const tutorApi = {
 };
 
 // --- Student: assessment + gaps ---
+// Generous per-call timeouts so a hung AI request fails (and shows a retry)
+// instead of leaving the modal stuck on "loading"/"Checking…" forever. The
+// backend's AI_SERVICE_TIMEOUT is ~180s, so allow a little more than that.
 export const assessmentApi = {
-  generate: (payload) => api.post("/assessments/generate", payload).then((r) => r.data.assessment),
-  submit: (id, answers) => api.post(`/assessments/${id}/submit`, { answers }).then((r) => r.data),
+  generate: (payload) => api.post("/assessments/generate", payload, { timeout: 200000 }).then((r) => r.data.assessment),
+  submit: (id, answers) => api.post(`/assessments/${id}/submit`, { answers }, { timeout: 120000 }).then((r) => r.data),
   history: () => api.get("/assessments/history").then((r) => r.data.assessments),
 };
 

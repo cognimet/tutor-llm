@@ -10,6 +10,7 @@ import { tint } from "../../ui/tints.js";
 import { tutorApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
 import Markdown from "../../ui/Markdown.jsx";
+import RichMessage from "../../ui/RichMessage.jsx";
 import AssessmentFlow from "./AssessmentFlow.jsx";
 import TutorMind from "./TutorMind.jsx";
 
@@ -24,6 +25,7 @@ const STARTERS = (t) => [
 const FOLLOWUPS = [
   { icon: "🪄", label: "Explain that more simply" },
   { icon: "➕", label: "Show me another example" },
+  { icon: "📊", label: "Visualize this" },
   { icon: "❓", label: "Why is that true?" },
   { icon: "🎯", label: "Quiz me on this" },
   { icon: "📝", label: "Give me exam tips for this" },
@@ -72,6 +74,7 @@ function groupSessions(list) {
 // Best-effort plain text for read-aloud: drop math/code/markdown noise.
 function speakable(md) {
   return String(md || "")
+    .replace(/```(?:viz|chart|plot|graph)[^\n]*\n[\s\S]*?```/gi, " (see the visualization) ")
     .replace(/\$\$[\s\S]*?\$\$/g, " (see the equation) ")
     .replace(/\\\[[\s\S]*?\\\]/g, " (see the equation) ")
     .replace(/\\\([\s\S]*?\\\)/g, " ")
@@ -160,7 +163,7 @@ function Bubble({ m, isUser, t }) {
       ) : thinking ? (
         <ThinkingDots />
       ) : (
-        <Markdown text={m.content} streaming={m.pending} />
+        <RichMessage text={m.content} streaming={m.pending} />
       )}
       {m.stopped && (
         <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-400">

@@ -157,7 +157,8 @@ class TutorService
             . "Formatting: use clear Markdown — short paragraphs, **bold** for key terms, "
             . "bullet or numbered lists for steps, and `inline code` for variables. "
             . "Write mathematics in LaTeX: inline as \$...\$ and display equations as \$\$...\$\$. "
-            . "Keep it concise and encouraging.";
+            . "Keep it concise and encouraging.\n"
+            . $this->visualGuide();
 
         $convo = '';
         foreach ($history as $m) {
@@ -167,6 +168,46 @@ class TutorService
         $user = "Topic: \"{$topic}\"\n\nConversation so far:\n{$convo}\nStudent: {$message}\n\nTutor:";
 
         return [$system, $user];
+    }
+
+    /**
+     * Instructs the tutor how to emit an inline visualization. The frontend
+     * renders a fenced ```viz block (RichMessage → Visualization) from a JSON
+     * spec — no HTML/JS, so the model can only describe a chart, never run code.
+     */
+    protected function visualGuide(): string
+    {
+        return <<<'GUIDE'
+Visualizations: when the student asks to "visualize / plot / graph / draw / show" something, OR when a concept is genuinely clearer shown than told (the shape of a function, a geometric figure, comparing data, or a process/cycle), include ONE visualization. Always keep a short text explanation alongside it — never reply with only a chart. Do not force a visualization when prose is clearly enough.
+
+Emit it as a fenced code block tagged `viz` containing ONLY valid minified JSON (double quotes, no comments, no trailing commas). Choose the type that fits:
+
+- Function graph (maths — lines, quadratics, trig, polynomials):
+```viz
+{"type":"function","title":"y = x² and y = 2x","fns":[{"expr":"x^2","label":"y=x²"},{"expr":"2*x","label":"y=2x"}],"domain":[-5,5]}
+```
+expr uses the variable x with + - * / ^ and functions sin cos tan asin acos atan sqrt cbrt abs ln log exp and constants pi, e (e.g. "sin(x)", "x^2-4", "2*x+1"). Angles are in radians.
+
+- Data chart (statistics, economics, comparisons) — types "bar", "line", "scatter", "pie":
+```viz
+{"type":"bar","title":"Sector share of GDP (%)","data":[{"label":"Primary","value":18},{"label":"Secondary","value":28},{"label":"Tertiary","value":54}],"yLabel":"%"}
+```
+For scatter use points like {"x":1,"y":2}. For pie use {"label","value"} slices.
+
+- Geometry figure (triangles, circles, angles, coordinate geometry):
+```viz
+{"type":"geometry","title":"Right triangle","elements":[{"kind":"polygon","points":[[0,0],[4,0],[0,3]],"labels":["A","B","C"]},{"kind":"segment","from":[0,0],"to":[4,0],"label":"4 cm"},{"kind":"angle","at":[0,0],"from":[4,0],"to":[0,3],"label":"90°"}]}
+```
+element kinds: point{x,y,label}, segment/vector{from,to,label}, polygon/polyline{points,labels}, circle{center,r,label}, angle{at,from,to,label}.
+
+- Process / cycle / timeline / mind-map / factor tree (science processes, history sequences) — Mermaid:
+```viz
+{"type":"diagram","title":"The water cycle","mermaid":"graph TD; A[Evaporation]-->B[Clouds]; B-->C[Rain]; C-->D[Rivers]; D-->E[Sea]; E-->A"}
+```
+Mermaid rules — follow exactly so it renders: give every node a unique id with its text in brackets, e.g. `A[60]-->B[2]` (NEVER reuse a bare value like `60-->2; 30-->2`, or the two 2s merge into one node). Use plain ASCII only and `-->` arrows. Do NOT include any `style`, `classDef`, `class`, `click`, `linkStyle` or theming lines — structure only. Put labels with spaces/symbols in brackets, e.g. `A[Prime factor]`.
+
+Prefer function/geometry for maths, charts for data, and diagrams for processes/sequences. Keep numbers realistic and the domain sensible. At most one visualization per reply unless the student asks for more.
+GUIDE;
     }
 
     /* ---------------- 2. Mini-assessment generation ------------------ */
