@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Check, Loader2 } from "lucide-react";
 import { curriculumApi } from "../api/endpoints.js";
 
 /**
- * Cascading Stage → Track → Level selector driven by the admin-managed tree.
- * Calls onChange with a normalised selection (or null) whenever a full
- * Stage→Track→Level path is chosen.
+ * Guided Stage → Track → Level onboarding selector driven by the admin-managed
+ * curriculum tree. Instead of three native dropdowns it reveals one friendly,
+ * tappable step at a time, so signing up feels like onboarding rather than
+ * filling a form.
  *
+ * Emits a normalised selection (or null) whenever a full Stage→Track→Level path
+ * is chosen — identical contract to before, so callers don't change:
  *   selection = { level_id, stream, board, grade, label }
  */
 export default function CurriculumPicker({ stages: provided, value, onChange }) {
@@ -14,7 +18,6 @@ export default function CurriculumPicker({ stages: provided, value, onChange }) 
   const [trackId, setTrackId] = useState("");
   const [levelId, setLevelId] = useState(value || "");
 
-  // Load options once (unless the parent supplied them).
   useEffect(() => {
     if (provided) { setStages(provided); return; }
     let alive = true;
@@ -22,7 +25,7 @@ export default function CurriculumPicker({ stages: provided, value, onChange }) 
     return () => { alive = false; };
   }, [provided]);
 
-  // Seed the dropdowns from an incoming level_id.
+  // Seed from an incoming level_id (e.g. editing an existing profile).
   useEffect(() => {
     if (!stages || !value) return;
     for (const s of stages) for (const t of s.tracks) {
@@ -53,37 +56,80 @@ export default function CurriculumPicker({ stages: provided, value, onChange }) 
   const pickLevel = (id) => { setLevelId(id); emit(id); };
 
   if (!stages) {
-    return <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm font-bold text-slate-400">Loading curriculum…</div>;
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl bg-white px-3.5 py-3 text-sm font-semibold text-slate-400">
+        <Loader2 className="h-4 w-4 animate-spin text-indigo-400" /> Loading your curriculum…
+      </div>
+    );
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <Select label="Stage" value={stageId} onChange={pickStage} placeholder="Choose stage">
-        {stages.map((s) => <option key={s.id} value={s.id}>{s.emoji ? `${s.emoji} ` : ""}{s.name}</option>)}
-      </Select>
-      <Select label="Board / Exam / Programme" value={trackId} onChange={pickTrack} placeholder="Choose track" disabled={!stage}>
-        {(stage?.tracks || []).map((t) => <option key={t.id} value={t.id}>{t.emoji ? `${t.emoji} ` : ""}{t.name}</option>)}
-      </Select>
-      <Select label="Class / Year / Level" value={levelId} onChange={pickLevel} placeholder="Choose level" disabled={!track}>
-        {levels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-      </Select>
+    <div className="space-y-4">
+      <Step n={1} title="Which stage are you at?" done={!!stage}>
+        <ChipGroup>
+          {stages.map((s) => (
+            <Chip key={s.id} active={Number(stageId) === s.id} onClick={() => pickStage(s.id)}
+              emoji={s.emoji} label={s.name} />
+          ))}
+        </ChipGroup>
+      </Step>
+
+      {stage && (
+        <Step n={2} title="Which board or exam?" done={!!track} animate>
+          <ChipGroup>
+            {(stage.tracks || []).map((t) => (
+              <Chip key={t.id} active={Number(trackId) === t.id} onClick={() => pickTrack(t.id)}
+                emoji={t.emoji} label={t.name} />
+            ))}
+          </ChipGroup>
+        </Step>
+      )}
+
+      {track && (
+        <Step n={3} title="Which class are you in?" done={!!levelId} animate>
+          <ChipGroup>
+            {levels.map((l) => (
+              <Chip key={l.id} active={Number(levelId) === l.id} onClick={() => pickLevel(l.id)}
+                label={l.name} />
+            ))}
+          </ChipGroup>
+        </Step>
+      )}
     </div>
   );
 }
 
-function Select({ label, value, onChange, children, placeholder, disabled }) {
+/* ----------------------------------------------------------------- pieces */
+
+function Step({ n, title, done, animate, children }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
-      <select
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-      >
-        <option value="">{placeholder}</option>
-        {children}
-      </select>
-    </label>
+    <div className={animate ? "auth-rise" : undefined}>
+      <div className="mb-2 flex items-center gap-2">
+        <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-extrabold transition-colors ${done ? "bg-indigo-500 text-white" : "bg-indigo-100 text-indigo-600"}`}>
+          {done ? <Check className="h-3 w-3" strokeWidth={3.5} /> : n}
+        </span>
+        <span className="text-[13px] font-semibold text-slate-700">{title}</span>
+      </div>
+      <div className="pl-7">{children}</div>
+    </div>
+  );
+}
+
+function ChipGroup({ children }) {
+  return <div className="flex flex-wrap gap-2">{children}</div>;
+}
+
+function Chip({ active, onClick, emoji, label }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-bold transition-all active:scale-[0.97] ${
+        active
+          ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500"
+          : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50/40 hover:text-indigo-600"
+      }`}>
+      {emoji && <span className="text-[15px] leading-none">{emoji}</span>}
+      {label}
+      {active && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+    </button>
   );
 }

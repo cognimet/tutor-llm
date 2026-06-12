@@ -64,6 +64,20 @@ h1, h2, h3, .font-display {
 }
 .msg-in { animation: msg-in 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
 
+/* Auth screen entrance: gentle rise + fade, optional stagger via inline delay. */
+@keyframes auth-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.auth-rise { animation: auth-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Slow drift for the hero gradient blobs so the background feels alive. */
+@keyframes auth-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(14px, -18px) scale(1.06); }
+}
+.auth-float { animation: auth-float 14s ease-in-out infinite; }
+
 /* "Tutor is thinking…" three-dot loader (before the first token arrives). */
 .thinking { @apply inline-flex items-center gap-1; }
 .thinking i {
@@ -93,5 +107,6 @@ h1, h2, h3, .font-display {
 .drawer-in-right { animation: drawer-right 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
 
 @media (prefers-reduced-motion: reduce) {
-  .msg-in, .drawer-in, .drawer-in-right, .thinking i, .md-stream > :last-child::after { animation: none; }
+  .msg-in, .drawer-in, .drawer-in-right, .thinking i, .md-stream > :last-child::after,
+  .auth-rise, .auth-float { animation: none; }
 }

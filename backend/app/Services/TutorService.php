@@ -204,7 +204,7 @@ element kinds: point{x,y,label}, segment/vector{from,to,label}, polygon/polyline
 ```viz
 {"type":"diagram","title":"The water cycle","mermaid":"graph TD; A[Evaporation]-->B[Clouds]; B-->C[Rain]; C-->D[Rivers]; D-->E[Sea]; E-->A"}
 ```
-Mermaid rules — follow exactly so it renders: give every node a unique id with its text in brackets, e.g. `A[60]-->B[2]` (NEVER reuse a bare value like `60-->2; 30-->2`, or the two 2s merge into one node). Use plain ASCII only and `-->` arrows. Do NOT include any `style`, `classDef`, `class`, `click`, `linkStyle` or theming lines — structure only. Put labels with spaces/symbols in brackets, e.g. `A[Prime factor]`.
+Mermaid rules — follow exactly so it renders: give every node a unique id with its text in brackets, e.g. `A[60]-->B[2]` (NEVER reuse a bare value like `60-->2; 30-->2`, or the two 2s merge into one node). Use plain ASCII only and `-->` arrows. Do NOT include any `style`, `classDef`, `class`, `click`, `linkStyle` or theming lines — structure only. ALWAYS wrap a node's label in double quotes whenever it contains a space, punctuation or math — e.g. `A["Stop: final r(x)"]`, `B{"Is degree(r) >= degree(d)?"}` — otherwise characters like `:`, `(`, `)`, `>`, `?` break the parser.
 
 Prefer function/geometry for maths, charts for data, and diagrams for processes/sequences. Keep numbers realistic and the domain sensible. At most one visualization per reply unless the student asks for more.
 GUIDE;

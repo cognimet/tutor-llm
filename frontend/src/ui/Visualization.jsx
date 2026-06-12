@@ -343,6 +343,23 @@ function GeoElement({ e, sx, sy, scale, idx }) {
 // renders. We keep the actual nodes + edges (and any non-ASCII LABEL text, e.g.
 // Hindi) untouched — only structural noise is removed.
 const DIAGRAM_HEAD = /^\s*(graph\s+(?:TD|TB|BT|RL|LR)|flowchart\s+(?:TD|TB|BT|RL|LR)|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|mindmap|timeline|gantt|pie|journey)\b/i;
+// Diagram types where node labels live inside [] {} () and can carry special
+// characters. For these we quote labels; for the others (sequence, etc.) the
+// syntax differs, so we leave statements as-is.
+const FLOW_HEAD = /^\s*(graph|flowchart)\b/i;
+
+// Wrap a node label in double quotes so `:` `(` `)` `>` `?` `,` etc. are treated
+// as literal text, not Mermaid syntax (the #1 cause of "Parse error … got …").
+const cleanLabel = (s) => s.trim().replace(/^["']+|["']+$/g, "").replace(/"/g, "'").trim();
+function quoteNodeLabels(stmt) {
+  // Quote [] and {} labels (the shapes models actually use). Parens that appear
+  // inside a label — e.g. r(x) in [final r(x)] — are protected once the square
+  // label is quoted, so we deliberately don't quote round () nodes (doing so
+  // would re-match those inner parens and corrupt the string).
+  return stmt
+    .replace(/\[([^\[\]]+)\]/g, (_, t) => `["${cleanLabel(t)}"]`)
+    .replace(/\{([^{}]+)\}/g, (_, t) => `{"${cleanLabel(t)}"}`);
+}
 
 function sanitizeMermaid(src) {
   let code = String(src || "").trim()
@@ -353,11 +370,13 @@ function sanitizeMermaid(src) {
   const head = code.match(DIAGRAM_HEAD);
   const header = head ? head[0].trim() : "graph TD";
   const rest = head ? code.slice(head[0].length) : code;
+  const isFlow = FLOW_HEAD.test(header);
   const stmts = rest
     .split(/[;\n]+/)
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((s) => !/^(style|classDef|class|linkStyle|click|%%|theme)\b/i.test(s));
+    .filter((s) => !/^(style|classDef|class|linkStyle|click|%%|theme)\b/i.test(s))
+    .map((s) => (isFlow ? quoteNodeLabels(s) : s));
   return { code: `${header}\n${stmts.join("\n")}`, hasBody: stmts.length > 0 };
 }
 
