@@ -1,120 +1,140 @@
-<svg viewBox="0 0 980 790" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<svg viewBox="0 0 980 820" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
   <title>AI Tutor system architecture</title>
-  <desc>Request flow from the React SPA through the Laravel API to the Python AI service, Qdrant, and the LLM providers.</desc>
-  <rect x="0" y="0" width="980" height="790" fill="#FFFFFF"/>
+  <desc>Four colored layers: client, Laravel API, Python AI service, and data stores with LLM providers. Numbered arrows trace one chat turn.</desc>
+  <rect x="0" y="0" width="980" height="820" fill="#FFFFFF"/>
   <defs>
-    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    <marker id="hA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4F46E5"/>
     </marker>
-    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#6366F1"/>
+    <marker id="hG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/>
     </marker>
   </defs>
 
-  <rect x="150" y="18" width="680" height="92" rx="14" fill="#EEF2FF" stroke="#6366F1" stroke-width="1.5"/>
-  <text x="490" y="44" text-anchor="middle" font-size="15" font-weight="700" fill="#0F172A">React SPA · :5173</text>
-  <g font-size="11.5" fill="#0F172A">
-    <rect x="175" y="58" width="200" height="38" rx="9" fill="#FFFFFF" stroke="#A5B4FC"/>
-    <text x="275" y="74" text-anchor="middle" font-weight="700">Student</text>
-    <text x="275" y="88" text-anchor="middle" font-size="10" fill="#64748B">chat · mind panel · snap · mic</text>
-    <rect x="390" y="58" width="200" height="38" rx="9" fill="#FFFFFF" stroke="#A5B4FC"/>
-    <text x="490" y="74" text-anchor="middle" font-weight="700">Parent</text>
-    <text x="490" y="88" text-anchor="middle" font-size="10" fill="#64748B">gap dashboard · credits</text>
-    <rect x="605" y="58" width="200" height="38" rx="9" fill="#FFFFFF" stroke="#A5B4FC"/>
-    <text x="705" y="74" text-anchor="middle" font-weight="700">Admin</text>
-    <text x="705" y="88" text-anchor="middle" font-size="10" fill="#64748B">credits console · analytics</text>
+  <rect x="120" y="14" width="740" height="106" rx="14" fill="#EEF2FF" stroke="#4F46E5" stroke-width="2"/>
+  <rect x="120" y="14" width="740" height="34" rx="14" fill="#4F46E5"/>
+  <rect x="120" y="34" width="740" height="14" fill="#4F46E5"/>
+  <text x="490" y="37" text-anchor="middle" font-size="15" font-weight="800" fill="#FFFFFF">REACT SPA &#183; :5173 &#8212; the client</text>
+  <g font-size="11.5">
+    <rect x="142" y="60" width="216" height="46" rx="9" fill="#FFFFFF" stroke="#818CF8" stroke-width="1.5"/>
+    <text x="250" y="79" text-anchor="middle" font-weight="800" fill="#1E1B4B">Student</text>
+    <text x="250" y="96" text-anchor="middle" font-size="10" fill="#4338CA">chat &#183; mind panel &#183; snap &#183; mic</text>
+    <rect x="382" y="60" width="216" height="46" rx="9" fill="#FFFFFF" stroke="#818CF8" stroke-width="1.5"/>
+    <text x="490" y="79" text-anchor="middle" font-weight="800" fill="#1E1B4B">Parent</text>
+    <text x="490" y="96" text-anchor="middle" font-size="10" fill="#4338CA">gap dashboard &#183; credits</text>
+    <rect x="622" y="60" width="216" height="46" rx="9" fill="#FFFFFF" stroke="#818CF8" stroke-width="1.5"/>
+    <text x="730" y="79" text-anchor="middle" font-weight="800" fill="#1E1B4B">Admin</text>
+    <text x="730" y="96" text-anchor="middle" font-size="10" fill="#4338CA">credits console &#183; analytics</text>
   </g>
 
-  <line x1="490" y1="110" x2="490" y2="148" stroke="#6366F1" stroke-width="2" marker-end="url(#arrA)"/>
-  <text x="502" y="134" font-size="10.5" fill="#64748B">JSON + SSE (Sanctum)</text>
-  <circle cx="455" cy="129" r="9" fill="#6366F1"/><text x="455" y="132.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">1</text>
+  <line x1="490" y1="120" x2="490" y2="158" stroke="#4F46E5" stroke-width="2.5" marker-end="url(#hA)"/>
+  <circle cx="455" cy="139" r="10" fill="#4F46E5"/><text x="455" y="143" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">1</text>
+  <text x="504" y="143" font-size="10.5" font-weight="700" fill="#64748B">JSON + SSE (Sanctum)</text>
 
-  <rect x="80" y="150" width="820" height="150" rx="14" fill="#FFFFFF" stroke="#6366F1" stroke-width="1.5"/>
-  <text x="490" y="174" text-anchor="middle" font-size="15" font-weight="700" fill="#0F172A">Laravel 11 API · :8000 · system of record</text>
-  <g font-size="11.5" fill="#0F172A">
-    <rect x="100" y="190" width="150" height="48" rx="9" fill="#EEF2FF" stroke="#6366F1"/>
-    <text x="175" y="210" text-anchor="middle" font-weight="700">TokenGate</text>
-    <text x="175" y="226" text-anchor="middle" font-size="10" fill="#64748B">quota check → 402</text>
-    <rect x="290" y="190" width="160" height="48" rx="9" fill="#EEF2FF" stroke="#6366F1"/>
-    <text x="370" y="210" text-anchor="middle" font-weight="700">TutorService</text>
-    <text x="370" y="226" text-anchor="middle" font-size="10" fill="#64748B">prompts · AI funnel</text>
-    <rect x="490" y="190" width="160" height="48" rx="9" fill="#EEF2FF" stroke="#6366F1"/>
-    <text x="570" y="210" text-anchor="middle" font-weight="700">MindService</text>
-    <text x="570" y="226" text-anchor="middle" font-size="10" fill="#64748B">memory · mastery</text>
-    <rect x="690" y="190" width="190" height="48" rx="9" fill="#EEF2FF" stroke="#6366F1"/>
-    <text x="785" y="210" text-anchor="middle" font-weight="700">TokenMeter</text>
-    <text x="785" y="226" text-anchor="middle" font-size="10" fill="#64748B">ledger: tokens · ₹</text>
+  <rect x="70" y="160" width="840" height="158" rx="14" fill="#F5F3FF" stroke="#7C3AED" stroke-width="2"/>
+  <rect x="70" y="160" width="840" height="34" rx="14" fill="#7C3AED"/>
+  <rect x="70" y="180" width="840" height="14" fill="#7C3AED"/>
+  <text x="490" y="183" text-anchor="middle" font-size="15" font-weight="800" fill="#FFFFFF">LARAVEL 11 API &#183; :8000 &#8212; system of record &amp; orchestration</text>
+  <g font-size="11.5">
+    <rect x="92" y="208" width="180" height="50" rx="9" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+    <text x="182" y="228" text-anchor="middle" font-weight="800" fill="#2E1065">TokenGate</text>
+    <text x="182" y="246" text-anchor="middle" font-size="10" fill="#6D28D9">quota check &#8594; 402</text>
+    <rect x="296" y="208" width="180" height="50" rx="9" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+    <text x="386" y="228" text-anchor="middle" font-weight="800" fill="#2E1065">TutorService</text>
+    <text x="386" y="246" text-anchor="middle" font-size="10" fill="#6D28D9">prompts &#183; AI funnel</text>
+    <rect x="500" y="208" width="180" height="50" rx="9" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+    <text x="590" y="228" text-anchor="middle" font-weight="800" fill="#2E1065">MindService</text>
+    <text x="590" y="246" text-anchor="middle" font-size="10" fill="#6D28D9">memory &#183; mastery</text>
+    <rect x="704" y="208" width="184" height="50" rx="9" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+    <text x="796" y="228" text-anchor="middle" font-weight="800" fill="#2E1065">TokenMeter</text>
+    <text x="796" y="246" text-anchor="middle" font-size="10" fill="#6D28D9">ledger: tokens &#183; &#8377;</text>
   </g>
-  <line x1="250" y1="214" x2="288" y2="214" stroke="#6366F1" stroke-width="1.8" marker-end="url(#arrA)"/>
-  <circle cx="269" cy="201" r="9" fill="#6366F1"/><text x="269" y="204.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">2</text>
-  <line x1="450" y1="214" x2="488" y2="214" stroke="#6366F1" stroke-width="1.8" marker-end="url(#arrA)"/>
-  <circle cx="469" cy="201" r="9" fill="#6366F1"/><text x="469" y="204.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">6</text>
-  <line x1="650" y1="214" x2="688" y2="214" stroke="#6366F1" stroke-width="1.8" marker-end="url(#arrA)"/>
-  <text x="490" y="276" text-anchor="middle" font-size="10.5" fill="#64748B">per chat turn: gate → prompt (+ memory · weakest concepts · misconceptions) → AI → meter → mind event</text>
+  <line x1="272" y1="233" x2="292" y2="233" stroke="#7C3AED" stroke-width="2.5" marker-end="url(#hA)"/>
+  <circle cx="282" cy="216" r="10" fill="#7C3AED"/><text x="282" y="220" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">2</text>
+  <line x1="476" y1="233" x2="496" y2="233" stroke="#7C3AED" stroke-width="2.5" marker-end="url(#hA)"/>
+  <circle cx="486" cy="216" r="10" fill="#7C3AED"/><text x="486" y="220" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">6</text>
+  <line x1="680" y1="233" x2="700" y2="233" stroke="#7C3AED" stroke-width="2.5" marker-end="url(#hA)"/>
+  <text x="490" y="295" text-anchor="middle" font-size="10.5" font-weight="700" fill="#5B21B6">per turn: gate &#8594; prompt (+ memory &#183; weakest concepts &#183; misconceptions) &#8594; AI &#8594; meter &#8594; mind event</text>
 
-  <line x1="170" y1="300" x2="170" y2="352" stroke="#64748B" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)"/>
-  <line x1="330" y1="300" x2="330" y2="352" stroke="#64748B" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)"/>
-  <line x1="650" y1="300" x2="650" y2="352" stroke="#6366F1" stroke-width="2" marker-end="url(#arrA)"/>
-  <text x="662" y="330" font-size="10.5" fill="#64748B">internal REST (bearer)</text>
-  <circle cx="627" cy="326" r="9" fill="#6366F1"/><text x="627" y="329.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">3</text>
+  <line x1="170" y1="318" x2="170" y2="372" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#hG)"/>
+  <line x1="330" y1="318" x2="330" y2="372" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#hG)"/>
+  <line x1="660" y1="318" x2="660" y2="372" stroke="#4F46E5" stroke-width="2.5" marker-end="url(#hA)"/>
+  <circle cx="630" cy="345" r="10" fill="#4F46E5"/><text x="630" y="349" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">3</text>
+  <text x="674" y="349" font-size="10.5" font-weight="700" fill="#64748B">internal REST (bearer)</text>
 
-  <rect x="95" y="354" width="150" height="64" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
-  <text x="170" y="381" text-anchor="middle" font-size="13" font-weight="700" fill="#0F172A">PostgreSQL</text>
-  <text x="170" y="398" text-anchor="middle" font-size="10" fill="#64748B">system of record</text>
-  <rect x="265" y="354" width="130" height="64" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
-  <text x="330" y="381" text-anchor="middle" font-size="13" font-weight="700" fill="#0F172A">Redis</text>
-  <text x="330" y="398" text-anchor="middle" font-size="10" fill="#64748B">cache · queue</text>
+  <rect x="86" y="374" width="160" height="70" rx="12" fill="#F1F5F9" stroke="#475569" stroke-width="2"/>
+  <rect x="86" y="374" width="160" height="26" rx="12" fill="#475569"/>
+  <rect x="86" y="388" width="160" height="12" fill="#475569"/>
+  <text x="166" y="392" text-anchor="middle" font-size="12" font-weight="800" fill="#FFFFFF">PostgreSQL</text>
+  <text x="166" y="424" text-anchor="middle" font-size="10.5" font-weight="700" fill="#334155">system of record</text>
 
-  <rect x="430" y="354" width="470" height="180" rx="14" fill="#FFFBEB" stroke="#F59E0B" stroke-width="1.5"/>
-  <text x="665" y="380" text-anchor="middle" font-size="15" font-weight="700" fill="#0F172A">Python AI service · :8001 · all LLM work</text>
-  <g font-size="11" fill="#0F172A">
-    <rect x="450" y="396" width="210" height="44" rx="9" fill="#FFFFFF" stroke="#FCD34D"/>
-    <text x="555" y="414" text-anchor="middle" font-weight="700">/ai/text · /ai/json · /ai/stream</text>
-    <text x="555" y="430" text-anchor="middle" font-size="10" fill="#64748B">generic, RAG-aware</text>
-    <rect x="680" y="396" width="200" height="44" rx="9" fill="#FFFFFF" stroke="#FCD34D"/>
-    <text x="780" y="414" text-anchor="middle" font-weight="700">Model router</text>
-    <text x="780" y="430" text-anchor="middle" font-size="10" fill="#64748B">chat | structured | grade</text>
-    <rect x="450" y="456" width="210" height="44" rx="9" fill="#FFFFFF" stroke="#FCD34D"/>
-    <text x="555" y="474" text-anchor="middle" font-weight="700">RAG retrieve + embed</text>
-    <text x="555" y="490" text-anchor="middle" font-size="10" fill="#64748B">local fastembed · 384-dim</text>
-    <rect x="680" y="456" width="200" height="44" rx="9" fill="#FFFFFF" stroke="#FCD34D"/>
-    <text x="780" y="474" text-anchor="middle" font-weight="700">/ai/ocr</text>
-    <text x="780" y="490" text-anchor="middle" font-size="10" fill="#64748B">tesseract · snap-a-doubt</text>
+  <rect x="266" y="374" width="130" height="70" rx="12" fill="#F1F5F9" stroke="#475569" stroke-width="2"/>
+  <rect x="266" y="374" width="130" height="26" rx="12" fill="#475569"/>
+  <rect x="266" y="388" width="130" height="12" fill="#475569"/>
+  <text x="331" y="392" text-anchor="middle" font-size="12" font-weight="800" fill="#FFFFFF">Redis</text>
+  <text x="331" y="424" text-anchor="middle" font-size="10.5" font-weight="700" fill="#334155">cache &#183; queue</text>
+
+  <rect x="430" y="374" width="480" height="196" rx="14" fill="#FFFBEB" stroke="#D97706" stroke-width="2"/>
+  <rect x="430" y="374" width="480" height="34" rx="14" fill="#D97706"/>
+  <rect x="430" y="394" width="480" height="14" fill="#D97706"/>
+  <text x="670" y="397" text-anchor="middle" font-size="15" font-weight="800" fill="#FFFFFF">PYTHON AI SERVICE &#183; :8001 &#8212; all LLM work</text>
+  <g font-size="11">
+    <rect x="450" y="420" width="216" height="48" rx="9" fill="#FFFFFF" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="558" y="439" text-anchor="middle" font-weight="800" fill="#451A03">/ai/text &#183; /ai/json &#183; /ai/stream</text>
+    <text x="558" y="456" text-anchor="middle" font-size="10" fill="#B45309">generic, RAG-aware</text>
+    <rect x="684" y="420" width="206" height="48" rx="9" fill="#FFFFFF" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="787" y="439" text-anchor="middle" font-weight="800" fill="#451A03">Model router</text>
+    <text x="787" y="456" text-anchor="middle" font-size="10" fill="#B45309">chat | structured | grade</text>
+    <rect x="450" y="482" width="216" height="48" rx="9" fill="#FFFFFF" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="558" y="501" text-anchor="middle" font-weight="800" fill="#451A03">RAG retrieve + embed</text>
+    <text x="558" y="518" text-anchor="middle" font-size="10" fill="#B45309">local fastembed &#183; 384-dim</text>
+    <rect x="684" y="482" width="206" height="48" rx="9" fill="#FFFFFF" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="787" y="501" text-anchor="middle" font-weight="800" fill="#451A03">/ai/ocr</text>
+    <text x="787" y="518" text-anchor="middle" font-size="10" fill="#B45309">tesseract &#183; snap-a-doubt</text>
   </g>
-  <text x="665" y="522" text-anchor="middle" font-size="10.5" fill="#64748B">AI_MOCK=true → deterministic offline mode · usage (tokens + model) on every response</text>
+  <text x="670" y="556" text-anchor="middle" font-size="10.5" font-weight="700" fill="#92400E">AI_MOCK=true &#8594; offline mode &#183; real token usage on every response</text>
 
-  <line x1="555" y1="534" x2="555" y2="586" stroke="#64748B" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)"/>
-  <circle cx="533" cy="560" r="9" fill="#6366F1"/><text x="533" y="563.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">4</text>
-  <line x1="780" y1="534" x2="780" y2="586" stroke="#6366F1" stroke-width="2" marker-end="url(#arrA)"/>
-  <circle cx="757" cy="560" r="9" fill="#6366F1"/><text x="757" y="563.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">5</text>
+  <line x1="558" y1="570" x2="558" y2="622" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#hG)"/>
+  <circle cx="532" cy="596" r="10" fill="#4F46E5"/><text x="532" y="600" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">4</text>
+  <line x1="787" y1="570" x2="787" y2="622" stroke="#4F46E5" stroke-width="2.5" marker-end="url(#hA)"/>
+  <circle cx="761" cy="596" r="10" fill="#4F46E5"/><text x="761" y="600" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">5</text>
 
-  <rect x="430" y="588" width="250" height="64" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
-  <text x="555" y="615" text-anchor="middle" font-size="13" font-weight="700" fill="#0F172A">Qdrant</text>
-  <text x="555" y="632" text-anchor="middle" font-size="10" fill="#64748B">curriculum embeddings, topic-filtered</text>
-  <rect x="700" y="588" width="200" height="64" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
-  <text x="800" y="610" text-anchor="middle" font-size="13" font-weight="700" fill="#0F172A">LLM providers</text>
-  <text x="800" y="626" text-anchor="middle" font-size="10" fill="#64748B">Gemini · OpenAI · Anthropic</text>
-  <text x="800" y="640" text-anchor="middle" font-size="10" fill="#64748B">or OpenRouter gateway</text>
+  <rect x="448" y="624" width="220" height="74" rx="12" fill="#F1F5F9" stroke="#475569" stroke-width="2"/>
+  <rect x="448" y="624" width="220" height="26" rx="12" fill="#475569"/>
+  <rect x="448" y="638" width="220" height="12" fill="#475569"/>
+  <text x="558" y="642" text-anchor="middle" font-size="12" font-weight="800" fill="#FFFFFF">Qdrant</text>
+  <text x="558" y="672" text-anchor="middle" font-size="10.5" font-weight="700" fill="#334155">curriculum embeddings</text>
+  <text x="558" y="688" text-anchor="middle" font-size="10" fill="#64748B">topic-filtered retrieval</text>
 
-  <g font-size="11" fill="#0F172A">
-    <text x="80" y="688" font-weight="700" fill="#64748B" font-size="10.5">ONE CHAT TURN</text>
-    <circle cx="89" cy="706" r="9" fill="#6366F1"/><text x="89" y="709.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">1</text>
-    <text x="104" y="710">student sends message</text>
-    <circle cx="89" cy="728" r="9" fill="#6366F1"/><text x="89" y="731.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">2</text>
-    <text x="104" y="732">quota gate, then prompt + mind context</text>
-    <circle cx="89" cy="750" r="9" fill="#6366F1"/><text x="89" y="753.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">3</text>
-    <text x="104" y="754">Laravel calls the AI service</text>
-    <circle cx="389" cy="706" r="9" fill="#6366F1"/><text x="389" y="709.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">4</text>
-    <text x="404" y="710">retrieve curriculum (RAG)</text>
-    <circle cx="389" cy="728" r="9" fill="#6366F1"/><text x="389" y="731.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">5</text>
-    <text x="404" y="732">routed model streams the reply (SSE)</text>
-    <circle cx="389" cy="750" r="9" fill="#6366F1"/><text x="389" y="753.5" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">6</text>
-    <text x="404" y="754">meter tokens → ledger · extract signals → mind</text>
+  <rect x="692" y="624" width="200" height="74" rx="12" fill="#F1F5F9" stroke="#475569" stroke-width="2"/>
+  <rect x="692" y="624" width="200" height="26" rx="12" fill="#475569"/>
+  <rect x="692" y="638" width="200" height="12" fill="#475569"/>
+  <text x="792" y="642" text-anchor="middle" font-size="12" font-weight="800" fill="#FFFFFF">LLM providers</text>
+  <text x="792" y="672" text-anchor="middle" font-size="10.5" font-weight="700" fill="#334155">Gemini &#183; OpenAI &#183; Anthropic</text>
+  <text x="792" y="688" text-anchor="middle" font-size="10" fill="#64748B">or OpenRouter gateway</text>
+
+  <g font-size="11" font-weight="700" fill="#0F172A">
+    <text x="70" y="730" font-size="11" font-weight="800" fill="#4F46E5">ONE CHAT TURN</text>
+    <circle cx="80" cy="750" r="10" fill="#4F46E5"/><text x="80" y="754" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">1</text>
+    <text x="98" y="754">student sends message</text>
+    <circle cx="80" cy="774" r="10" fill="#4F46E5"/><text x="80" y="778" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">2</text>
+    <text x="98" y="778">quota gate &#8594; prompt + mind recall</text>
+    <circle cx="80" cy="798" r="10" fill="#4F46E5"/><text x="80" y="802" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">3</text>
+    <text x="98" y="802">Laravel calls the AI service</text>
+    <circle cx="390" cy="750" r="10" fill="#4F46E5"/><text x="390" y="754" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">4</text>
+    <text x="408" y="754">retrieve curriculum (RAG)</text>
+    <circle cx="390" cy="774" r="10" fill="#4F46E5"/><text x="390" y="778" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">5</text>
+    <text x="408" y="778">routed model streams the reply</text>
+    <circle cx="390" cy="798" r="10" fill="#4F46E5"/><text x="390" y="802" text-anchor="middle" font-size="10.5" font-weight="800" fill="#FFFFFF">6</text>
+    <text x="408" y="802">meter tokens &#183; update the mind</text>
   </g>
-  <g font-size="10.5" fill="#64748B">
-    <line x1="720" y1="706" x2="756" y2="706" stroke="#6366F1" stroke-width="2" marker-end="url(#arrA)"/>
-    <text x="764" y="710">request / AI path</text>
-    <line x1="720" y1="730" x2="756" y2="730" stroke="#64748B" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)"/>
-    <text x="764" y="734">data reads / writes</text>
+  <g font-size="10.5" font-weight="700" fill="#64748B">
+    <line x1="700" y1="750" x2="738" y2="750" stroke="#4F46E5" stroke-width="2.5" marker-end="url(#hA)"/>
+    <text x="746" y="754">request / AI path</text>
+    <line x1="700" y1="776" x2="738" y2="776" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#hG)"/>
+    <text x="746" y="780">data reads / writes</text>
+    <rect x="700" y="794" width="14" height="14" rx="4" fill="#4F46E5"/><rect x="720" y="794" width="14" height="14" rx="4" fill="#7C3AED"/>
+    <rect x="740" y="794" width="14" height="14" rx="4" fill="#D97706"/><rect x="760" y="794" width="14" height="14" rx="4" fill="#475569"/>
+    <text x="782" y="805">client &#183; API &#183; AI &#183; stores</text>
   </g>
 </svg>
