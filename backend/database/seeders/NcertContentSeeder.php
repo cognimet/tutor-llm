@@ -115,6 +115,11 @@ abstract class NcertContentSeeder extends Seeder
      * between Zeroes and Coefficients of a Polynomial"). When several
      * candidates hit, the longest (most specific) one wins.
      *
+     * The contained side must be a MULTI-WORD phrase — otherwise a single
+     * common word would wrongly merge whole chapters (e.g. Economics
+     * "Development" must NOT fold into Geography "Resources & Development").
+     * A bare single word only matches by exact equality.
+     *
      * @template T of Chapter|Topic
      * @param  \Illuminate\Support\Collection<int, T>  $candidates
      * @return T|null
@@ -124,6 +129,7 @@ abstract class NcertContentSeeder extends Seeder
         $w = $this->normalize($wanted);
         $best = null;
         $bestLen = 0;
+        $multiWord = fn (string $s) => str_contains($s, ' ');
 
         foreach ($candidates as $candidate) {
             $h = $this->normalize($candidate->name);
@@ -131,8 +137,8 @@ abstract class NcertContentSeeder extends Seeder
                 continue;
             }
             $hit = $h === $w
-                || (strlen($h) >= 8 && str_contains($w, $h))
-                || (strlen($w) >= 8 && str_contains($h, $w));
+                || (strlen($h) >= 8 && $multiWord($h) && str_contains($w, $h))
+                || (strlen($w) >= 8 && $multiWord($w) && str_contains($h, $w));
             if ($hit && strlen($h) > $bestLen) {
                 $best = $candidate;
                 $bestLen = strlen($h);
