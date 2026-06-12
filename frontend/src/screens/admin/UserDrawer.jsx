@@ -17,12 +17,12 @@ const SEVERITY_BADGE = {
   high:   "bg-rose-50 text-rose-600",
 };
 
-const inputCls = "w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 outline-none transition focus:ring-2 focus:ring-indigo-200";
+const inputCls = "w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 outline-none transition focus:ring-2 focus:ring-indigo-200";
 
 function Field({ label, children }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</span>
       {children}
     </label>
   );
@@ -48,7 +48,7 @@ function ProfileTab({ form, set, role, user, onCurriculumChange }) {
           </select>
         </Field>
       )}
-      <label className="flex items-center gap-2.5 text-sm font-bold text-slate-700 cursor-pointer">
+      <label className="flex items-center gap-2.5 text-sm font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
         <input
           type="checkbox"
           checked={!!form.is_active}
@@ -59,11 +59,11 @@ function ProfileTab({ form, set, role, user, onCurriculumChange }) {
       </label>
 
       {role === "student" && (
-        <div className="space-y-2 rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Curriculum assignment</p>
+        <div className="space-y-2 rounded-2xl bg-slate-50 dark:bg-white/5 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Curriculum assignment</p>
           {user.curriculum_path && (
             <p className="text-xs text-slate-400">
-              Current: <span className="font-extrabold text-slate-600">{user.curriculum_path}</span>
+              Current: <span className="font-extrabold text-slate-600 dark:text-slate-300">{user.curriculum_path}</span>
             </p>
           )}
           <CurriculumPicker value={user.level_id} onChange={onCurriculumChange} />
@@ -98,8 +98,8 @@ function ActivityTab({ progress }) {
       {/* Stats strip */}
       <div className="grid grid-cols-4 gap-2">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-2xl bg-slate-50 px-2 py-3 text-center">
-            <p className="text-xl font-extrabold text-slate-900">{s.value}</p>
+          <div key={s.label} className="rounded-2xl bg-slate-50 dark:bg-white/5 px-2 py-3 text-center">
+            <p className="text-xl font-extrabold text-slate-900 dark:text-white">{s.value}</p>
             <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{s.label}</p>
           </div>
         ))}
@@ -107,14 +107,14 @@ function ActivityTab({ progress }) {
 
       {/* Recent assessments */}
       <div>
-        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Recent assessments</p>
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recent assessments</p>
         {assessments.length === 0 ? (
-          <p className="rounded-2xl bg-slate-50 py-5 text-center text-sm text-slate-400">No assessments yet.</p>
+          <p className="rounded-2xl bg-slate-50 dark:bg-white/5 py-5 text-center text-sm text-slate-400">No assessments yet.</p>
         ) : (
-          <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-100">
+          <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10">
             {assessments.map((a) => (
-              <div key={a.id} className="flex items-center justify-between bg-white px-4 py-2.5">
-                <p className="max-w-[55%] truncate text-xs font-bold text-slate-700">{a.topic_name}</p>
+              <div key={a.id} className="flex items-center justify-between bg-white dark:bg-slate-800 px-4 py-2.5">
+                <p className="max-w-[55%] truncate text-xs font-bold text-slate-700 dark:text-slate-200">{a.topic_name}</p>
                 <div className="flex items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${a.score >= a.total * 0.7 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
                     {a.score}/{a.total}
@@ -131,7 +131,7 @@ function ActivityTab({ progress }) {
 
       {/* Open knowledge gaps */}
       <div>
-        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Open knowledge gaps</p>
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Open knowledge gaps</p>
         {gaps.length === 0 ? (
           <p className="rounded-2xl bg-emerald-50 py-5 text-center text-sm font-bold text-emerald-600">
             No open gaps — great work!
@@ -139,13 +139,13 @@ function ActivityTab({ progress }) {
         ) : (
           <div className="space-y-2">
             {gaps.map((g) => (
-              <div key={g.id} className="rounded-2xl border border-slate-100 bg-white p-3">
+              <div key={g.id} className="rounded-2xl border border-slate-100 dark:border-white/10 bg-white dark:bg-slate-800 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-xs font-extrabold text-slate-800">{g.topic_name}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{g.concept}</p>
+                    <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100">{g.topic_name}</p>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{g.concept}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold capitalize ${SEVERITY_BADGE[g.severity] ?? "bg-slate-50 text-slate-500"}`}>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold capitalize ${SEVERITY_BADGE[g.severity] ?? "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400"}`}>
                     {g.severity}
                   </span>
                 </div>
@@ -163,17 +163,17 @@ function ActivityTab({ progress }) {
 function ParentsTab({ parents, onUnlink }) {
   return (
     <div>
-      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         Linked parents ({parents.length})
       </p>
       {parents.length === 0 ? (
-        <p className="rounded-2xl bg-slate-50 py-8 text-center text-sm text-slate-400">No linked parents.</p>
+        <p className="rounded-2xl bg-slate-50 dark:bg-white/5 py-8 text-center text-sm text-slate-400">No linked parents.</p>
       ) : (
         <div className="space-y-2">
           {parents.map((p) => (
-            <div key={p.id} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white px-4 py-3">
+            <div key={p.id} className="flex items-center justify-between rounded-2xl border border-slate-100 dark:border-white/10 bg-white dark:bg-slate-800 px-4 py-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-extrabold text-slate-800">{p.name}</p>
+                <p className="truncate text-sm font-extrabold text-slate-800 dark:text-slate-100">{p.name}</p>
                 <p className="truncate text-xs text-slate-400">{p.email}</p>
                 {p.relationship && (
                   <p className="mt-0.5 text-[10px] capitalize text-slate-400">{p.relationship}</p>
@@ -181,7 +181,7 @@ function ParentsTab({ parents, onUnlink }) {
               </div>
               <button
                 onClick={() => onUnlink(p.id)}
-                className="ml-3 inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-extrabold text-slate-500 hover:border-rose-200 hover:text-rose-600"
+                className="ml-3 inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 dark:border-white/10 px-2.5 py-1.5 text-xs font-extrabold text-slate-500 dark:text-slate-400 hover:border-rose-200 hover:text-rose-600"
               >
                 <Unlink className="h-3 w-3" /> Unlink
               </button>
@@ -199,17 +199,17 @@ function ChildrenTab({ children, onUnlink, linkEmail, setLinkEmail, onLink, link
   return (
     <div className="space-y-6">
       <div>
-        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Linked children ({children.length})
         </p>
         {children.length === 0 ? (
-          <p className="rounded-2xl bg-slate-50 py-8 text-center text-sm text-slate-400">No linked children.</p>
+          <p className="rounded-2xl bg-slate-50 dark:bg-white/5 py-8 text-center text-sm text-slate-400">No linked children.</p>
         ) : (
           <div className="space-y-2">
             {children.map((c) => (
-              <div key={c.id} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white px-4 py-3">
+              <div key={c.id} className="flex items-center justify-between rounded-2xl border border-slate-100 dark:border-white/10 bg-white dark:bg-slate-800 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-extrabold text-slate-800">{c.name}</p>
+                  <p className="truncate text-sm font-extrabold text-slate-800 dark:text-slate-100">{c.name}</p>
                   <p className="truncate text-xs text-slate-400">{c.curriculum_path || c.email}</p>
                   {c.relationship && (
                     <p className="mt-0.5 text-[10px] capitalize text-slate-400">{c.relationship}</p>
@@ -217,7 +217,7 @@ function ChildrenTab({ children, onUnlink, linkEmail, setLinkEmail, onLink, link
                 </div>
                 <button
                   onClick={() => onUnlink(c.id)}
-                  className="ml-3 inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-extrabold text-slate-500 hover:border-rose-200 hover:text-rose-600"
+                  className="ml-3 inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 dark:border-white/10 px-2.5 py-1.5 text-xs font-extrabold text-slate-500 dark:text-slate-400 hover:border-rose-200 hover:text-rose-600"
                 >
                   <Unlink className="h-3 w-3" /> Unlink
                 </button>
@@ -229,14 +229,14 @@ function ChildrenTab({ children, onUnlink, linkEmail, setLinkEmail, onLink, link
 
       {/* Link a student */}
       <div>
-        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Link a student</p>
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Link a student</p>
         <div className="flex gap-2">
           <input
             value={linkEmail}
             onChange={(e) => setLinkEmail(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onLink()}
             placeholder="Student email address…"
-            className="flex-1 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200"
+            className="flex-1 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200"
           />
           <button
             onClick={onLink}
@@ -344,30 +344,30 @@ export default function UserDrawer({ user: initialUser, onClose, onSaved }) {
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="drawer-in-right absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-slate-200 bg-white shadow-2xl">
+      <div className="drawer-in-right absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 shadow-2xl">
 
         {/* Header */}
-        <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="flex items-center gap-3 border-b border-slate-100 dark:border-white/10 px-5 py-4">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-indigo-100 to-violet-100 text-xl font-extrabold text-indigo-600">
             {(initialUser.name?.[0] ?? "?").toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-extrabold text-slate-900">{detail?.user?.name ?? initialUser.name}</p>
-            <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-extrabold capitalize ${ROLE_BADGE[role] ?? "bg-slate-50 text-slate-500"}`}>
+            <p className="truncate text-base font-extrabold text-slate-900 dark:text-white">{detail?.user?.name ?? initialUser.name}</p>
+            <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-extrabold capitalize ${ROLE_BADGE[role] ?? "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400"}`}>
               {role}
             </span>
           </div>
-          <button onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 hover:text-rose-500">
+          <button onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-white/10 hover:text-rose-500">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Tabs */}
         {TABS.length > 1 && (
-          <div className="flex gap-1 border-b border-slate-100 px-4 py-2">
+          <div className="flex gap-1 border-b border-slate-100 dark:border-white/10 px-4 py-2">
             {TABS.map((t) => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition-colors ${tab === t.key ? "bg-indigo-500 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+                className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition-colors ${tab === t.key ? "bg-indigo-500 text-white" : "text-slate-500 dark:text-slate-400 hover:bg-slate-50"}`}>
                 {t.label}
               </button>
             ))}
@@ -407,7 +407,7 @@ export default function UserDrawer({ user: initialUser, onClose, onSaved }) {
 
         {/* Footer: save button only on profile tab */}
         {tab === "profile" && (
-          <div className="border-t border-slate-100 px-5 py-4">
+          <div className="border-t border-slate-100 dark:border-white/10 px-5 py-4">
             <button
               onClick={save}
               disabled={saving || !detail}

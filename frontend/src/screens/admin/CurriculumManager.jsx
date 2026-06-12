@@ -84,7 +84,7 @@ export default function CurriculumManager() {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Curriculum</h1>
-          <p className="text-slate-500">Manage the whole Stage → Track → Level → Subject → Chapter → Topic tree.</p>
+          <p className="text-slate-500 dark:text-slate-400">Manage the whole Stage → Track → Level → Subject → Chapter → Topic tree.</p>
         </div>
         <button
           onClick={() => setEditing({ mode: "create", type: childType })}
@@ -96,14 +96,14 @@ export default function CurriculumManager() {
 
       {/* Breadcrumb */}
       <div className="mt-5 flex flex-wrap items-center gap-1 text-sm font-bold">
-        <button onClick={() => setPath([])} className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 ${path.length === 0 ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-white"}`}>
+        <button onClick={() => setPath([])} className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 ${path.length === 0 ? "bg-indigo-50 text-indigo-600" : "text-slate-500 dark:text-slate-400 hover:bg-white"}`}>
           <Home className="h-3.5 w-3.5" /> All stages
         </button>
         {path.map((seg, i) => (
           <span key={`${seg.type}-${seg.id}`} className="flex items-center gap-1">
             <ChevronRight className="h-4 w-4 text-slate-300" />
             <button onClick={() => setPath(path.slice(0, i + 1))}
-              className={`rounded-lg px-2 py-1 ${i === path.length - 1 ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-white"}`}>
+              className={`rounded-lg px-2 py-1 ${i === path.length - 1 ? "bg-indigo-50 text-indigo-600" : "text-slate-500 dark:text-slate-400 hover:bg-white"}`}>
               {seg.name}
             </button>
           </span>
@@ -111,7 +111,7 @@ export default function CurriculumManager() {
       </div>
 
       <Card className="mt-4 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 px-5 py-3">
           <p className="text-xs font-extrabold uppercase tracking-wide text-slate-400">
             {items.length} {LABEL[childType].split(" ")[0]}{items.length === 1 ? "" : "s"}
             {parent ? ` in ${parent.name}` : ""}
@@ -128,7 +128,7 @@ export default function CurriculumManager() {
               const drillable = node.type !== "topic";
               return (
                 <li key={node.id} className="group flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500 text-lg">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 text-lg">
                     {node.emoji || <Icon className="h-4 w-4" />}
                   </span>
                   <button
@@ -136,9 +136,9 @@ export default function CurriculumManager() {
                     className="min-w-0 flex-1 text-left"
                     disabled={!drillable}
                   >
-                    <p className="flex items-center gap-2 truncate text-sm font-extrabold text-slate-800">
+                    <p className="flex items-center gap-2 truncate text-sm font-extrabold text-slate-800 dark:text-slate-100">
                       {node.name}
-                      {node.is_active === false && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-400"><EyeOff className="h-3 w-3" /> hidden</span>}
+                      {node.is_active === false && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-slate-400"><EyeOff className="h-3 w-3" /> hidden</span>}
                     </p>
                     <p className="truncate text-xs text-slate-400">
                       {[node.stream, node.class_number ? `Class ${node.class_number}` : null, drillable ? `${kids.length} ${CHILD[node.type]}${kids.length === 1 ? "" : "s"}` : null, node.blurb]
@@ -197,10 +197,10 @@ function NodeForm({ title, type, node, busy, onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <form onSubmit={submit} className="relative w-full max-w-md rounded-3xl border border-white/60 bg-white p-6 shadow-2xl">
+      <form onSubmit={submit} className="relative w-full max-w-md rounded-3xl border border-white/60 dark:border-white/10 bg-white dark:bg-slate-800 p-6 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-extrabold text-slate-900">{title}</h3>
-          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200"><X className="h-4 w-4" /></button>
+          <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">{title}</h3>
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-white/10"><X className="h-4 w-4" /></button>
         </div>
 
         <div className="mt-5 space-y-3">
@@ -226,7 +226,7 @@ function NodeForm({ title, type, node, busy, onClose, onSave }) {
           {fields.includes("class_number") && <Text label="Class number (optional)" type="number" value={form.class_number} onChange={(v) => set("class_number", v)} placeholder="e.g. 10" />}
           {fields.includes("blurb") && <Text label="Short description" value={form.blurb} onChange={(v) => set("blurb", v)} placeholder="One line" />}
           {node && (
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-300">
               <input type="checkbox" checked={!!form.is_active} onChange={(e) => set("is_active", e.target.checked)} className="h-4 w-4 rounded" />
               Visible to students
             </label>
@@ -234,7 +234,7 @@ function NodeForm({ title, type, node, busy, onClose, onSave }) {
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2.5 text-sm font-extrabold text-slate-500 hover:bg-slate-100">Cancel</button>
+          <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2.5 text-sm font-extrabold text-slate-500 dark:text-slate-400 hover:bg-slate-100">Cancel</button>
           <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 px-5 py-2.5 text-sm font-extrabold text-white shadow-lg disabled:opacity-50">
             {busy && <Loader2 className="h-4 w-4 animate-spin" />} Save
           </button>
@@ -244,9 +244,9 @@ function NodeForm({ title, type, node, busy, onClose, onSave }) {
   );
 }
 
-const inputCls = "w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200";
+const inputCls = "w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-200";
 function Field({ label, children }) {
-  return <label className="block"><span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>{children}</label>;
+  return <label className="block"><span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</span>{children}</label>;
 }
 function Text({ label, value, onChange, ...props }) {
   return <Field label={label}><input value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={inputCls} {...props} /></Field>;

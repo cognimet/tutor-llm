@@ -12,12 +12,12 @@ function MasteryBar({ concept, score, passes }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-600">{concept}</span>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-600 dark:text-slate-300">{concept}</span>
         <span className={`text-[11px] font-extrabold ${passes ? "text-emerald-600" : "text-slate-400"}`}>
           {score}%{passes && " ✓"}
         </span>
       </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
         <div
           className={`h-full rounded-full transition-all duration-700 ${
             passes ? "bg-gradient-to-r from-emerald-400 to-emerald-500"
@@ -33,8 +33,8 @@ function MasteryBar({ concept, score, passes }) {
 
 function Section({ icon, title, children }) {
   return (
-    <div className="rounded-3xl border border-white/60 bg-white/75 p-4 shadow-sm backdrop-blur-sm">
-      <p className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wide text-slate-500">
+    <div className="rounded-3xl border border-white/60 dark:border-white/10 bg-white/75 dark:bg-slate-800/80 p-4 shadow-sm backdrop-blur-sm dark:shadow-black/20">
+      <p className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {icon} {title}
       </p>
       <div className="mt-2.5">{children}</div>
@@ -45,7 +45,7 @@ function Section({ icon, title, children }) {
 export default function TutorMind({ mind }) {
   if (!mind) {
     return (
-      <div className="rounded-3xl border border-white/60 bg-white/60 p-5 text-center text-xs font-bold text-slate-400 backdrop-blur-sm">
+      <div className="rounded-3xl border border-white/60 dark:border-white/10 bg-white/60 dark:bg-slate-800/50 p-5 text-center text-xs font-bold text-slate-400 backdrop-blur-sm">
         <Brain className="mx-auto mb-2 h-5 w-5 text-indigo-300" />
         The tutor’s live read on you appears here as you chat.
       </div>
@@ -73,7 +73,7 @@ export default function TutorMind({ mind }) {
                 className="transition-all duration-700"
               />
             </svg>
-            <span className="absolute text-sm font-extrabold text-slate-800">{composite}%</span>
+            <span className="absolute text-sm font-extrabold text-slate-800 dark:text-slate-100">{composite}%</span>
           </div>
           <p className="min-w-0 text-[11px] font-bold leading-snug text-slate-400">
             {mind.topic_mastered
@@ -127,7 +127,7 @@ export default function TutorMind({ mind }) {
         ) : (
           <div className="space-y-1">
             {memory.slice(0, 8).map(([k, v]) => (
-              <p key={k} className="text-[11px] font-bold text-slate-500">
+              <p key={k} className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                 <span className="capitalize text-slate-400">{k.replace(/_/g, " ")}:</span> {String(v)}
               </p>
             ))}
@@ -138,7 +138,7 @@ export default function TutorMind({ mind }) {
       {/* Next step */}
       {mind.next_step && (
         <Section icon={<Compass className="h-3.5 w-3.5 text-sky-500" />} title="Next step">
-          <p className="text-[11px] font-bold leading-relaxed text-slate-600">{mind.next_step}</p>
+          <p className="text-[11px] font-bold leading-relaxed text-slate-600 dark:text-slate-300">{mind.next_step}</p>
         </Section>
       )}
     </div>

@@ -4,7 +4,7 @@ import {
   Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Plus, MessageSquare,
   ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
-  Brain, Mic, MicOff, Camera,
+  Brain, Mic, MicOff, Camera, Maximize2,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
 import { tutorApi } from "../../api/endpoints.js";
@@ -127,7 +127,7 @@ function Avatar({ user, t }) {
   return (
     <div
       className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl text-lg shadow-sm ${
-        user ? "bg-white ring-1 ring-slate-200" : `bg-gradient-to-br ${t.grad} text-white shadow-md`
+        user ? "bg-white dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-white/10" : `bg-gradient-to-br ${t.grad} text-white shadow-md`
       }`}
     >
       {user ? "🧑‍🎓" : "🦉"}
@@ -150,12 +150,12 @@ function Bubble({ m, isUser, t }) {
   const thinking = m.pending && !m.content;
   return (
     <div
-      className={`max-w-[88%] rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+      className={`max-w-[92%] rounded-3xl px-4 py-3 text-[0.95rem] leading-relaxed ${
         isUser
-          ? `rounded-tr-md bg-gradient-to-br ${t.grad} text-white`
+          ? `rounded-tr-md bg-gradient-to-br ${t.grad} text-white shadow-sm shadow-indigo-500/20`
           : m.error
-          ? "rounded-tl-md border border-rose-100 bg-rose-50 text-rose-700"
-          : "rounded-tl-md border border-slate-100 bg-white text-slate-700"
+          ? "rounded-tl-md border border-rose-100 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+          : "rounded-tl-md border border-slate-100 dark:border-white/10 bg-white text-slate-700 dark:text-slate-200 shadow-sm dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-200"
       }`}
     >
       {isUser ? (
@@ -181,11 +181,37 @@ function ActionButton({ title, active, onClick, children }) {
       aria-label={title}
       onClick={onClick}
       className={`grid h-7 w-7 place-items-center rounded-lg transition-colors ${
-        active ? "bg-indigo-100 text-indigo-600" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+        active ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
       }`}
     >
       {children}
     </button>
+  );
+}
+
+/* --------------------------------------------------- fullscreen reader ---- */
+
+// A distraction-free, borderless full-screen view of one tutor reply: just the
+// content on a clean surface with a floating close button. Esc also closes.
+function ResponseReader({ message, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
+
+  return (
+    <div className="msg-in fixed inset-0 z-[60] overflow-y-auto bg-white dark:bg-slate-950">
+      <button onClick={onClose} title="Close (Esc)" aria-label="Close"
+        className="fixed right-4 top-4 z-10 grid h-10 w-10 place-items-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white">
+        <X className="h-5 w-5" />
+      </button>
+      <div className="mx-auto w-full max-w-3xl px-5 py-16 sm:px-8 sm:py-20">
+        <RichMessage text={message.content} className="md-lg" />
+      </div>
+    </div>
   );
 }
 
@@ -205,20 +231,20 @@ function ShortcutsOverlay({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="msg-in relative w-full max-w-sm rounded-3xl border border-white/60 bg-white p-5 shadow-2xl">
+      <div className="msg-in relative w-full max-w-sm rounded-3xl border border-white/60 dark:border-white/10 bg-white dark:bg-slate-800 p-5 shadow-2xl">
         <div className="mb-3 flex items-center justify-between">
           <p className="flex items-center gap-2 text-sm font-extrabold text-slate-800">
             <Keyboard className="h-4 w-4 text-indigo-500" /> Keyboard shortcuts
           </p>
-          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 ring-1 ring-slate-200 hover:text-slate-600">
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 ring-1 ring-slate-200 dark:ring-white/10 hover:text-slate-600 dark:text-slate-300">
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="space-y-1.5">
           {rows.map(([k, d]) => (
             <div key={k} className="flex items-center justify-between gap-3 rounded-xl px-1 py-1.5">
-              <span className="text-xs font-bold text-slate-600">{d}</span>
-              <kbd className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-extrabold text-slate-500 shadow-sm">{k}</kbd>
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{d}</span>
+              <kbd className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 px-2 py-1 text-[11px] font-extrabold text-slate-500 shadow-sm">{k}</kbd>
             </div>
           ))}
         </div>
@@ -249,7 +275,7 @@ function SessionList({ sessions, sessionId, onPick, t, searchRef }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search chats"
-          className="w-full rounded-2xl border border-slate-200 bg-white/80 py-2 pl-8 pr-3 text-xs font-bold text-slate-600 outline-none placeholder:font-bold placeholder:text-slate-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+          className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 py-2 pl-8 pr-3 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none placeholder:font-bold placeholder:text-slate-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
         />
       </div>
 
@@ -281,7 +307,7 @@ function SessionList({ sessions, sessionId, onPick, t, searchRef }) {
                       <MessageSquare className="h-4 w-4" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-extrabold text-slate-700">
+                      <span className="block truncate text-xs font-extrabold text-slate-700 dark:text-slate-200">
                         {s.title || s.topic_name}
                       </span>
                       <span className="block truncate text-[11px] text-slate-400">
@@ -322,8 +348,9 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [copiedTranscript, setCopiedTranscript] = useState(false);
   const [mind, setMind] = useState(null);            // the tutor's live "mind"
-  const [mindOpen, setMindOpen] = useState(true);    // right panel (desktop xl)
+  const [sidePanel, setSidePanel] = useState("chats"); // desktop right panel tab: chats | mind
   const [mindSheet, setMindSheet] = useState(false); // bottom sheet (mobile)
+  const [expanded, setExpanded] = useState(null);    // a reply opened in fullscreen reader
   const [snapBusy, setSnapBusy] = useState(false);   // OCR upload in flight
   const [listening, setListening] = useState(false); // voice-to-text active
 
@@ -716,62 +743,32 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
 
   return (
     <div className="flex h-[calc(100vh-57px)] flex-col">
-      <div className="mx-auto flex w-full max-w-[88rem] flex-1 gap-5 overflow-hidden px-4 py-5">
-        {/* Context + history rail (desktop) */}
-        <aside className="hidden w-72 shrink-0 flex-col gap-4 lg:flex">
-          <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-extrabold text-slate-500 hover:text-indigo-600">
-            <ArrowLeft className="h-4 w-4" /> Topics
-          </button>
-
-          <div className="rounded-3xl border border-white/60 bg-white/75 p-5 shadow-lg shadow-slate-200/40 backdrop-blur-sm">
-            <div className={`grid h-12 w-12 place-items-center rounded-2xl text-2xl ${t.soft}`}>{ctx.emoji || "📘"}</div>
-            <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">{ctx.subject_name} · {ctx.chapter_name}</p>
-            <h2 className="mt-1 text-lg font-extrabold leading-snug text-slate-900">{ctx.topic_name}</h2>
-            <button onClick={() => setAssessing(true)} className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-indigo-500/30 transition-all hover:shadow-xl active:scale-[0.98]`}>
-              <ClipboardCheck className="h-4 w-4" /> Check my understanding
-            </button>
-            <button onClick={newChat} className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-3 py-2 text-sm font-extrabold text-slate-600 ring-1 ring-slate-200 transition-all hover:text-indigo-600 active:scale-[0.98]">
-              <Plus className="h-4 w-4" /> New chat
-              <span className="ml-auto hidden rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-400 xl:inline">{MOD} J</span>
-            </button>
-          </div>
-
-          {/* Recent chats */}
-          <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/60 bg-white/60 p-3 backdrop-blur-sm">
-            <p className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-400">Recent chats</p>
-            <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} searchRef={searchRef} />
-          </div>
-
-          <div className="rounded-3xl border border-white/60 bg-white/60 p-4 text-sm text-slate-500 backdrop-blur-sm">
-            <p className="flex items-center gap-2 font-extrabold text-slate-700"><Lightbulb className="h-4 w-4 text-amber-500" /> Tip</p>
-            <p className="mt-1.5 text-xs">Ask “why”, not just “what”. The tutor explains the reasoning with worked steps and math.</p>
-          </div>
-        </aside>
+      <div className="mx-auto flex w-full max-w-[100rem] flex-1 gap-6 overflow-hidden px-4 py-5 lg:px-6">
 
         {/* Chat column */}
-        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border border-white/60 bg-white/50 shadow-xl shadow-slate-200/50 backdrop-blur-sm">
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border border-white/60 dark:border-white/10 bg-white/50 dark:bg-slate-900/40 shadow-xl shadow-slate-200/50 backdrop-blur-sm">
           {/* Unified header */}
-          <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
-            <button onClick={onBack} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 hover:text-indigo-600 lg:hidden">
+          <div className="flex items-center gap-3 border-b border-slate-100 dark:border-white/10 px-4 py-3 sm:px-5">
+            <button onClick={onBack} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10 hover:text-indigo-600 lg:hidden">
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className={`hidden h-10 w-10 shrink-0 place-items-center rounded-2xl text-xl sm:grid ${t.soft}`}>{ctx.emoji || "📘"}</div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-extrabold leading-tight text-slate-900">{ctx.topic_name}</p>
+              <p className="truncate text-sm font-extrabold leading-tight text-slate-900 dark:text-white">{ctx.topic_name}</p>
               <p className="truncate text-[11px] font-bold text-slate-400">{ctx.subject_name}{ctx.chapter_name ? ` · ${ctx.chapter_name}` : ""}</p>
             </div>
             <span className={`hidden items-center gap-1.5 rounded-full ${t.soft} px-2.5 py-1 text-[11px] font-extrabold ${t.text} sm:inline-flex`}>
               <ShieldCheck className="h-3.5 w-3.5" /> Topic-scoped
             </span>
-            <button onClick={() => setDrawerOpen(true)} title="Chat history" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 hover:text-indigo-600 lg:hidden">
+            <button onClick={() => setDrawerOpen(true)} title="Chat history" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10 hover:text-indigo-600 lg:hidden">
               <History className="h-5 w-5" />
             </button>
-            {/* Tutor's mind: side panel on desktop, bottom sheet on mobile */}
+            {/* Tutor's mind: selects the Mind tab on desktop, bottom sheet on mobile */}
             <button
-              onClick={() => (window.matchMedia("(min-width: 1280px)").matches ? setMindOpen((v) => !v) : setMindSheet(true))}
+              onClick={() => (window.matchMedia("(min-width: 1024px)").matches ? setSidePanel("mind") : setMindSheet(true))}
               title="Tutor's mind"
-              className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 transition-colors ${
-                mindOpen ? "bg-indigo-50 text-indigo-600 ring-indigo-200" : "text-slate-500 ring-slate-200 hover:text-indigo-600"
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 transition-colors lg:hidden ${
+                "text-slate-500 ring-slate-200 dark:ring-white/10 hover:text-indigo-600"
               }`}
             >
               <Brain className="h-5 w-5" />
@@ -783,26 +780,26 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             {/* Overflow menu */}
             <div className="relative shrink-0" ref={menuRef}>
               <button onClick={() => setMenuOpen((v) => !v)} title="More" aria-haspopup="menu" aria-expanded={menuOpen}
-                className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 hover:text-indigo-600">
+                className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10 hover:text-indigo-600">
                 <MoreVertical className="h-5 w-5" />
               </button>
               {menuOpen && (
-                <div className="msg-in absolute right-0 top-11 z-20 w-56 overflow-hidden rounded-2xl border border-slate-100 bg-white p-1.5 shadow-xl">
-                  <button onClick={newChat} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50">
+                <div className="msg-in absolute right-0 top-11 z-20 w-56 overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10 bg-white dark:bg-slate-800 p-1.5 shadow-xl">
+                  <button onClick={newChat} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">
                     <Plus className="h-4 w-4 text-slate-400" /> New chat
                   </button>
-                  <button onClick={renameChat} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50">
+                  <button onClick={renameChat} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">
                     <Pencil className="h-4 w-4 text-slate-400" /> Rename chat
                   </button>
-                  <button onClick={copyTranscript} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50">
+                  <button onClick={copyTranscript} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">
                     {copiedTranscript ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4 text-slate-400" />}
                     {copiedTranscript ? "Copied!" : "Copy transcript"}
                   </button>
-                  <button onClick={exportTranscript} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50">
+                  <button onClick={exportTranscript} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">
                     <Download className="h-4 w-4 text-slate-400" /> Export as Markdown
                   </button>
-                  <div className="my-1 border-t border-slate-100" />
-                  <button onClick={() => { setMenuOpen(false); setShowShortcuts(true); }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50">
+                  <div className="my-1 border-t border-slate-100 dark:border-white/10" />
+                  <button onClick={() => { setMenuOpen(false); setShowShortcuts(true); }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">
                     <Keyboard className="h-4 w-4 text-slate-400" /> Keyboard shortcuts
                   </button>
                 </div>
@@ -810,7 +807,8 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             </div>
           </div>
 
-          <div ref={scrollRef} onScroll={onScroll} className="flex-1 space-y-5 overflow-y-auto px-4 py-6 sm:px-5">
+          <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-10 sm:px-8">
             {booting ? (
               <div className="flex items-center gap-3 text-slate-400">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
@@ -835,6 +833,9 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                     )}
                     {showActions && (
                       <div className="flex items-center gap-0.5 px-1">
+                        <ActionButton title="Open in full screen" onClick={() => setExpanded(m)}>
+                          <Maximize2 className="h-3.5 w-3.5" />
+                        </ActionButton>
                         <ActionButton title="Copy" active={copiedId === (m.id ?? i)} onClick={() => copy(m.content, m.id ?? i)}>
                           {copiedId === (m.id ?? i) ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                         </ActionButton>
@@ -864,11 +865,12 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                 </div>
               );
             })}
+            </div>
           </div>
 
           {!atBottom && (
             <button onClick={jumpToLatest} title="Jump to latest"
-              className="absolute bottom-28 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white px-3 py-2 text-xs font-extrabold text-slate-500 shadow-lg ring-1 ring-slate-200 transition-colors hover:text-indigo-600">
+              className="absolute bottom-28 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white dark:bg-slate-800 px-3 py-2 text-xs font-extrabold text-slate-500 shadow-lg ring-1 ring-slate-200 dark:ring-white/10 transition-colors hover:text-indigo-600">
               {hasNew ? <span className={`h-2 w-2 rounded-full ${t.dot} animate-pulse`} /> : <ArrowDown className="h-4 w-4" />}
               {hasNew ? "New reply" : "Latest"}
             </button>
@@ -878,7 +880,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             <div className="grid grid-cols-1 gap-2 px-4 pb-3 sm:grid-cols-2 sm:px-5">
               {STARTERS(ctx.topic_name).map((s) => (
                 <button key={s.label} onClick={() => send(s.label)}
-                  className="group flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white/80 px-3.5 py-2.5 text-left text-xs font-extrabold text-slate-600 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-md">
+                  className="group flex items-center gap-2.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3.5 py-2.5 text-left text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-md">
                   <span className="text-base">{s.icon}</span>
                   <span className="min-w-0 flex-1 truncate">{s.label}</span>
                   <Send className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-colors group-hover:text-indigo-400" />
@@ -891,14 +893,14 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             <div className="flex flex-wrap gap-2 px-4 pb-3 sm:px-5">
               {FOLLOWUPS.map((s) => (
                 <button key={s.label} onClick={() => send(s.label)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-extrabold text-slate-600 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm">
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm">
                   <span>{s.icon}</span> {s.label}
                 </button>
               ))}
             </div>
           )}
 
-          <div className="border-t border-slate-100 p-3">
+          <div className="border-t border-slate-100 dark:border-white/10 p-3">
             {/* Tutor mode selector — changes how the tutor teaches. */}
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
               <span className="mr-1 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Mode</span>
@@ -907,20 +909,20 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold transition-all ${
                     mode === m.id
                       ? `bg-gradient-to-br ${t.grad} text-white shadow-sm`
-                      : "border border-slate-200 bg-white/80 text-slate-500 hover:border-indigo-300 hover:text-indigo-600"
+                      : "border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 text-slate-500 hover:border-indigo-300 hover:text-indigo-600"
                   }`}>
                   <span>{m.icon}</span> {m.label}
                 </button>
               ))}
             </div>
-            <div className="flex items-end gap-2 rounded-3xl bg-white p-2 shadow-sm ring-1 ring-slate-200 transition-shadow focus-within:ring-2 focus-within:ring-indigo-300">
+            <div className="flex items-end gap-2 rounded-3xl bg-white dark:bg-slate-800 p-2 shadow-sm ring-1 ring-slate-200 dark:ring-white/10 transition-shadow focus-within:ring-2 focus-within:ring-indigo-300">
               {/* Snap-a-doubt: photo -> OCR -> tutor solves it teaching-style */}
               <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onSnapFile} />
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={streaming || snapBusy}
                 title="Snap a doubt (photo of a problem)"
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-40"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-white/5 hover:text-indigo-600 disabled:opacity-40"
               >
                 {snapBusy
                   ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
@@ -932,7 +934,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                   disabled={streaming}
                   title={listening ? "Stop listening" : "Speak your question"}
                   className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl transition-colors disabled:opacity-40 ${
-                    listening ? "bg-rose-50 text-rose-500 ring-1 ring-rose-200 animate-pulse" : "text-slate-400 hover:bg-slate-50 hover:text-indigo-600"
+                    listening ? "bg-rose-50 text-rose-500 ring-1 ring-rose-200 animate-pulse" : "text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-indigo-600"
                   }`}
                 >
                   {listening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
@@ -968,26 +970,55 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
         </main>
 
         {/* RIGHT panel: the tutor's live mind (spec \u00a76) \u2014 collapsible */}
-        {mindOpen && (
-          <aside className="hidden w-72 shrink-0 flex-col gap-3 overflow-y-auto pr-0.5 xl:flex">
-            <p className="flex items-center gap-2 px-1 text-sm font-extrabold text-slate-500">
-              <Brain className="h-4 w-4 text-indigo-500" /> Tutor’s mind
-            </p>
-            <TutorMind mind={mind} />
-          </aside>
-        )}
+        {/* RIGHT: one tabbed side panel — consolidates recent chats + tutor's mind */}
+        <aside className="hidden w-[21rem] shrink-0 flex-col gap-3 lg:flex xl:w-[23rem]">
+          <button onClick={onBack} className="inline-flex w-fit items-center gap-2 px-1 text-sm font-extrabold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300">
+            <ArrowLeft className="h-4 w-4" /> All topics
+          </button>
+
+          {/* Segmented tabs */}
+          <div className="relative flex rounded-2xl bg-slate-100 p-1 dark:bg-white/5">
+            <span
+              className="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 transition-transform duration-300 ease-out dark:bg-slate-800 dark:ring-white/10"
+              style={{ transform: sidePanel === "mind" ? "translateX(100%)" : "translateX(0)" }}
+            />
+            {[["chats", "Recents", History], ["mind", "Tutor's Mind", Brain]].map(([id, label, Icon]) => (
+              <button key={id} onClick={() => setSidePanel(id)}
+                className={`relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold transition-colors ${
+                  sidePanel === id ? "text-indigo-600 dark:text-indigo-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                }`}>
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Panel body */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-3xl border border-white/60 bg-white/70 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-slate-900/60">
+            {sidePanel === "mind" ? (
+              <TutorMind mind={mind} />
+            ) : (
+              <>
+                <button onClick={newChat} className={`mb-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
+                  <Plus className="h-4 w-4" /> New chat
+                  <span className="ml-auto hidden rounded-md bg-white/20 px-1.5 py-0.5 text-[10px] font-extrabold xl:inline">{MOD} J</span>
+                </button>
+                <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} searchRef={searchRef} />
+              </>
+            )}
+          </div>
+        </aside>
       </div>
 
       {/* Mobile "tutor's mind" bottom sheet */}
       {mindSheet && (
         <div className="fixed inset-0 z-40 xl:hidden">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMindSheet(false)} />
-          <div className="drawer-in absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-3xl bg-gradient-to-b from-slate-50 to-indigo-50/60 p-4 shadow-2xl">
+          <div className="drawer-in absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-3xl bg-gradient-to-b from-slate-50 to-indigo-50/60 p-4 shadow-2xl dark:from-slate-900 dark:to-slate-950">
             <div className="mb-3 flex items-center justify-between">
-              <p className="flex items-center gap-2 text-sm font-extrabold text-slate-700">
+              <p className="flex items-center gap-2 text-sm font-extrabold text-slate-700 dark:text-slate-200">
                 <Brain className="h-4 w-4 text-indigo-500" /> Tutor’s mind
               </p>
-              <button onClick={() => setMindSheet(false)} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200">
+              <button onClick={() => setMindSheet(false)} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -1000,22 +1031,25 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       {drawerOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
-          <div className="drawer-in absolute inset-y-0 left-0 flex w-[86%] max-w-sm flex-col gap-3 bg-gradient-to-b from-slate-50 to-indigo-50/60 p-4 shadow-2xl">
+          <div className="drawer-in absolute inset-y-0 left-0 flex w-[86%] max-w-sm flex-col gap-3 bg-gradient-to-b from-slate-50 to-indigo-50/60 p-4 shadow-2xl dark:from-slate-900 dark:to-slate-950">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-extrabold text-slate-700">Chat history</p>
-              <button onClick={() => setDrawerOpen(false)} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200">
+              <p className="text-sm font-extrabold text-slate-700 dark:text-slate-200">Chat history</p>
+              <button onClick={() => setDrawerOpen(false)} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10">
                 <X className="h-4 w-4" />
               </button>
             </div>
             <button onClick={newChat} className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-md`}>
               <Plus className="h-4 w-4" /> New chat
             </button>
-            <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/60 bg-white/70 p-3 backdrop-blur-sm">
+            <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/60 dark:border-white/10 bg-white/70 p-3 backdrop-blur-sm">
               <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} />
             </div>
           </div>
         </div>
       )}
+
+      {/* Full-screen reading view for a single response — borderless, content only */}
+      {expanded && <ResponseReader message={expanded} onClose={() => setExpanded(null)} />}
 
       {showShortcuts && <ShortcutsOverlay onClose={() => setShowShortcuts(false)} />}
 

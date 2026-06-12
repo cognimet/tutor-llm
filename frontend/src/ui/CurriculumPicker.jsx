@@ -57,7 +57,7 @@ export default function CurriculumPicker({ stages: provided, value, onChange }) 
 
   if (!stages) {
     return (
-      <div className="flex items-center gap-2.5 rounded-xl bg-white px-3.5 py-3 text-sm font-semibold text-slate-400">
+      <div className="flex items-center gap-2.5 rounded-xl bg-white dark:bg-slate-800 px-3.5 py-3 text-sm font-semibold text-slate-400">
         <Loader2 className="h-4 w-4 animate-spin text-indigo-400" /> Loading your curriculum…
       </div>
     );
@@ -108,7 +108,7 @@ function Step({ n, title, done, animate, children }) {
         <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-extrabold transition-colors ${done ? "bg-indigo-500 text-white" : "bg-indigo-100 text-indigo-600"}`}>
           {done ? <Check className="h-3 w-3" strokeWidth={3.5} /> : n}
         </span>
-        <span className="text-[13px] font-semibold text-slate-700">{title}</span>
+        <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{title}</span>
       </div>
       <div className="pl-7">{children}</div>
     </div>
@@ -125,7 +125,7 @@ function Chip({ active, onClick, emoji, label }) {
       className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-bold transition-all active:scale-[0.97] ${
         active
           ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500"
-          : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50/40 hover:text-indigo-600"
+          : "border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-indigo-300 hover:bg-indigo-50/40 hover:text-indigo-600"
       }`}>
       {emoji && <span className="text-[15px] leading-none">{emoji}</span>}
       {label}

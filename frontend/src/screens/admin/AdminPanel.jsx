@@ -21,9 +21,9 @@ export default function AdminPanel() {
     <div className="min-h-screen">
       <Backdrop />
       <AppHeader user={user} onLogout={logout} right={
-        <div className="hidden gap-1 rounded-2xl bg-white/70 p-1 ring-1 ring-slate-200 sm:flex">
+        <div className="hidden gap-1 rounded-2xl bg-white/70 dark:bg-slate-800/60 p-1 ring-1 ring-slate-200 dark:ring-white/10 sm:flex">
           {["overview", "users", "curriculum", "credits", "gaps"].map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={`rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize ${tab === t ? "bg-indigo-500 text-white" : "text-slate-500"}`}>{t}</button>
+            <button key={t} onClick={() => setTab(t)} className={`rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize ${tab === t ? "bg-indigo-500 text-white" : "text-slate-500 dark:text-slate-400"}`}>{t}</button>
           ))}
         </div>
       } />
@@ -52,18 +52,18 @@ function Overview({ data }) {
   return (
     <>
       <h1 className="text-3xl font-extrabold tracking-tight">Platform overview</h1>
-      <p className="text-slate-500">A live snapshot of Everything AI Tutor.</p>
+      <p className="text-slate-500 dark:text-slate-400">A live snapshot of Everything AI Tutor.</p>
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {cards.map((c) => (
           <Card key={c.label} className="p-4">
             <div className={`grid h-10 w-10 place-items-center rounded-2xl bg-${c.tint}-50 text-${c.tint}-600`}><c.icon className="h-5 w-5" /></div>
-            <p className="mt-3 text-2xl font-extrabold text-slate-900">{c.value}</p>
+            <p className="mt-3 text-2xl font-extrabold text-slate-900 dark:text-white">{c.value}</p>
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{c.label}</p>
           </Card>
         ))}
       </div>
       <Card className="mt-6 p-5">
-        <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Signups by day</p>
+        <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Signups by day</p>
         <div className="mt-3 h-56">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.signups_by_day}>
@@ -110,9 +110,9 @@ function UsersTab() {
           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()}
             placeholder="Search name or email… (Enter)"
-            className="w-full rounded-2xl border border-slate-200 bg-white/80 py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200" />
+            className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200" />
         </div>
-        <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-extrabold outline-none">
+        <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-4 py-3 text-sm font-extrabold outline-none">
           <option value="">All roles</option><option value="student">Students</option><option value="parent">Parents</option><option value="admin">Admins</option>
         </select>
       </div>
@@ -120,7 +120,7 @@ function UsersTab() {
       <Card className="mt-5 overflow-hidden">
         {!users ? <Spinner /> : (
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-extrabold uppercase tracking-wide text-slate-400">
+            <thead className="bg-slate-50 dark:bg-white/5 text-xs font-extrabold uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-5 py-3">Name</th>
                 <th className="px-5 py-3">Role</th>
@@ -134,16 +134,16 @@ function UsersTab() {
                 <tr
                   key={u.id}
                   onClick={() => setDrawerUser(u)}
-                  className="cursor-pointer border-t border-slate-100 transition-colors hover:bg-indigo-50/40"
+                  className="cursor-pointer border-t border-slate-100 dark:border-white/10 transition-colors hover:bg-indigo-50/40"
                 >
                   <td className="px-5 py-3">
-                    <p className="font-extrabold text-slate-800">{u.name}</p>
+                    <p className="font-extrabold text-slate-800 dark:text-slate-100">{u.name}</p>
                     <p className="text-xs text-slate-400">{u.email}</p>
                   </td>
                   <td className="px-5 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-extrabold capitalize ${ROLE_BADGE[u.role] ?? "bg-slate-50 text-slate-500"}`}>{u.role}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-extrabold capitalize ${ROLE_BADGE[u.role] ?? "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400"}`}>{u.role}</span>
                   </td>
-                  <td className="px-5 py-3 text-xs text-slate-500">{u.curriculum_path || (u.grade ? `Class ${u.grade}` : "—")}</td>
+                  <td className="px-5 py-3 text-xs text-slate-500 dark:text-slate-400">{u.curriculum_path || (u.grade ? `Class ${u.grade}` : "—")}</td>
                   <td className="px-5 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${u.is_active ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>
                       {u.is_active ? "Active" : "Disabled"}
@@ -152,7 +152,7 @@ function UsersTab() {
                   <td className="px-5 py-3 text-right">
                     <button
                       onClick={(e) => toggleActive(e, u)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-white/10 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 hover:border-indigo-300 hover:text-indigo-600"
                     >
                       <Power className="h-3.5 w-3.5" /> {u.is_active ? "Disable" : "Enable"}
                     </button>

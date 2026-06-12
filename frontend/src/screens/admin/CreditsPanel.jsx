@@ -60,12 +60,12 @@ export default function CreditsPanel() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">AI usage & credits</h1>
-          <p className="text-slate-500">Raw tokens and ₹ cost are visible only here. Students and parents see credits.</p>
+          <p className="text-slate-500 dark:text-slate-400">Raw tokens and ₹ cost are visible only here. Students and parents see credits.</p>
         </div>
-        <div className="flex gap-1 rounded-2xl bg-white/70 p-1 ring-1 ring-slate-200">
+        <div className="flex gap-1 rounded-2xl bg-white/70 dark:bg-slate-800/60 p-1 ring-1 ring-slate-200 dark:ring-white/10">
           {[7, 30, 90].map((d) => (
             <button key={d} onClick={() => setDays(d)}
-              className={`rounded-xl px-3 py-1.5 text-sm font-extrabold ${days === d ? "bg-indigo-500 text-white" : "text-slate-500"}`}>
+              className={`rounded-xl px-3 py-1.5 text-sm font-extrabold ${days === d ? "bg-indigo-500 text-white" : "text-slate-500 dark:text-slate-400"}`}>
               {d}d
             </button>
           ))}
@@ -84,7 +84,7 @@ export default function CreditsPanel() {
 
       {/* Daily trend */}
       <Card className="mt-6 p-5">
-        <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Daily tokens & cost</p>
+        <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Daily tokens & cost</p>
         <div className="mt-3 h-56">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data.daily}>
@@ -101,15 +101,15 @@ export default function CreditsPanel() {
       <div className="mt-6 grid gap-5 lg:grid-cols-2">
         {/* By action */}
         <Card className="p-5">
-          <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Cost by action</p>
+          <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Cost by action</p>
           <table className="mt-3 w-full text-left text-sm">
             <thead className="text-xs font-extrabold uppercase tracking-wide text-slate-400">
               <tr><th className="py-2">Action</th><th>Calls</th><th>Tokens</th><th className="text-right">₹</th></tr>
             </thead>
             <tbody>
               {(data.by_action || []).map((a) => (
-                <tr key={a.action_type} className="border-t border-slate-100">
-                  <td className="py-2 font-extrabold capitalize text-slate-700">{a.action_type}</td>
+                <tr key={a.action_type} className="border-t border-slate-100 dark:border-white/10">
+                  <td className="py-2 font-extrabold capitalize text-slate-700 dark:text-slate-200">{a.action_type}</td>
                   <td>{fmt(a.calls)}</td><td>{fmt(a.tokens)}</td>
                   <td className="text-right font-bold">{inr(a.cost_inr)}</td>
                 </tr>
@@ -120,15 +120,15 @@ export default function CreditsPanel() {
 
         {/* By model */}
         <Card className="p-5">
-          <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Cost by model</p>
+          <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Cost by model</p>
           <table className="mt-3 w-full text-left text-sm">
             <thead className="text-xs font-extrabold uppercase tracking-wide text-slate-400">
               <tr><th className="py-2">Model</th><th>Calls</th><th>Tokens</th><th className="text-right">₹</th></tr>
             </thead>
             <tbody>
               {(data.by_model || []).map((m) => (
-                <tr key={m.model || "—"} className="border-t border-slate-100">
-                  <td className="max-w-[180px] truncate py-2 font-extrabold text-slate-700">{m.model || "—"}</td>
+                <tr key={m.model || "—"} className="border-t border-slate-100 dark:border-white/10">
+                  <td className="max-w-[180px] truncate py-2 font-extrabold text-slate-700 dark:text-slate-200">{m.model || "—"}</td>
                   <td>{fmt(m.calls)}</td><td>{fmt(m.tokens)}</td>
                   <td className="text-right font-bold">{inr(m.cost_inr)}</td>
                 </tr>
@@ -141,7 +141,7 @@ export default function CreditsPanel() {
       {/* Per-student credit control */}
       <Card className="mt-6 p-5">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Top consumers — plan & top-ups</p>
+          <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Top consumers — plan & top-ups</p>
           <button onClick={() => load()} className="inline-flex items-center gap-1.5 text-xs font-extrabold text-slate-400 hover:text-indigo-600">
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
           </button>
@@ -152,9 +152,9 @@ export default function CreditsPanel() {
           </thead>
           <tbody>
             {(data.top_students || []).map((s) => (
-              <tr key={s.user_id} className="border-t border-slate-100">
+              <tr key={s.user_id} className="border-t border-slate-100 dark:border-white/10">
                 <td className="py-2.5">
-                  <p className="font-extrabold text-slate-800">{s.user?.name || `#${s.user_id}`}</p>
+                  <p className="font-extrabold text-slate-800 dark:text-slate-100">{s.user?.name || `#${s.user_id}`}</p>
                   <p className="text-xs text-slate-400">{s.user?.email}</p>
                 </td>
                 <td>{fmt(s.calls)}</td>
@@ -165,7 +165,7 @@ export default function CreditsPanel() {
                     defaultValue=""
                     disabled={busyId === s.user_id}
                     onChange={(e) => e.target.value && changePlan(s.user_id, e.target.value)}
-                    className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-extrabold outline-none"
+                    className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs font-extrabold outline-none"
                   >
                     <option value="" disabled>Set plan…</option>
                     {plans.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
@@ -190,7 +190,7 @@ export default function CreditsPanel() {
       </Card>
 
       {/* Plan editor */}
-      <p className="mt-8 text-sm font-extrabold uppercase tracking-wide text-slate-500">Plans (limits & per-action weights)</p>
+      <p className="mt-8 text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Plans (limits & per-action weights)</p>
       <div className="mt-3 grid gap-5 lg:grid-cols-3">
         {plans.map((p) => <PlanCard key={p.id} plan={p} onSaved={(np) => { setPlans((ps) => ps.map((x) => x.id === np.id ? np : x)); flash(`${np.name} saved.`); }} />)}
       </div>
@@ -205,7 +205,7 @@ function Tile({ icon: Icon, tint, label, value }) {
   return (
     <Card className="p-4">
       <div className={`grid h-10 w-10 place-items-center rounded-2xl bg-${tint}-50 text-${tint}-600`}><Icon className="h-5 w-5" /></div>
-      <p className="mt-3 text-2xl font-extrabold text-slate-900">{value}</p>
+      <p className="mt-3 text-2xl font-extrabold text-slate-900 dark:text-white">{value}</p>
       <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p>
     </Card>
   );
@@ -240,14 +240,14 @@ function PlanCard({ plan, onSaved }) {
       <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">{label}</span>
       <input type="number" min="0" value={form[key]}
         onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-        className="mt-0.5 w-full rounded-xl border border-slate-200 px-2.5 py-1.5 text-sm font-extrabold outline-none focus:ring-2 focus:ring-indigo-200" />
+        className="mt-0.5 w-full rounded-xl border border-slate-200 dark:border-white/10 px-2.5 py-1.5 text-sm font-extrabold outline-none focus:ring-2 focus:ring-indigo-200" />
     </label>
   );
 
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between">
-        <p className="text-lg font-extrabold text-slate-900">{plan.name}</p>
+        <p className="text-lg font-extrabold text-slate-900 dark:text-white">{plan.name}</p>
         <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-extrabold text-indigo-600">{plan.key}</span>
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
@@ -262,7 +262,7 @@ function PlanCard({ plan, onSaved }) {
             <span className="block truncate text-[10px] font-bold capitalize text-slate-400">{action}</span>
             <input type="number" min="0" step="0.5" value={w}
               onChange={(e) => setForm((f) => ({ ...f, per_action_weights: { ...f.per_action_weights, [action]: e.target.value } }))}
-              className="mt-0.5 w-full rounded-xl border border-slate-200 px-2 py-1 text-sm font-extrabold outline-none focus:ring-2 focus:ring-indigo-200" />
+              className="mt-0.5 w-full rounded-xl border border-slate-200 dark:border-white/10 px-2 py-1 text-sm font-extrabold outline-none focus:ring-2 focus:ring-indigo-200" />
           </label>
         ))}
       </div>
@@ -295,22 +295,22 @@ function ModelRates({ rates, onAdded }) {
 
   return (
     <Card className="mt-6 p-5">
-      <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Model rates (₹ per 1K tokens)</p>
+      <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Model rates (₹ per 1K tokens)</p>
       <form onSubmit={add} className="mt-3 flex flex-wrap items-end gap-2">
         <input value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
           placeholder="model id (e.g. gpt-4o-mini)"
-          className="min-w-[220px] flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200" />
+          className="min-w-[220px] flex-1 rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200" />
         <input value={form.input_rate_per_1k} onChange={(e) => setForm((f) => ({ ...f, input_rate_per_1k: e.target.value }))}
           type="number" step="0.001" min="0" placeholder="in ₹/1k"
-          className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold outline-none" />
+          className="w-28 rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 text-sm font-semibold outline-none" />
         <input value={form.output_rate_per_1k} onChange={(e) => setForm((f) => ({ ...f, output_rate_per_1k: e.target.value }))}
           type="number" step="0.001" min="0" placeholder="out ₹/1k"
-          className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold outline-none" />
+          className="w-28 rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 text-sm font-semibold outline-none" />
         <Button type="submit" disabled={busy}><Plus className="h-4 w-4" /> Add rate</Button>
       </form>
       <div className="mt-3 flex flex-wrap gap-2">
         {(rates || []).slice(0, 12).map((r) => (
-          <span key={r.id} className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-extrabold text-slate-600 ring-1 ring-slate-200">
+          <span key={r.id} className="inline-flex items-center gap-2 rounded-full bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-white/10">
             {r.model} · in ₹{r.input_rate_per_1k} · out ₹{r.output_rate_per_1k}
           </span>
         ))}
