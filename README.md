@@ -259,6 +259,34 @@ GET  /health /ai/rag/status
 
 ---
 
+## Connecting to the databases (local dev)
+
+All three stores publish ports to your Mac, so you can inspect them directly:
+
+**PostgreSQL — use DBeaver** (Database > New Connection > PostgreSQL):
+
+| Setting | Value |
+|---|---|
+| Host / Port | `localhost` / `5432` |
+| Database | `aitutor` |
+| Username / Password | `aitutor` / `aitutor` (or your `DB_PASSWORD` from `.env`) |
+
+Interesting tables: `users`, `chat_sessions`, `chat_messages`, `concept_masteries`,
+`student_memory`, `misconceptions`, `knowledge_gaps`, `token_ledger`, `usage_counters`,
+`content_chunks` (note `indexed_at`).
+
+**Qdrant — built-in web dashboard** (DBeaver doesn't speak Qdrant):
+open <http://localhost:6333/dashboard>, collection `curriculum` — each point shows its
+payload (topic, type, body) and the 384-dim fastembed vector. REST also works:
+`curl -s -X POST localhost:6333/collections/curriculum/points/scroll -H 'Content-Type: application/json' -d '{"limit":10,"with_payload":true}'`.
+
+**Redis**: `docker compose exec redis redis-cli` (e.g. `KEYS *`).
+
+**Seeding behavior**: the database is created + seeded **once** on first boot and
+preserved afterwards (incremental migrations only). To wipe and reseed on purpose:
+`DB_FRESH=true docker compose up -d backend` (then unset it), or `docker compose down -v`
+for a full reset of all volumes.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |

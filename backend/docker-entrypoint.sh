@@ -43,14 +43,32 @@ if [ "$DB_CONNECTION" = "pgsql" ]; then
   done
   echo "✅ Postgres is ready."
 
-  # Seed only once; a marker row in a tiny table tells us if we've run.
-  if ! php artisan migrate:status >/dev/null 2>&1; then
+  # ── Create + seed ONCE; never wipe an existing database. ────────────────
+  # The probe is a direct, deterministic check for the `migrations` table via
+  # psql (the old `artisan migrate:status` probe treated ANY failure — even a
+  # transient one — as "empty DB", which could trigger a destructive
+  # migrate:fresh). Set DB_FRESH=true in the environment to wipe + reseed
+  # explicitly when you want a clean slate.
+  HAS_MIGRATIONS_TABLE="$(PGPASSWORD="${DB_PASSWORD:-aitutor}" psql -h "${DB_HOST:-postgres}" -p "${DB_PORT:-5432}" \
+      -U "${DB_USERNAME:-aitutor}" -d "${DB_DATABASE:-aitutor}" -tAc \
+      "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='migrations'" 2>/dev/null || echo "probe_failed")"
+
+  if [ "$HAS_MIGRATIONS_TABLE" = "probe_failed" ]; then
+    echo "⚠️  Could not probe the database — starting WITHOUT migrating (data preserved)."
+    echo "    Check DB credentials, then run: docker compose exec backend php artisan migrate"
+  elif [ "${DB_FRESH:-false}" = "true" ]; then
+    echo "🧨 DB_FRESH=true — wiping and reseeding the database…"
     php artisan migrate:fresh --seed --force
     echo "✅ Seeded demo accounts (password: password): admin@tuto.ai · student@tuto.ai · parent@tuto.ai"
-    # Index seeded curriculum content into the vector store (non-fatal — the
-    # indexer degrades gracefully if the AI service/Qdrant aren't ready yet).
-    php artisan rag:index --pending || echo "⚠️  RAG index skipped (run 'php artisan rag:index' later)."
+    php artisan rag:index || echo "⚠️  RAG index skipped (run 'php artisan rag:index' later)."
+  elif [ "$HAS_MIGRATIONS_TABLE" = "0" ]; then
+    echo "🆕 Fresh database detected — first-time create + seed…"
+    php artisan migrate --seed --force
+    echo "✅ Seeded demo accounts (password: password): admin@tuto.ai · student@tuto.ai · parent@tuto.ai"
+    # Index seeded curriculum into the vector store (non-fatal).
+    php artisan rag:index || echo "⚠️  RAG index skipped (run 'php artisan rag:index' later)."
   else
+    echo "♻️  Existing database detected — incremental migrations only (no reseed, data preserved)."
     php artisan migrate --force || true
     php artisan rag:index --pending || true
   fi

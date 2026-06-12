@@ -94,6 +94,9 @@ services:
       # Must exceed the AI service's LLM_TIMEOUT + retries, or Laravel gives up
       # while the model is still generating ("Couldn't generate a quiz").
       AI_SERVICE_TIMEOUT: ${AI_SERVICE_TIMEOUT:-180}
+      # Set DB_FRESH=true (once) to wipe + reseed explicitly; otherwise the
+      # database is created + seeded only on first boot and then preserved.
+      DB_FRESH: ${DB_FRESH:-false}
     depends_on:
       postgres:
         condition: service_healthy
