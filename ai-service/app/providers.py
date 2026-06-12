@@ -46,13 +46,69 @@ def decode_json(text: str):
     return None
 
 
+def _parse_ok_body(r: httpx.Response) -> dict | None:
+    """Parse a 200 response body into the provider's JSON envelope.
+
+    Free OpenRouter endpoints often return 200 with a body that is NOT clean
+    JSON: leading ``: OPENROUTER PROCESSING`` keep-alive comments (sent to dodge
+    proxy timeouts while the model warms up) followed by the real object, or an
+    SSE ``data:`` stream. Plain ``r.json()`` raises JSONDecodeError on those and
+    — since it isn't an httpx error — escapes the retry loop and 500s the
+    endpoint. Returns the envelope dict, or None if the body isn't usable yet
+    (so the caller can retry).
+    """
+    # Fast path: a clean JSON body.
+    try:
+        return r.json()
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    text = (r.text or "").strip()
+    if not text:
+        return None
+
+    # SSE stream: aggregate the last complete chat-completion object from the
+    # data: frames (ignores ': ...' comment pings and the [DONE] sentinel).
+    salvaged = None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("data:"):
+            body = line[5:].strip()
+            if body and body != "[DONE]":
+                try:
+                    salvaged = json.loads(body)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+    if isinstance(salvaged, dict):
+        return salvaged
+
+    # Comment-prefixed single object (": OPENROUTER PROCESSING\n\n{...}"):
+    # grab the first {...}/[...] block. Never raises.
+    extracted = decode_json(text)
+    return extracted if isinstance(extracted, dict) else None
+
+
 async def _post_with_retry(url: str, payload: dict, headers: dict, timeout: int) -> dict:
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             try:
                 r = await client.post(url, json=payload, headers=headers)
                 if r.status_code == 200:
-                    return r.json()
+                    parsed = _parse_ok_body(r)
+                    if parsed is not None:
+                        return parsed
+                    # 200 but body not yet usable (keep-alive pings / empty).
+                    # Treat as transient: a retry usually returns real JSON.
+                    if attempt < _MAX_ATTEMPTS:
+                        wait = _BACKOFF_5XX[attempt - 1]
+                        log.warning("LLM 200 with unparseable body (attempt %s/%s) — "
+                                    "retrying in %.1fs; head=%r",
+                                    attempt, _MAX_ATTEMPTS, wait, r.text[:120])
+                        await asyncio.sleep(wait)
+                        continue
+                    log.warning("LLM 200 but body unparseable after %s attempts: %r",
+                                _MAX_ATTEMPTS, r.text[:300])
+                    return {}
                 if r.status_code in _TRANSIENT and attempt < _MAX_ATTEMPTS:
                     if r.status_code == 429:
                         retry_after = r.headers.get("retry-after")
