@@ -264,6 +264,22 @@ async def status() -> dict:
         "dim": embed_dim(),
         "points": None,
     }
+
+    # DEFINITIVE probe: actually run the active embedder once. "embedder" only
+    # says which backend is SELECTED; if the local model failed to download,
+    # per-call embedding silently falls back to a mock vector. This makes the
+    # difference visible.
+    if out["embedder"] == "local":
+        vec = _embed_local("healthcheck probe")
+        out["local_embed_ok"] = vec is not None
+        out["probe_dim"] = len(vec) if vec else None
+        if vec is None:
+            out["warning"] = ("fastembed selected but embedding FAILED — vectors are "
+                              "falling back to mock. Usually the HF model download was "
+                              "blocked on first use; check ai-service logs.")
+    elif out["embedder"] == "mock":
+        out["local_embed_ok"] = False
+        out["probe_dim"] = _MOCK_DIM
     if not settings.qdrant_url:
         return out
     try:
