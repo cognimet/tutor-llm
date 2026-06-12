@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
-  ArrowLeft, Send, Square, Lightbulb, ClipboardCheck, Sparkles,
+  ArrowLeft, Send, Square, ClipboardCheck, Sparkles,
   Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Plus, MessageSquare,
-  ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
+  ChevronRight, ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
   Brain, Mic, MicOff, Camera, Maximize2,
 } from "lucide-react";
@@ -146,30 +146,121 @@ function ThinkingDots() {
   );
 }
 
-function Bubble({ m, isUser, t }) {
-  const thinking = m.pending && !m.content;
+// Compact tutor-mode picker that lives inside the composer (like a model
+// selector): a small pill showing the current mode, opening an upward menu.
+function ModePicker({ mode, onPick }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const current = MODES.find((m) => m.id === mode) || MODES[0];
   return (
-    <div
-      className={`max-w-[92%] rounded-3xl px-4 py-3 text-[0.95rem] leading-relaxed ${
-        isUser
-          ? `rounded-tr-md bg-gradient-to-br ${t.grad} text-white shadow-sm shadow-indigo-500/20`
-          : m.error
-          ? "rounded-tl-md border border-rose-100 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-          : "rounded-tl-md border border-slate-100 dark:border-white/10 bg-white text-slate-700 dark:text-slate-200 shadow-sm dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-200"
-      }`}
-    >
-      {isUser ? (
-        <p className="whitespace-pre-wrap">{m.content}</p>
-      ) : thinking ? (
-        <ThinkingDots />
-      ) : (
-        <RichMessage text={m.content} streaming={m.pending} />
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title="How the tutor teaches"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`flex h-11 items-center gap-1.5 rounded-2xl px-2.5 text-xs font-extrabold transition-colors sm:px-3 ${
+          open
+            ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
+            : "text-slate-500 hover:bg-slate-50 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-indigo-300"
+        }`}
+      >
+        <span className="text-sm">{current.icon}</span>
+        <span className="hidden sm:inline">{current.label}</span>
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div role="menu" className="msg-in absolute bottom-[3.25rem] right-0 z-30 w-60 overflow-hidden rounded-2xl border border-slate-100 bg-white p-1.5 shadow-xl dark:border-white/10 dark:bg-slate-800">
+          <p className="px-3 pb-1 pt-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Tutor mode</p>
+          {MODES.map((m) => {
+            const active = m.id === mode;
+            return (
+              <button key={m.id} role="menuitemradio" aria-checked={active}
+                onClick={() => { onPick(m.id); setOpen(false); }}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors ${
+                  active ? "bg-indigo-50 dark:bg-indigo-500/15" : "hover:bg-slate-50 dark:hover:bg-white/5"
+                }`}
+              >
+                <span className="text-base">{m.icon}</span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-xs font-extrabold ${active ? "text-indigo-600 dark:text-indigo-300" : "text-slate-700 dark:text-slate-200"}`}>
+                    {m.label}
+                  </span>
+                  <span className="block text-[11px] text-slate-400">{m.hint}</span>
+                </span>
+                {active && <Check className="h-4 w-4 shrink-0 text-indigo-500 dark:text-indigo-300" />}
+              </button>
+            );
+          })}
+        </div>
       )}
-      {m.stopped && (
-        <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-          Stopped
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------- empty state */
+
+// Centered "session start" hero shown while the chat is still fresh: the topic
+// front and center, the tutor's greeting, the learn → practice → close-gaps
+// loop this screen is built around, and starter prompts to dive in.
+function EmptyState({ ctx, t, greeting, onSend, onPractice, onMind }) {
+  const loopChip =
+    "inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-[11px] font-extrabold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:ring-white/10";
+  return (
+    <div className="flex min-h-full items-center justify-center px-4 py-8 sm:px-6">
+      <div className="msg-in w-full max-w-[44rem] text-center">
+        <div className={`mx-auto grid h-16 w-16 place-items-center rounded-[1.4rem] text-3xl shadow-sm ${t.soft} ring-1 ${t.ring}`}>
+          {ctx.emoji || "📘"}
+        </div>
+        <h1 className="mt-5 font-display text-2xl font-extrabold text-slate-900 dark:text-white sm:text-3xl">
+          {ctx.topic_name}
+        </h1>
+        <p className="mt-1 text-xs font-bold text-slate-400">
+          {ctx.subject_name}{ctx.chapter_name ? ` · ${ctx.chapter_name}` : ""}
         </p>
-      )}
+        {greeting && (
+          <p className="mx-auto mt-4 max-w-[34rem] text-[0.95rem] leading-relaxed text-slate-500 dark:text-slate-400">
+            {greeting}
+          </p>
+        )}
+
+        {/* The learning loop: learn here → practice → see & close the gaps */}
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-1.5">
+          <span className={loopChip}>💡 Learn</span>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-slate-600" />
+          <button onClick={onPractice} className={`${loopChip} transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm dark:hover:text-indigo-300`}>
+            🎯 Practice
+          </button>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-slate-600" />
+          <button onClick={onMind} className={`${loopChip} transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm dark:hover:text-indigo-300`}>
+            🧠 Close gaps
+          </button>
+        </div>
+
+        <div className="mt-7 grid gap-2.5 text-left sm:grid-cols-2">
+          {STARTERS(ctx.topic_name).map((s) => (
+            <button key={s.label} onClick={() => onSend(s.label)}
+              className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3.5 text-left text-[13px] font-extrabold text-slate-600 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-md dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:text-indigo-300">
+              <span className="text-lg">{s.icon}</span>
+              <span className="min-w-0 flex-1">{s.label}</span>
+              <Send className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-colors group-hover:text-indigo-400" />
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -348,7 +439,12 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [copiedTranscript, setCopiedTranscript] = useState(false);
   const [mind, setMind] = useState(null);            // the tutor's live "mind"
-  const [sidePanel, setSidePanel] = useState("chats"); // desktop right panel tab: chats | mind
+  // Side panel (Recents | Tutor's Mind) is on-demand so the chat keeps the
+  // whole canvas by default. Open/closed survives reloads.
+  const [sideOpen, setSideOpen] = useState(() => {
+    try { return localStorage.getItem("tutorchat:sidepanel") === "open"; } catch { return false; }
+  });
+  const [sidePanel, setSidePanel] = useState("chats"); // active tab: chats | mind
   const [mindSheet, setMindSheet] = useState(false); // bottom sheet (mobile)
   const [expanded, setExpanded] = useState(null);    // a reply opened in fullscreen reader
   const [snapBusy, setSnapBusy] = useState(false);   // OCR upload in flight
@@ -380,6 +476,25 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     try { window.speechSynthesis?.cancel(); } catch { /* */ }
     setSpeakingId(null);
   }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("tutorchat:sidepanel", sideOpen ? "open" : "closed"); } catch { /* */ }
+  }, [sideOpen]);
+
+  // One toggle drives both form factors: inline panel on desktop,
+  // drawer / bottom sheet on mobile.
+  const toggleSide = useCallback((tab) => {
+    if (!window.matchMedia("(min-width: 1024px)").matches) {
+      if (tab === "chats") setDrawerOpen(true);
+      else setMindSheet(true);
+      return;
+    }
+    setSideOpen((open) => {
+      if (open && sidePanel === tab) return false;
+      setSidePanel(tab);
+      return true;
+    });
+  }, [sidePanel]);
 
   // Open (resume) the topic session on mount / when topic changes.
   useEffect(() => {
@@ -459,8 +574,11 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        if (window.matchMedia("(min-width: 1024px)").matches) searchRef.current?.focus();
-        else setDrawerOpen(true);
+        if (window.matchMedia("(min-width: 1024px)").matches) {
+          setSidePanel("chats");
+          setSideOpen(true);
+          requestAnimationFrame(() => searchRef.current?.focus());
+        } else setDrawerOpen(true);
         return;
       }
       if (mod && e.key.toLowerCase() === "j") { e.preventDefault(); newChat(); return; }
@@ -735,46 +853,58 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     return -1;
   })();
   const showStarters = messages.length <= 1 && !streaming && !booting;
+  // The opening line for the hero — the tutor's greeting, sans markdown bold.
+  const greeting = useMemo(() => {
+    const first = messages[0];
+    if (!first || first.role !== "tutor" || !first.content) {
+      return "Ask me anything about this topic — I'll explain it step by step.";
+    }
+    return first.content.replace(/\*\*/g, "");
+  }, [messages]);
   // Show follow-up chips once a real exchange exists and the tutor is idle.
   const lastMsg = messages[messages.length - 1];
   const showFollowups =
     !showStarters && !streaming && !booting && messages.length > 1 &&
     lastMsg && lastMsg.role === "tutor" && lastMsg.content && !lastMsg.error;
 
+  // Header icon-toggle styling: lit while its panel tab is open (desktop).
+  const headerToggle = (active) =>
+    `grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 transition-colors ${
+      active
+        ? "bg-indigo-50 text-indigo-600 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/30"
+        : "text-slate-500 ring-slate-200 hover:text-indigo-600 dark:ring-white/10 dark:text-slate-300 dark:hover:text-indigo-300"
+    }`;
+
   return (
     <div className="flex h-[calc(100vh-57px)] flex-col">
-      <div className="mx-auto flex w-full max-w-[100rem] flex-1 gap-6 overflow-hidden px-4 py-5 lg:px-6">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
 
-        {/* Chat column */}
-        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border border-white/60 dark:border-white/10 bg-white/50 dark:bg-slate-900/40 shadow-xl shadow-slate-200/50 backdrop-blur-sm">
-          {/* Unified header */}
-          <div className="flex items-center gap-3 border-b border-slate-100 dark:border-white/10 px-4 py-3 sm:px-5">
-            <button onClick={onBack} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10 hover:text-indigo-600 lg:hidden">
+        {/* Chat canvas — the hero. Full-bleed, content centered to a reading column. */}
+        <main className="relative flex min-w-0 flex-1 flex-col">
+          {/* Slim header */}
+          <div className="flex items-center gap-2 border-b border-slate-200/60 bg-white/60 px-3 py-2.5 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/50 sm:gap-2.5 sm:px-4">
+            <button onClick={onBack} title="All topics" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 transition-colors hover:text-indigo-600 dark:text-slate-300 dark:ring-white/10 dark:hover:text-indigo-300">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <div className={`hidden h-10 w-10 shrink-0 place-items-center rounded-2xl text-xl sm:grid ${t.soft}`}>{ctx.emoji || "📘"}</div>
+            <div className={`hidden h-9 w-9 shrink-0 place-items-center rounded-xl text-lg sm:grid ${t.soft}`}>{ctx.emoji || "📘"}</div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-extrabold leading-tight text-slate-900 dark:text-white">{ctx.topic_name}</p>
               <p className="truncate text-[11px] font-bold text-slate-400">{ctx.subject_name}{ctx.chapter_name ? ` · ${ctx.chapter_name}` : ""}</p>
             </div>
-            <span className={`hidden items-center gap-1.5 rounded-full ${t.soft} px-2.5 py-1 text-[11px] font-extrabold ${t.text} sm:inline-flex`}>
+            <span className={`hidden items-center gap-1.5 rounded-full ${t.soft} px-2.5 py-1 text-[11px] font-extrabold ${t.text} xl:inline-flex`}>
               <ShieldCheck className="h-3.5 w-3.5" /> Topic-scoped
             </span>
-            <button onClick={() => setDrawerOpen(true)} title="Chat history" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10 hover:text-indigo-600 lg:hidden">
+            <button onClick={() => setAssessing(true)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br ${t.grad} px-3 py-2 text-xs font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
+              <ClipboardCheck className="h-4 w-4" /> <span className="hidden sm:inline">Check understanding</span><span className="sm:hidden">Quiz</span>
+            </button>
+            <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-slate-200 dark:bg-white/10 sm:block" />
+            <button onClick={() => toggleSide("chats")} title="Recent chats"
+              className={headerToggle(sideOpen && sidePanel === "chats")}>
               <History className="h-5 w-5" />
             </button>
-            {/* Tutor's mind: selects the Mind tab on desktop, bottom sheet on mobile */}
-            <button
-              onClick={() => (window.matchMedia("(min-width: 1024px)").matches ? setSidePanel("mind") : setMindSheet(true))}
-              title="Tutor's mind"
-              className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 transition-colors lg:hidden ${
-                "text-slate-500 ring-slate-200 dark:ring-white/10 hover:text-indigo-600"
-              }`}
-            >
+            <button onClick={() => toggleSide("mind")} title="Tutor's mind"
+              className={headerToggle(sideOpen && sidePanel === "mind")}>
               <Brain className="h-5 w-5" />
-            </button>
-            <button onClick={() => setAssessing(true)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br ${t.grad} px-3 py-2 text-xs font-extrabold text-white shadow-md`}>
-              <ClipboardCheck className="h-4 w-4" /> <span className="hidden sm:inline">Check understanding</span><span className="sm:hidden">Quiz</span>
             </button>
 
             {/* Overflow menu */}
@@ -808,114 +938,124 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           </div>
 
           <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-10 sm:px-8">
             {booting ? (
-              <div className="flex items-center gap-3 text-slate-400">
+              <div className="flex h-full items-center justify-center gap-3 text-slate-400">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
                 <span className="text-sm font-bold">Opening your chat…</span>
               </div>
-            ) : messages.map((m, i) => {
-              const isUser = m.role === "user";
-              const isLastTutor = i === lastTutorIdx;
-              const isLastUser = i === lastUserIdx;
-              const showActions = !isUser && !m.pending && m.content && !m.error;
-              return (
-                <div key={m.id ?? `tmp-${i}`} className={`msg-in flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
-                  <Avatar user={isUser} t={t} />
-                  <div className={`group flex min-w-0 flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
-                    <Bubble m={m} isUser={isUser} t={t} />
-                    {/* Edit / reuse your last question */}
-                    {isUser && isLastUser && !streaming && (
-                      <button onClick={() => focusComposer(m.content)} title="Edit this question"
-                        className="flex items-center gap-1 px-1 text-[11px] font-extrabold text-slate-400 opacity-0 transition-opacity hover:text-indigo-600 group-hover:opacity-100">
-                        <Pencil className="h-3 w-3" /> Edit
-                      </button>
-                    )}
-                    {showActions && (
-                      <div className="flex items-center gap-0.5 px-1">
-                        <ActionButton title="Open in full screen" onClick={() => setExpanded(m)}>
-                          <Maximize2 className="h-3.5 w-3.5" />
-                        </ActionButton>
-                        <ActionButton title="Copy" active={copiedId === (m.id ?? i)} onClick={() => copy(m.content, m.id ?? i)}>
-                          {copiedId === (m.id ?? i) ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                        </ActionButton>
-                        {ttsSupported && (
-                          <ActionButton title={speakingId === (m.id ?? i) ? "Stop reading" : "Read aloud"} active={speakingId === (m.id ?? i)} onClick={() => speak(m.id ? m : { ...m, id: i })}>
-                            {speakingId === (m.id ?? i) ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                          </ActionButton>
+            ) : showStarters ? (
+              <EmptyState
+                ctx={ctx} t={t} greeting={greeting} onSend={send}
+                onPractice={() => setAssessing(true)}
+                onMind={() => toggleSide("mind")}
+              />
+            ) : (
+              <div className="mx-auto w-full max-w-3xl space-y-8 px-4 pb-10 pt-8 sm:px-6">
+                {messages.map((m, i) => {
+                  const isUser = m.role === "user";
+                  const isLastTutor = i === lastTutorIdx;
+                  const isLastUser = i === lastUserIdx;
+                  const showActions = !isUser && !m.pending && m.content && !m.error;
+                  const thinking = m.pending && !m.content;
+
+                  // The student's turn: a compact bubble on the right.
+                  if (isUser) {
+                    return (
+                      <div key={m.id ?? `tmp-${i}`} className="msg-in flex justify-end">
+                        <div className="group flex min-w-0 max-w-[85%] flex-col items-end gap-1 sm:max-w-[75%]">
+                          <div className={`rounded-3xl rounded-br-lg bg-gradient-to-br ${t.grad} px-4 py-2.5 text-[0.95rem] leading-relaxed text-white shadow-sm shadow-indigo-500/20`}>
+                            <p className="whitespace-pre-wrap">{m.content}</p>
+                          </div>
+                          {isLastUser && !streaming && (
+                            <button onClick={() => focusComposer(m.content)} title="Edit this question"
+                              className="flex items-center gap-1 px-1 text-[11px] font-extrabold text-slate-400 opacity-0 transition-opacity hover:text-indigo-600 group-hover:opacity-100">
+                              <Pencil className="h-3 w-3" /> Edit
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // The tutor's turn: open text on the canvas — no bubble, so
+                  // long explanations read like a page, not a chat scrap.
+                  return (
+                    <div key={m.id ?? `tmp-${i}`} className="msg-in flex gap-3 sm:gap-4">
+                      <Avatar t={t} />
+                      <div className="group min-w-0 flex-1 pt-1">
+                        {thinking ? (
+                          <ThinkingDots />
+                        ) : m.error ? (
+                          <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-[0.95rem] leading-relaxed text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                            <p className="whitespace-pre-wrap">{m.content}</p>
+                          </div>
+                        ) : (
+                          <RichMessage text={m.content} streaming={m.pending} className="md-lg" />
                         )}
-                        {i > 0 && m.id && (
-                          <>
-                            <ActionButton title="Good answer" active={m.meta?.rating === "up"} onClick={() => rate(m, "up")}><ThumbsUp className="h-3.5 w-3.5" /></ActionButton>
-                            <ActionButton title="Needs work" active={m.meta?.rating === "down"} onClick={() => rate(m, "down")}><ThumbsDown className="h-3.5 w-3.5" /></ActionButton>
-                          </>
+                        {m.stopped && (
+                          <p className="mt-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Stopped</p>
                         )}
-                        {isLastTutor && i > 0 && (
-                          <ActionButton title="Regenerate" onClick={regenerate}><RefreshCw className="h-3.5 w-3.5" /></ActionButton>
+                        {showActions && (
+                          <div className="-ml-1 mt-2 flex items-center gap-0.5">
+                            <ActionButton title="Open in full screen" onClick={() => setExpanded(m)}>
+                              <Maximize2 className="h-3.5 w-3.5" />
+                            </ActionButton>
+                            <ActionButton title="Copy" active={copiedId === (m.id ?? i)} onClick={() => copy(m.content, m.id ?? i)}>
+                              {copiedId === (m.id ?? i) ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            </ActionButton>
+                            {ttsSupported && (
+                              <ActionButton title={speakingId === (m.id ?? i) ? "Stop reading" : "Read aloud"} active={speakingId === (m.id ?? i)} onClick={() => speak(m.id ? m : { ...m, id: i })}>
+                                {speakingId === (m.id ?? i) ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                              </ActionButton>
+                            )}
+                            {i > 0 && m.id && (
+                              <>
+                                <ActionButton title="Good answer" active={m.meta?.rating === "up"} onClick={() => rate(m, "up")}><ThumbsUp className="h-3.5 w-3.5" /></ActionButton>
+                                <ActionButton title="Needs work" active={m.meta?.rating === "down"} onClick={() => rate(m, "down")}><ThumbsDown className="h-3.5 w-3.5" /></ActionButton>
+                              </>
+                            )}
+                            {isLastTutor && i > 0 && (
+                              <ActionButton title="Regenerate" onClick={regenerate}><RefreshCw className="h-3.5 w-3.5" /></ActionButton>
+                            )}
+                          </div>
+                        )}
+                        {/* Regenerate affordance for an errored last reply */}
+                        {m.error && isLastTutor && (
+                          <button onClick={regenerate} className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-extrabold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10">
+                            <RefreshCw className="h-3.5 w-3.5" /> Try again
+                          </button>
                         )}
                       </div>
-                    )}
-                    {/* Regenerate affordance for an errored last reply */}
-                    {!isUser && m.error && isLastTutor && (
-                      <button onClick={regenerate} className="ml-1 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-extrabold text-rose-600 hover:bg-rose-50">
-                        <RefreshCw className="h-3.5 w-3.5" /> Try again
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {!atBottom && (
             <button onClick={jumpToLatest} title="Jump to latest"
-              className="absolute bottom-28 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white dark:bg-slate-800 px-3 py-2 text-xs font-extrabold text-slate-500 shadow-lg ring-1 ring-slate-200 dark:ring-white/10 transition-colors hover:text-indigo-600">
+              className="absolute bottom-36 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white dark:bg-slate-800 px-3 py-2 text-xs font-extrabold text-slate-500 shadow-lg ring-1 ring-slate-200 dark:ring-white/10 transition-colors hover:text-indigo-600">
               {hasNew ? <span className={`h-2 w-2 rounded-full ${t.dot} animate-pulse`} /> : <ArrowDown className="h-4 w-4" />}
               {hasNew ? "New reply" : "Latest"}
             </button>
           )}
 
-          {showStarters && (
-            <div className="grid grid-cols-1 gap-2 px-4 pb-3 sm:grid-cols-2 sm:px-5">
-              {STARTERS(ctx.topic_name).map((s) => (
-                <button key={s.label} onClick={() => send(s.label)}
-                  className="group flex items-center gap-2.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3.5 py-2.5 text-left text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-md">
-                  <span className="text-base">{s.icon}</span>
-                  <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                  <Send className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-colors group-hover:text-indigo-400" />
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Composer block — same reading column as the messages */}
+          <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
+            <div className="mx-auto w-full max-w-3xl">
+            {showFollowups && (
+              <div className="mb-2.5 flex flex-wrap gap-2">
+                {FOLLOWUPS.map((s) => (
+                  <button key={s.label} onClick={() => send(s.label)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm">
+                    <span>{s.icon}</span> {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
-          {showFollowups && (
-            <div className="flex flex-wrap gap-2 px-4 pb-3 sm:px-5">
-              {FOLLOWUPS.map((s) => (
-                <button key={s.label} onClick={() => send(s.label)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm">
-                  <span>{s.icon}</span> {s.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="border-t border-slate-100 dark:border-white/10 p-3">
-            {/* Tutor mode selector — changes how the tutor teaches. */}
-            <div className="mb-2 flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Mode</span>
-              {MODES.map((m) => (
-                <button key={m.id} onClick={() => setMode(m.id)} title={m.hint}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold transition-all ${
-                    mode === m.id
-                      ? `bg-gradient-to-br ${t.grad} text-white shadow-sm`
-                      : "border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 text-slate-500 hover:border-indigo-300 hover:text-indigo-600"
-                  }`}>
-                  <span>{m.icon}</span> {m.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-end gap-2 rounded-3xl bg-white dark:bg-slate-800 p-2 shadow-sm ring-1 ring-slate-200 dark:ring-white/10 transition-shadow focus-within:ring-2 focus-within:ring-indigo-300">
+            <div className="flex items-end gap-1.5 rounded-[1.75rem] bg-white dark:bg-slate-800 p-2 shadow-lg shadow-slate-200/60 dark:shadow-black/20 ring-1 ring-slate-200 dark:ring-white/10 transition-shadow focus-within:ring-2 focus-within:ring-indigo-300 sm:gap-2">
               {/* Snap-a-doubt: photo -> OCR -> tutor solves it teaching-style */}
               <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onSnapFile} />
               <button
@@ -949,6 +1089,8 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                 }}
                 placeholder={`Ask anything about ${ctx.topic_name}…`}
                 className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2 text-sm outline-none placeholder:text-slate-400" />
+              {/* Tutor mode lives inside the composer to keep the canvas clean */}
+              <ModePicker mode={mode} onPick={setMode} />
               {streaming ? (
                 <button onClick={stop} title="Stop generating (Esc)"
                   className="group grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-800 text-white shadow-lg transition-transform active:scale-95">
@@ -966,18 +1108,21 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
               <span className="hidden sm:inline">· Shift+Enter for a new line ·</span>
               <button onClick={() => setShowShortcuts(true)} className="hidden font-extrabold text-slate-400 underline decoration-slate-300 underline-offset-2 hover:text-indigo-600 sm:inline">shortcuts</button>
             </p>
+            </div>
           </div>
         </main>
 
-        {/* RIGHT panel: the tutor's live mind (spec \u00a76) \u2014 collapsible */}
-        {/* RIGHT: one tabbed side panel — consolidates recent chats + tutor's mind */}
-        <aside className="hidden w-[21rem] shrink-0 flex-col gap-3 lg:flex xl:w-[23rem]">
-          <button onClick={onBack} className="inline-flex w-fit items-center gap-2 px-1 text-sm font-extrabold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300">
-            <ArrowLeft className="h-4 w-4" /> All topics
-          </button>
-
+        {/* RIGHT: on-demand side panel (Recents | Tutor's Mind). Collapsed by
+            default so the chat owns the canvas; opens from the header toggles. */}
+        <aside
+          className="hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-out lg:block"
+          style={{ width: sideOpen ? "21.5rem" : "0rem" }}
+          aria-hidden={!sideOpen}
+        >
+          <div className="flex h-full w-[21.5rem] flex-col border-l border-slate-200/60 bg-white/55 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/50">
+          <div className="flex items-center gap-2 px-3 pt-3">
           {/* Segmented tabs */}
-          <div className="relative flex rounded-2xl bg-slate-100 p-1 dark:bg-white/5">
+          <div className="relative flex flex-1 rounded-2xl bg-slate-100 p-1 dark:bg-white/5">
             <span
               className="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 transition-transform duration-300 ease-out dark:bg-slate-800 dark:ring-white/10"
               style={{ transform: sidePanel === "mind" ? "translateX(100%)" : "translateX(0)" }}
@@ -991,9 +1136,14 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
               </button>
             ))}
           </div>
+          <button onClick={() => setSideOpen(false)} title="Hide panel"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 ring-1 ring-slate-200 transition-colors hover:text-slate-600 dark:text-slate-300 dark:ring-white/10">
+            <X className="h-4 w-4" />
+          </button>
+          </div>
 
           {/* Panel body */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-3xl border border-white/60 bg-white/70 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-slate-900/60">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
             {sidePanel === "mind" ? (
               <TutorMind mind={mind} />
             ) : (
@@ -1005,6 +1155,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                 <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} searchRef={searchRef} />
               </>
             )}
+          </div>
           </div>
         </aside>
       </div>
