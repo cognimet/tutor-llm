@@ -37,6 +37,8 @@ RUN cp -R /overlay/app/. /app/app/ \
     && cp -R /overlay/routes/. /app/routes/ \
     && cp -R /overlay/database/migrations/. /app/database/migrations/ \
     && cp -R /overlay/database/seeders/. /app/database/seeders/ \
+    && mkdir -p /app/database/seed-data \
+    && cp -R /overlay/database/seed-data/. /app/database/seed-data/ \
     && cp /overlay/config/gemini.php /app/config/gemini.php \
     && cp /overlay/config/ai_service.php /app/config/ai_service.php \
     && cp /overlay/config/cors.php /app/config/cors.php \

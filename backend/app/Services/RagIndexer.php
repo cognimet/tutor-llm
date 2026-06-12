@@ -21,13 +21,17 @@ class RagIndexer
     {
         $this->ai->ensureCollection();
 
-        $query = ContentChunk::with('topic')->orderBy('id');
+        $query = ContentChunk::with('topic');
         if ($onlyPending) {
             $query->whereNull('indexed_at');
         }
 
         $total = 0;
-        $query->chunk(100, function ($chunks) use (&$total, $progress) {
+        // chunkById, NOT chunk: the callback sets indexed_at, which removes
+        // rows from the --pending filter mid-iteration. Offset-based chunk()
+        // then skips every other page (e.g. indexes 159 of 259); keyset
+        // pagination by id is immune to the shrinking result set.
+        $query->chunkById(100, function ($chunks) use (&$total, $progress) {
             $points = $chunks->map(fn (ContentChunk $c) => [
                 'id' => $c->id,
                 'topic' => $c->topic?->name ?? '',

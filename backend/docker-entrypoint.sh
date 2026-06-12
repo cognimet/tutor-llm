@@ -28,6 +28,29 @@ env_put AI_SERVICE_KEY "${AI_SERVICE_KEY:-dev-internal-key}"
 env_put AI_SERVICE_TIMEOUT "${AI_SERVICE_TIMEOUT:-180}"
 env_put FRONTEND_URL   "${FRONTEND_URL:-http://localhost:5173}"
 
+# Block until the Python AI service is accepting connections, so the first-boot
+# `rag:index` doesn't race ahead of it and silently skip embedding (compose only
+# waits for the ai-service container to START, not to be ready). The backend
+# image has no curl/wget, so probe the TCP port with bash's /dev/tcp. Derive
+# host:port from AI_SERVICE_URL (default ai-service:8001).
+wait_for_ai_service() {
+  local url="${AI_SERVICE_URL:-http://ai-service:8001}"
+  local hostport="${url#*://}"; hostport="${hostport%%/*}"
+  local host="${hostport%%:*}" port="${hostport##*:}"
+  [ "$host" = "$port" ] && port=8001
+  echo "⏳ Waiting for AI service at ${host}:${port}…"
+  for _ in $(seq 1 90); do
+    if (exec 3<>"/dev/tcp/${host}/${port}") 2>/dev/null; then
+      exec 3>&- 3<&- 2>/dev/null || true
+      echo "✅ AI service reachable."
+      return 0
+    fi
+    sleep 2
+  done
+  echo "⚠️  AI service unreachable after 180s — indexing may be skipped (it self-heals on the next boot via 'rag:index --pending')."
+  return 1
+}
+
 # Generate app key if missing.
 if ! grep -q "APP_KEY=base64" .env 2>/dev/null; then
   php artisan key:generate --force
@@ -60,16 +83,20 @@ if [ "$DB_CONNECTION" = "pgsql" ]; then
     echo "🧨 DB_FRESH=true — wiping and reseeding the database…"
     php artisan migrate:fresh --seed --force
     echo "✅ Seeded demo accounts (password: password): admin@tuto.ai · student@tuto.ai · parent@tuto.ai"
+    wait_for_ai_service || true
     php artisan rag:index || echo "⚠️  RAG index skipped (run 'php artisan rag:index' later)."
   elif [ "$HAS_MIGRATIONS_TABLE" = "0" ]; then
     echo "🆕 Fresh database detected — first-time create + seed…"
     php artisan migrate --seed --force
     echo "✅ Seeded demo accounts (password: password): admin@tuto.ai · student@tuto.ai · parent@tuto.ai"
     # Index seeded curriculum into the vector store (non-fatal).
+    wait_for_ai_service || true
     php artisan rag:index || echo "⚠️  RAG index skipped (run 'php artisan rag:index' later)."
   else
     echo "♻️  Existing database detected — incremental migrations only (no reseed, data preserved)."
     php artisan migrate --force || true
+    # Catch up any chunks that weren't indexed on a previous boot (self-healing).
+    wait_for_ai_service || true
     php artisan rag:index --pending || true
   fi
 else

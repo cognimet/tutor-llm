@@ -15,6 +15,8 @@ class DatabaseSeeder extends Seeder
         $this->call(CurriculumSeeder::class);
         $this->call(PlanSeeder::class);
         $this->call(ContentSeeder::class);
+        $this->call(NcertMathsContentSeeder::class);   // full NCERT Class 10 Maths textbook
+        $this->call(NcertScienceContentSeeder::class); // full NCERT Class 10 Science textbook
 
         // Resolve a couple of CBSE levels to scope the demo students.
         $cbseClass10 = Level::whereHas('track', fn ($q) => $q->where('slug', 'cbse'))
