@@ -4,7 +4,7 @@ import {
   Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Plus, MessageSquare,
   ChevronRight, ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
-  Brain, Mic, MicOff, Camera, Maximize2,
+  Brain, Mic, MicOff, Camera, Maximize2, PenLine,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
 import { tutorApi } from "../../api/endpoints.js";
@@ -13,6 +13,7 @@ import Markdown from "../../ui/Markdown.jsx";
 import RichMessage from "../../ui/RichMessage.jsx";
 import AssessmentFlow from "./AssessmentFlow.jsx";
 import TutorMind from "./TutorMind.jsx";
+import Whiteboard from "../../ui/Whiteboard.jsx";
 
 const STARTERS = (t) => [
   { icon: "💡", label: `Explain "${t}" simply` },
@@ -216,7 +217,7 @@ function ModePicker({ mode, onPick }) {
 // Centered "session start" hero shown while the chat is still fresh: the topic
 // front and center, the tutor's greeting, the learn → practice → close-gaps
 // loop this screen is built around, and starter prompts to dive in.
-function EmptyState({ ctx, t, greeting, onSend, onPractice, onMind }) {
+function EmptyState({ ctx, t, greeting, onSend, onPractice, onMind, onBoard }) {
   const loopChip =
     "inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-[11px] font-extrabold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:ring-white/10";
   return (
@@ -260,6 +261,11 @@ function EmptyState({ ctx, t, greeting, onSend, onPractice, onMind }) {
             </button>
           ))}
         </div>
+
+        <button onClick={onBoard}
+          className="mt-5 inline-flex items-center gap-1.5 text-xs font-extrabold text-slate-400 transition-colors hover:text-indigo-600 dark:hover:text-indigo-300">
+          <PenLine className="h-3.5 w-3.5" /> or work it out on the whiteboard
+        </button>
       </div>
     </div>
   );
@@ -449,6 +455,8 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [expanded, setExpanded] = useState(null);    // a reply opened in fullscreen reader
   const [snapBusy, setSnapBusy] = useState(false);   // OCR upload in flight
   const [listening, setListening] = useState(false); // voice-to-text active
+  const [boardOpen, setBoardOpen] = useState(false); // whiteboard overlay
+  const boardStrokes = useRef([]);                   // board survives close/reopen
 
   const scrollRef = useRef(null);
   const taRef = useRef(null);
@@ -566,6 +574,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") {
+        if (boardOpen) { return; } // the whiteboard handles its own Esc
         if (showShortcuts) { setShowShortcuts(false); return; }
         if (menuOpen) { setMenuOpen(false); return; }
         if (drawerOpen) { setDrawerOpen(false); return; }
@@ -588,7 +597,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streaming, showShortcuts, menuOpen, drawerOpen]);
+  }, [streaming, showShortcuts, menuOpen, drawerOpen, boardOpen]);
 
   const onScroll = () => {
     const el = scrollRef.current;
@@ -677,6 +686,27 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     } finally {
       setSnapBusy(false);
     }
+  };
+
+  // Whiteboard → OCR → the normal tutor flow (same rail as snap-a-doubt).
+  // Throws with a friendly message so the board can show it inline.
+  const askWhiteboard = async (blob) => {
+    const file = new File([blob], "whiteboard.png", { type: "image/png" });
+    let text = "";
+    try {
+      ({ text } = await tutorApi.snap(file));
+    } catch (err) {
+      const e = new Error("whiteboard-read-failed");
+      e.userMessage = err?.response?.status === 422
+        ? "I couldn't read the board — write a little larger and clearer, then ask again."
+        : "Something went wrong reading the board. Please try again.";
+      throw e;
+    }
+    setBoardOpen(false);
+    send(
+      "Here's my working from my whiteboard — check each step, point out any mistakes, and guide me to the next step:\n\n" +
+      text
+    );
   };
 
   // Voice-to-text via the browser's SpeechRecognition (no backend needed).
@@ -948,6 +978,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                 ctx={ctx} t={t} greeting={greeting} onSend={send}
                 onPractice={() => setAssessing(true)}
                 onMind={() => toggleSide("mind")}
+                onBoard={() => setBoardOpen(true)}
               />
             ) : (
               <div className="mx-auto w-full max-w-3xl space-y-8 px-4 pb-10 pt-8 sm:px-6">
@@ -1067,6 +1098,15 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                 {snapBusy
                   ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
                   : <Camera className="h-5 w-5" />}
+              </button>
+              {/* Whiteboard: sketch your working, the tutor reads the board */}
+              <button
+                onClick={() => setBoardOpen(true)}
+                disabled={streaming || snapBusy}
+                title="Open the whiteboard"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-white/5 hover:text-indigo-600 disabled:opacity-40"
+              >
+                <PenLine className="h-5 w-5" />
               </button>
               {voiceSupported && (
                 <button
@@ -1197,6 +1237,18 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             </div>
           </div>
         </div>
+      )}
+
+      {/* Built-in whiteboard: sketch the working, send it to the tutor */}
+      {boardOpen && (
+        <Whiteboard
+          topicName={ctx.topic_name}
+          grad={t.grad}
+          initialStrokes={boardStrokes.current}
+          onChange={(s) => { boardStrokes.current = s; }}
+          onAsk={askWhiteboard}
+          onClose={() => setBoardOpen(false)}
+        />
       )}
 
       {/* Full-screen reading view for a single response — borderless, content only */}
