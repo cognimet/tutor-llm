@@ -1,0 +1,186 @@
+<svg viewBox="0 0 980 860" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <title>The AI tutor's mind - cognitive architecture</title>
+  <desc>Evidence in (chat, assessments, snaps), the mind's stores and learning math in the center, expression out (prompts, panel, dashboards, adaptive loop), with a feedback cycle and a worked example.</desc>
+  <rect x="0" y="0" width="980" height="860" fill="#FFFFFF"/>
+  <defs>
+    <marker id="mA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4F46E5"/>
+    </marker>
+    <marker id="mV" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#D97706"/>
+    </marker>
+  </defs>
+
+  <rect x="24" y="20" width="270" height="600" rx="14" fill="#EEF2FF" stroke="#4F46E5" stroke-width="2"/>
+  <rect x="24" y="20" width="270" height="36" rx="14" fill="#4F46E5"/>
+  <rect x="24" y="42" width="270" height="14" fill="#4F46E5"/>
+  <text x="159" y="44" text-anchor="middle" font-size="14" font-weight="800" fill="#FFFFFF">EVIDENCE IN &#8212; perception</text>
+  <g font-size="10.5">
+    <rect x="42" y="72" width="234" height="118" rx="10" fill="#FFFFFF" stroke="#818CF8" stroke-width="1.5"/>
+    <text x="56" y="94" font-size="11.5" font-weight="800" fill="#1E1B4B">&#128172; Every chat turn</text>
+    <g font-weight="600" fill="#4338CA">
+      <text x="56" y="113">after each reply, a cheap grade-routed</text>
+      <text x="56" y="127">call extracts: concept tags &#183;</text>
+      <text x="56" y="141">mastery signal (&#8722;1&#8230;1) &#183; misconception</text>
+      <text x="56" y="155">detected / resolved &#183; next step &#183;</text>
+      <text x="56" y="169">durable memory facts</text>
+    </g>
+    <text x="56" y="184" font-size="9" font-weight="700" fill="#4F46E5">soft evidence &#8594; EWMA &#945; = 0.2</text>
+    <rect x="42" y="208" width="234" height="96" rx="10" fill="#FFFFFF" stroke="#818CF8" stroke-width="1.5"/>
+    <text x="56" y="230" font-size="11.5" font-weight="800" fill="#1E1B4B">&#127919; Mini-assessments</text>
+    <g font-weight="600" fill="#4338CA">
+      <text x="56" y="249">each answer is right/wrong per</text>
+      <text x="56" y="263">concept; wrong answers also go to</text>
+      <text x="56" y="277">AI gap analysis (severity + advice)</text>
+    </g>
+    <text x="56" y="294" font-size="9" font-weight="700" fill="#4F46E5">hard evidence &#8594; EWMA &#945; = 0.4</text>
+    <rect x="42" y="322" width="234" height="78" rx="10" fill="#FFFFFF" stroke="#818CF8" stroke-width="1.5"/>
+    <text x="56" y="344" font-size="11.5" font-weight="800" fill="#1E1B4B">&#128247; Snap-a-doubt &#183; &#127908; voice</text>
+    <g font-weight="600" fill="#4338CA">
+      <text x="56" y="363">OCR / speech become normal chat</text>
+      <text x="56" y="377">turns &#8212; same extraction applies,</text>
+      <text x="56" y="391">no separate pipeline</text>
+    </g>
+    <rect x="42" y="418" width="234" height="78" rx="10" fill="#FFFFFF" stroke="#818CF8" stroke-width="1.5"/>
+    <text x="56" y="440" font-size="11.5" font-weight="800" fill="#1E1B4B">&#128218; Curriculum (RAG)</text>
+    <g font-weight="600" fill="#4338CA">
+      <text x="56" y="459">grounds what the tutor SAYS, not</text>
+      <text x="56" y="473">what it believes about the student &#8212;</text>
+      <text x="56" y="487">knowledge &#8800; memory</text>
+    </g>
+    <text x="159" y="528" text-anchor="middle" font-size="9.5" font-weight="700" fill="#4338CA">guardrails: deduped misconceptions &#183;</text>
+    <text x="159" y="543" text-anchor="middle" font-size="9.5" font-weight="700" fill="#4338CA">durable-only memory (0&#8211;2 facts/turn) &#183;</text>
+    <text x="159" y="558" text-anchor="middle" font-size="9.5" font-weight="700" fill="#4338CA">length caps &#183; never breaks a chat turn</text>
+  </g>
+
+  <line x1="294" y1="150" x2="338" y2="186" stroke="#4F46E5" stroke-width="2.5" marker-end="url(#mA)"/>
+  <line x1="294" y1="256" x2="338" y2="266" stroke="#4F46E5" stroke-width="2.5" marker-end="url(#mA)"/>
+  <line x1="294" y1="361" x2="338" y2="340" stroke="#4F46E5" stroke-width="2.5" marker-end="url(#mA)"/>
+
+  <rect x="342" y="20" width="300" height="600" rx="14" fill="#F5F3FF" stroke="#7C3AED" stroke-width="2"/>
+  <rect x="342" y="20" width="300" height="36" rx="14" fill="#7C3AED"/>
+  <rect x="342" y="42" width="300" height="14" fill="#7C3AED"/>
+  <text x="492" y="44" text-anchor="middle" font-size="14" font-weight="800" fill="#FFFFFF">&#129504; THE MIND &#8212; beliefs</text>
+  <g font-size="10.5">
+    <rect x="360" y="72" width="264" height="108" rx="10" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+    <text x="374" y="94" font-size="11.5" font-weight="800" fill="#2E1065">student_memory &#8212; who you are</text>
+    <g font-weight="600" fill="#6D28D9">
+      <text x="374" y="113">learning_style: visual</text>
+      <text x="374" y="127">struggles_with: rearranging equations</text>
+      <text x="374" y="141">likes_examples_about: cricket</text>
+    </g>
+    <text x="374" y="160" font-size="9" font-weight="700" fill="#7C3AED">global &#183; survives every session &amp; topic</text>
+    <text x="374" y="172" font-size="9" font-weight="700" fill="#7C3AED">upsert by key, capped lengths</text>
+    <rect x="360" y="196" width="264" height="120" rx="10" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+    <text x="374" y="218" font-size="11.5" font-weight="800" fill="#2E1065">concept_masteries &#8212; what you know</text>
+    <text x="374" y="238" font-weight="800" fill="#6D28D9">new = (1&#8722;&#945;)&#183;old + &#945;&#183;outcome</text>
+    <g font-weight="600" fill="#6D28D9">
+      <text x="374" y="256">per (topic, concept) &#183; confidence counts</text>
+      <text x="374" y="270">Rearranging V=IR: 37% &#9646;&#9646;&#9647;&#9647;&#9647;</text>
+      <text x="374" y="284">Units of resistance: 71% &#9646;&#9646;&#9646;&#9646;&#9647;</text>
+    </g>
+    <text x="374" y="304" font-size="9" font-weight="700" fill="#7C3AED">passes at &#8805;80% AND confidence &#8805;2 &#8212; never an average</text>
+    <rect x="360" y="332" width="264" height="100" rx="10" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+    <text x="374" y="354" font-size="11.5" font-weight="800" fill="#2E1065">misconceptions &#8212; what to fix</text>
+    <g font-weight="600" fill="#6D28D9">
+      <text x="374" y="373">&#9888; open: &#8220;inverts V=IR when rearranging&#8221;</text>
+      <text x="374" y="387">&#10003; resolved: &#8220;confuses series / parallel&#8221;</text>
+    </g>
+    <text x="374" y="406" font-size="9" font-weight="700" fill="#7C3AED">deduped on detect &#183; fuzzy token-overlap</text>
+    <text x="374" y="418" font-size="9" font-weight="700" fill="#7C3AED">match on resolve (model paraphrases)</text>
+    <rect x="360" y="448" width="264" height="64" rx="10" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+    <text x="374" y="470" font-size="11.5" font-weight="800" fill="#2E1065">intent &#8212; next_step per topic</text>
+    <g font-weight="600" fill="#6D28D9">
+      <text x="374" y="489">&#8220;try 2 triangle drills, then take</text>
+      <text x="374" y="503">a quick check&#8221;</text>
+    </g>
+    <text x="492" y="540" text-anchor="middle" font-size="9.5" font-weight="700" fill="#6D28D9">MindService (Laravel) owns all writes &#8212;</text>
+    <text x="492" y="555" text-anchor="middle" font-size="9.5" font-weight="700" fill="#6D28D9">one validated funnel into Postgres;</text>
+    <text x="492" y="570" text-anchor="middle" font-size="9.5" font-weight="700" fill="#6D28D9">the LLM never writes beliefs directly</text>
+  </g>
+
+  <line x1="642" y1="150" x2="686" y2="130" stroke="#D97706" stroke-width="2.5" marker-end="url(#mV)"/>
+  <line x1="642" y1="280" x2="686" y2="280" stroke="#D97706" stroke-width="2.5" marker-end="url(#mV)"/>
+  <line x1="642" y1="410" x2="686" y2="430" stroke="#D97706" stroke-width="2.5" marker-end="url(#mV)"/>
+
+  <rect x="690" y="20" width="266" height="600" rx="14" fill="#FFFBEB" stroke="#D97706" stroke-width="2"/>
+  <rect x="690" y="20" width="266" height="36" rx="14" fill="#D97706"/>
+  <rect x="690" y="42" width="266" height="14" fill="#D97706"/>
+  <text x="823" y="44" text-anchor="middle" font-size="14" font-weight="800" fill="#FFFFFF">EXPRESSION OUT &#8212; action</text>
+  <g font-size="10.5">
+    <rect x="706" y="72" width="234" height="118" rx="10" fill="#FFFFFF" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="720" y="94" font-size="11.5" font-weight="800" fill="#451A03">&#9997;&#65039; Personalized prompt (recall)</text>
+    <g font-weight="600" fill="#B45309">
+      <text x="720" y="113">every tutor reply begins with:</text>
+      <text x="720" y="127">&#8220;what you remember&#8230; weakest</text>
+      <text x="720" y="141">concepts&#8230; misconceptions to FIX&#8221;</text>
+      <text x="720" y="155">&#8212; so it teaches THIS student,</text>
+      <text x="720" y="169">in their style, at their level</text>
+    </g>
+    <rect x="706" y="208" width="234" height="86" rx="10" fill="#FFFFFF" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="720" y="230" font-size="11.5" font-weight="800" fill="#451A03">&#129504; Tutor&#8217;s-mind panel (live)</text>
+    <g font-weight="600" fill="#B45309">
+      <text x="720" y="249">mastery ring + bars &#183; misconceptions</text>
+      <text x="720" y="263">open&#8594;fixed &#183; memory &#183; next step &#8212;</text>
+      <text x="720" y="277">streamed as an SSE event per turn</text>
+    </g>
+    <rect x="706" y="312" width="234" height="86" rx="10" fill="#FFFFFF" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="720" y="334" font-size="11.5" font-weight="800" fill="#451A03">&#128202; Dashboards (same data)</text>
+    <g font-weight="600" fill="#B45309">
+      <text x="720" y="353">parent: child gap dashboard &#183;</text>
+      <text x="720" y="367">admin: cohort mastery, students at</text>
+      <text x="720" y="381">risk, recurring misconceptions</text>
+    </g>
+    <rect x="706" y="416" width="234" height="100" rx="10" fill="#FFFFFF" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="720" y="438" font-size="11.5" font-weight="800" fill="#451A03">&#128257; Adaptive targeting</text>
+    <g font-weight="600" fill="#B45309">
+      <text x="720" y="457">next quiz drills the weakest concept;</text>
+      <text x="720" y="471">re-teach uses a DIFFERENT analogy;</text>
+      <text x="720" y="485">plan items map to open gaps;</text>
+      <text x="720" y="499">topic done when ALL concepts pass</text>
+    </g>
+    <text x="823" y="545" text-anchor="middle" font-size="9.5" font-weight="700" fill="#B45309">transparency = trust: the student SEES</text>
+    <text x="823" y="560" text-anchor="middle" font-size="9.5" font-weight="700" fill="#B45309">exactly what the tutor believes about them</text>
+  </g>
+
+  <path d="M 823 620 L 823 668 L 159 668 L 159 620" fill="none" stroke="#4F46E5" stroke-width="2.5" stroke-dasharray="8 5" marker-end="url(#mA)"/>
+  <rect x="345" y="648" width="294" height="40" rx="10" fill="#4F46E5"/>
+  <text x="492" y="665" text-anchor="middle" font-size="11.5" font-weight="800" fill="#FFFFFF">THE LOOP: action changes what the student</text>
+  <text x="492" y="680" text-anchor="middle" font-size="11.5" font-weight="800" fill="#FFFFFF">does next &#8594; new evidence &#8594; updated beliefs</text>
+
+  <rect x="24" y="712" width="932" height="98" rx="12" fill="#F1F5F9" stroke="#475569" stroke-width="2"/>
+  <rect x="24" y="712" width="932" height="26" rx="12" fill="#475569"/>
+  <rect x="24" y="726" width="932" height="12" fill="#475569"/>
+  <text x="490" y="730" text-anchor="middle" font-size="11.5" font-weight="800" fill="#FFFFFF">ONE BELIEF, EVOLVING &#8212; &#8220;Rearranging V=IR&#8221; across a session</text>
+  <g font-size="10" font-weight="600" fill="#334155" text-anchor="middle">
+    <text x="135" y="760" font-weight="800" fill="#0F172A">chat: &#8220;I mix it up&#8221;</text>
+    <text x="135" y="776">signal &#8722;0.5 &#183; &#945;0.2</text>
+    <text x="135" y="792" font-weight="800" fill="#DC2626">40% &#8594; 37% &#183; &#9888; opened</text>
+    <text x="330" y="760" font-weight="800" fill="#0F172A">triangle trick lands</text>
+    <text x="330" y="776">signal +0.8 &#183; &#945;0.2</text>
+    <text x="330" y="792" font-weight="800" fill="#D97706">37% &#8594; 48%</text>
+    <text x="530" y="760" font-weight="800" fill="#0F172A">quiz: 2/2 on concept</text>
+    <text x="530" y="776">outcome 1.0 &#215;2 &#183; &#945;0.4</text>
+    <text x="530" y="792" font-weight="800" fill="#D97706">48% &#8594; 69% &#8594; 81%</text>
+    <text x="730" y="760" font-weight="800" fill="#0F172A">explains it back</text>
+    <text x="730" y="776">signal +1.0 &#183; &#10003; resolved</text>
+    <text x="730" y="792" font-weight="800" fill="#059669">85% &#183; conf 4 &#8594; PASSES</text>
+    <text x="888" y="760" font-weight="800" fill="#0F172A">all concepts pass</text>
+    <text x="888" y="776">&#8805;80% &amp; conf &#8805;2</text>
+    <text x="888" y="792" font-weight="800" fill="#059669">&#127881; topic mastered</text>
+  </g>
+  <g stroke="#4F46E5" stroke-width="2">
+    <line x1="218" y1="775" x2="244" y2="775" marker-end="url(#mA)"/>
+    <line x1="416" y1="775" x2="442" y2="775" marker-end="url(#mA)"/>
+    <line x1="622" y1="775" x2="648" y2="775" marker-end="url(#mA)"/>
+    <line x1="804" y1="775" x2="830" y2="775" marker-end="url(#mA)"/>
+  </g>
+
+  <g font-size="10.5" font-weight="700" fill="#64748B">
+    <rect x="24" y="828" width="13" height="13" rx="4" fill="#4F46E5"/><text x="44" y="839">evidence in</text>
+    <rect x="128" y="828" width="13" height="13" rx="4" fill="#7C3AED"/><text x="148" y="839">beliefs (the mind, Postgres)</text>
+    <rect x="330" y="828" width="13" height="13" rx="4" fill="#D97706"/><text x="350" y="839">expression out</text>
+    <line x1="470" y1="834" x2="508" y2="834" stroke="#4F46E5" stroke-width="2.5" stroke-dasharray="8 5" marker-end="url(#mA)"/>
+    <text x="516" y="839">feedback loop (continuous)</text>
+  </g>
+</svg>

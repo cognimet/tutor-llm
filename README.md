@@ -14,6 +14,10 @@ Three roles — **Student, Parent, Admin** — around one core adaptive loop:
 
 ![Architecture](docs/architecture.svg)
 
+**How the AI's mind works** — evidence in → beliefs → expression out, on every turn:
+
+![The AI's mind](docs/ai-mind.svg)
+
 ```
                 ┌────────────────────────────────────────────────────────┐
                 │                  React SPA (Vite, :5173)               │
