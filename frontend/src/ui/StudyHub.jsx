@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { notesApi, plannerApi, flashcardsApi, mistakesApi } from "../api/endpoints.js";
 import { NoteIcon, fmtBytes } from "./NotesPicker.jsx";
+import TutorMind from "../screens/student/TutorMind.jsx";
 
 /* ----------------------------------------------------------------- dates */
 const MS_DAY = 86400000;
@@ -33,13 +34,13 @@ const KIND = {
 
 const TABS = [
   ["plan", "Plan", CalendarDays],
+  ["fix", "What to work on", Target],
   ["notes", "Notes", FileText],
-  ["cards", "Flashcards", Layers],
-  ["mistakes", "Mistakes", AlertTriangle],
+  ["cards", "Cards", Layers],
 ];
 
 /* ================================================================== shell */
-export default function StudyHub({ ctx, grad, initialTab = "plan", onClose, onBigAssessment, onReExplain }) {
+export default function StudyHub({ ctx, grad, initialTab = "plan", mind, onClose, onBigAssessment, onReExplain }) {
   const [tab, setTab] = useState(initialTab);
 
   useEffect(() => {
@@ -82,9 +83,9 @@ export default function StudyHub({ ctx, grad, initialTab = "plan", onClose, onBi
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-2xl px-4 py-6">
           {tab === "plan" && <PlanTab ctx={ctx} grad={grad} onBigAssessment={onBigAssessment} />}
+          {tab === "fix" && <FixTab ctx={ctx} mind={mind} onReExplain={onReExplain} />}
           {tab === "notes" && <NotesTab ctx={ctx} grad={grad} />}
           {tab === "cards" && <FlashcardsTab ctx={ctx} grad={grad} />}
-          {tab === "mistakes" && <MistakesTab ctx={ctx} onReExplain={onReExplain} />}
         </div>
       </div>
     </div>
@@ -435,53 +436,91 @@ function FlashcardsTab({ ctx, grad }) {
   );
 }
 
-/* ============================================================== mistakes */
-function MistakesTab({ ctx, onReExplain }) {
-  const [items, setItems] = useState([]);
+/* =========================================================== what to fix */
+// One student-facing place for "where I'm weak": the tutor's live read
+// (mastery + memory) on top, then a single merged list of open misconceptions
+// (from chat) + unresolved mistakes (from assessments), de-duped by text.
+function FixTab({ ctx, mind, onReExplain }) {
+  const [mistakes, setMistakes] = useState([]);
   const [loading, setLoading] = useState(true);
   const params = ctx.topic_id ? { topic_id: ctx.topic_id } : { topic_name: ctx.topic_name };
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setItems(await mistakesApi.index({ ...params, include_resolved: true })); }
+    try { setMistakes(await mistakesApi.index({ ...params, include_resolved: true })); }
     catch { /* */ } finally { setLoading(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.topic_id, ctx.topic_name]);
   useEffect(() => { load(); }, [load]);
 
-  const resolve = async (m) => {
+  const resolveMistake = async (m) => {
     const updated = await mistakesApi.resolve(m.id);
-    setItems((xs) => xs.map((x) => x.id === m.id ? updated : x));
+    setMistakes((xs) => xs.map((x) => x.id === m.id ? updated : x));
   };
 
-  if (loading) return <Loading label="Opening your notebook…" />;
-  if (items.length === 0) return <Empty icon={AlertTriangle} text="No mistakes logged yet. When you slip on an assessment, it lands here so you can fix it for good." />;
+  // Open misconceptions the assessment mistakes already cover are dropped.
+  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const mistakeText = new Set(mistakes.map((m) => norm(m.question) + " " + norm(m.concept)));
+  const openMisc = (mind?.misconceptions || [])
+    .filter((m) => m.status === "open")
+    .filter((m) => ![...mistakeText].some((t) => t && t.includes(norm(m.description).slice(0, 24))));
+
+  const openMistakes = mistakes.filter((m) => !m.resolved);
+  const nothingToFix = !loading && openMisc.length === 0 && openMistakes.length === 0;
 
   return (
-    <div className="space-y-3">
-      {items.map((m) => (
-        <div key={m.id} className={`rounded-2xl border p-3.5 ${m.resolved ? "border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/5" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-800"}`}>
-          {m.concept && <p className="mb-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">{m.concept}</p>}
-          <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{m.question}</p>
-          <div className="mt-2 space-y-1 text-xs">
-            {m.student_answer && <p className="text-rose-500"><b>You:</b> {m.student_answer}</p>}
-            {m.correct_answer && <p className="text-emerald-600 dark:text-emerald-400"><b>Correct:</b> {m.correct_answer}</p>}
-            {m.explanation && <p className="text-slate-500 dark:text-slate-400">{m.explanation}</p>}
+    <div className="space-y-5">
+      {/* The tutor's live read on you (mastery + memory + next step) */}
+      <TutorMind mind={mind} />
+
+      <div>
+        <p className="mb-2 flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-slate-400">
+          <Target className="h-3.5 w-3.5" /> Things to fix
+        </p>
+
+        {loading ? <Loading label="Checking your weak spots…" /> : nothingToFix ? (
+          <Empty icon={Check} text="Nothing to fix right now — nice! Keep learning and take a check; anything you slip on shows up here." />
+        ) : (
+          <div className="space-y-3">
+            {/* Misconceptions caught live in chat */}
+            {openMisc.map((m) => (
+              <div key={`misc-${m.id}`} className="rounded-2xl border border-amber-200 bg-amber-50/50 p-3.5 dark:border-amber-500/20 dark:bg-amber-500/5">
+                <p className="mb-1 text-[10px] font-extrabold uppercase tracking-widest text-amber-500">From your chat</p>
+                <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{m.description}</p>
+                <button onClick={() => onReExplain?.(`Earlier I had this misunderstanding: "${m.description}". Re-teach me this a different way, with a fresh example, so I really get it.`)}
+                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-2.5 py-1.5 text-[11px] font-extrabold text-indigo-600 transition-colors hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300">
+                  <PenLine className="h-3.5 w-3.5" /> Re-explain
+                </button>
+              </div>
+            ))}
+
+            {/* Mistakes auto-collected from assessments */}
+            {mistakes.map((m) => (
+              <div key={`mis-${m.id}`} className={`rounded-2xl border p-3.5 ${m.resolved ? "border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/5" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-800"}`}>
+                {m.concept && <p className="mb-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">{m.concept}</p>}
+                <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{m.question}</p>
+                <div className="mt-2 space-y-1 text-xs">
+                  {m.student_answer && <p className="text-rose-500"><b>You:</b> {m.student_answer}</p>}
+                  {m.correct_answer && <p className="text-emerald-600 dark:text-emerald-400"><b>Correct:</b> {m.correct_answer}</p>}
+                  {m.explanation && <p className="text-slate-500 dark:text-slate-400">{m.explanation}</p>}
+                </div>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <button onClick={() => onReExplain?.(`I got this wrong: "${m.question}". Re-teach me this concept (${m.concept || "this"}) a different way so I really understand it.`)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-2.5 py-1.5 text-[11px] font-extrabold text-indigo-600 transition-colors hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300">
+                    <PenLine className="h-3.5 w-3.5" /> Re-explain
+                  </button>
+                  <button onClick={() => resolveMistake(m)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-extrabold transition-colors ${
+                      m.resolved ? "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300"
+                    }`}>
+                    {m.resolved ? <><RotateCcw className="h-3.5 w-3.5" /> Reopen</> : <><Check className="h-3.5 w-3.5" /> Got it</>}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="mt-2.5 flex items-center gap-2">
-            <button onClick={() => onReExplain?.(`I got this wrong: "${m.question}". Re-teach me this concept (${m.concept || "this"}) a different way so I really understand it.`)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-2.5 py-1.5 text-[11px] font-extrabold text-indigo-600 transition-colors hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300">
-              <PenLine className="h-3.5 w-3.5" /> Re-explain
-            </button>
-            <button onClick={() => resolve(m)}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-extrabold transition-colors ${
-                m.resolved ? "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300"
-              }`}>
-              {m.resolved ? <><RotateCcw className="h-3.5 w-3.5" /> Reopen</> : <><Check className="h-3.5 w-3.5" /> Got it</>}
-            </button>
-          </div>
-        </div>
-      ))}
+        )}
+      </div>
     </div>
   );
 }

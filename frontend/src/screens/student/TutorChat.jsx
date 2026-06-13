@@ -4,7 +4,7 @@ import {
   Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Plus, MessageSquare,
   ChevronRight, ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
-  Brain, Mic, MicOff, Camera, Maximize2, PenLine,
+  Mic, MicOff, Camera, Maximize2, PenLine,
   Sparkles as SparklesIcon, CalendarClock, Paperclip,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
@@ -13,10 +13,11 @@ import { streamSSE } from "../../api/stream.js";
 import Markdown from "../../ui/Markdown.jsx";
 import RichMessage from "../../ui/RichMessage.jsx";
 import AssessmentFlow from "./AssessmentFlow.jsx";
-import TutorMind from "./TutorMind.jsx";
 import Whiteboard from "../../ui/Whiteboard.jsx";
 import StudyHub from "../../ui/StudyHub.jsx";
 import NotesPicker from "../../ui/NotesPicker.jsx";
+import NextStep from "../../ui/NextStep.jsx";
+import { flashcardsApi, mistakesApi } from "../../api/endpoints.js";
 
 const STARTERS = (t) => [
   { icon: "💡", label: `Explain "${t}" simply` },
@@ -188,7 +189,7 @@ function ModePicker({ mode, onPick }) {
       </button>
       {open && (
         <div role="menu" className="msg-in absolute bottom-[3.25rem] right-0 z-30 w-60 overflow-hidden rounded-2xl border border-slate-100 bg-white p-1.5 shadow-xl dark:border-white/10 dark:bg-slate-800">
-          <p className="px-3 pb-1 pt-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Tutor mode</p>
+          <p className="px-3 pb-1 pt-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">How the tutor teaches</p>
           {MODES.map((m) => {
             const active = m.id === mode;
             return (
@@ -453,8 +454,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [sideOpen, setSideOpen] = useState(() => {
     try { return localStorage.getItem("tutorchat:sidepanel") === "open"; } catch { return false; }
   });
-  const [sidePanel, setSidePanel] = useState("chats"); // active tab: chats | mind
-  const [mindSheet, setMindSheet] = useState(false); // bottom sheet (mobile)
+  const [sidePanel, setSidePanel] = useState("chats"); // Recents panel
   const [expanded, setExpanded] = useState(null);    // a reply opened in fullscreen reader
   const [snapBusy, setSnapBusy] = useState(false);   // OCR upload in flight
   const [listening, setListening] = useState(false); // voice-to-text active
@@ -464,6 +464,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [bigAssess, setBigAssess] = useState(false); // big (exam-scope) assessment
   const [attached, setAttached] = useState([]);      // notes riding with the next message [{id,title}]
   const [examDate, setExamDate] = useState(null);    // soonest exam date for the countdown chip
+  const [guide, setGuide] = useState({ planTaskTitle: null, dueCards: 0, mistakes: [] }); // "Next →" inputs
 
   const scrollRef = useRef(null);
   const taRef = useRef(null);
@@ -487,12 +488,31 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     try { setMind(await tutorApi.mind(id)); } catch { /* ignore */ }
   }, []);
 
-  // Soonest exam date for this topic → drives the header countdown chip.
-  const loadExam = useCallback(async () => {
+  // Pull the bits the "Next →" guide + countdown chip need: exam date, the
+  // soonest unfinished plan task, cards due, and unresolved mistakes. Cheap
+  // GETs, run in parallel, never block the chat.
+  const loadGuide = useCallback(async () => {
+    const params = ctx.topic_id ? { topic_id: ctx.topic_id } : { topic_name: ctx.topic_name };
     try {
-      const params = ctx.topic_id ? { topic_id: ctx.topic_id } : { topic_name: ctx.topic_name };
-      const data = await plannerApi.index(params);
-      setExamDate(data.exam_date || null);
+      const [plan, due, mistakes] = await Promise.all([
+        plannerApi.index(params).catch(() => ({})),
+        flashcardsApi.due(params).catch(() => []),
+        mistakesApi.index(params).catch(() => []),
+      ]);
+      setExamDate(plan?.exam_date || null);
+
+      // Soonest todo task scheduled for today/earlier (or undated).
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const tasks = (plan?.plans || []).flatMap((p) => p.tasks || [])
+        .filter((t) => t.status === "todo")
+        .filter((t) => !t.scheduled_for || new Date(t.scheduled_for) <= today)
+        .sort((a, b) => new Date(a.scheduled_for || 0) - new Date(b.scheduled_for || 0));
+
+      setGuide({
+        planTaskTitle: tasks[0]?.title || null,
+        dueCards: Array.isArray(due) ? due.length : 0,
+        mistakes: Array.isArray(mistakes) ? mistakes : [],
+      });
     } catch { /* ignore */ }
   }, [ctx.topic_id, ctx.topic_name]);
 
@@ -502,6 +522,29 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     const today = new Date(); today.setHours(0, 0, 0, 0);
     return Math.round((d.getTime() - today.getTime()) / 86400000);
   }, [examDate]);
+
+  // The single next action for the guide pill — combines fetched guide data,
+  // the live "mind" (open misconceptions), and whether a real exchange exists.
+  const nextState = useMemo(() => {
+    const openMisc = (mind?.misconceptions || []).filter((m) => m.status === "open");
+    const fixCount = openMisc.length + (guide.mistakes?.length || 0);
+    const fixTop = openMisc[0]?.description || guide.mistakes?.[0]?.concept || guide.mistakes?.[0]?.question || null;
+    return {
+      planTaskTitle: guide.planTaskTitle,
+      dueCards: guide.dueCards,
+      fixCount,
+      fixTop,
+      hasExchange: messages.length > 1,
+    };
+  }, [mind, guide, messages.length]);
+
+  const nextHandlers = useMemo(() => ({
+    onPlan: () => setStudyTab("plan"),
+    onFix: () => setStudyTab("fix"),
+    onCards: () => setStudyTab("cards"),
+    onCheck: () => setAssessing(true),
+    onAsk: () => taRef.current?.focus(),
+  }), []);
 
   // Re-explain from the Mistake Notebook: close the hub and ask the tutor.
   const reExplain = useCallback((text) => {
@@ -519,12 +562,10 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     try { localStorage.setItem("tutorchat:sidepanel", sideOpen ? "open" : "closed"); } catch { /* */ }
   }, [sideOpen]);
 
-  // One toggle drives both form factors: inline panel on desktop,
-  // drawer / bottom sheet on mobile.
+  // Recents panel: inline on desktop, drawer on mobile.
   const toggleSide = useCallback((tab) => {
     if (!window.matchMedia("(min-width: 1024px)").matches) {
-      if (tab === "chats") setDrawerOpen(true);
-      else setMindSheet(true);
+      setDrawerOpen(true);
       return;
     }
     setSideOpen((open) => {
@@ -554,7 +595,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       }
     })();
     loadSessions();
-    loadExam();
+    loadGuide();
     setAttached([]); // don't carry attachments across topics
     return () => { alive = false; abortRef.current?.abort(); stopSpeaking(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -984,10 +1025,6 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
               className={headerToggle(sideOpen && sidePanel === "chats")}>
               <History className="h-5 w-5" />
             </button>
-            <button onClick={() => toggleSide("mind")} title="Tutor's mind"
-              className={headerToggle(sideOpen && sidePanel === "mind")}>
-              <Brain className="h-5 w-5" />
-            </button>
 
             {/* Overflow menu */}
             <div className="relative shrink-0" ref={menuRef}>
@@ -1029,7 +1066,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
               <EmptyState
                 ctx={ctx} t={t} greeting={greeting} onSend={send}
                 onPractice={() => setAssessing(true)}
-                onMind={() => toggleSide("mind")}
+                onMind={() => setStudyTab("fix")}
                 onBoard={() => setBoardOpen(true)}
               />
             ) : (
@@ -1136,6 +1173,12 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           {/* Composer block — same reading column as the messages */}
           <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
             <div className="mx-auto w-full max-w-3xl xl:max-w-4xl 2xl:max-w-5xl">
+            {/* The one guiding nudge — Learn → Check → Fix → Remember */}
+            {!showStarters && (
+              <div className="mb-2.5">
+                <NextStep state={nextState} handlers={nextHandlers} />
+              </div>
+            )}
             {showFollowups && (
               <div className="mb-2.5 flex flex-wrap gap-2">
                 {FOLLOWUPS.map((s) => (
@@ -1238,8 +1281,8 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           </div>
         </main>
 
-        {/* RIGHT: on-demand side panel (Recents | Tutor's Mind). Collapsed by
-            default so the chat owns the canvas; opens from the header toggles. */}
+        {/* RIGHT: on-demand Recents panel. Collapsed by default so the chat
+            owns the canvas; opens from the header History toggle. */}
         <aside
           className="hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-out lg:block"
           style={{ width: sideOpen ? "21.5rem" : "0rem" }}
@@ -1247,62 +1290,26 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
         >
           <div className="flex h-full w-[21.5rem] flex-col border-l border-slate-200/60 bg-white/55 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/50">
           <div className="flex items-center gap-2 px-3 pt-3">
-          {/* Segmented tabs */}
-          <div className="relative flex flex-1 rounded-2xl bg-slate-100 p-1 dark:bg-white/5">
-            <span
-              className="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 transition-transform duration-300 ease-out dark:bg-slate-800 dark:ring-white/10"
-              style={{ transform: sidePanel === "mind" ? "translateX(100%)" : "translateX(0)" }}
-            />
-            {[["chats", "Recents", History], ["mind", "Tutor's Mind", Brain]].map(([id, label, Icon]) => (
-              <button key={id} onClick={() => setSidePanel(id)}
-                className={`relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold transition-colors ${
-                  sidePanel === id ? "text-indigo-600 dark:text-indigo-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                }`}>
-                <Icon className="h-3.5 w-3.5" /> {label}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setSideOpen(false)} title="Hide panel"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 ring-1 ring-slate-200 transition-colors hover:text-slate-600 dark:text-slate-300 dark:ring-white/10">
-            <X className="h-4 w-4" />
-          </button>
+            <p className="flex flex-1 items-center gap-1.5 px-1 text-xs font-extrabold text-slate-600 dark:text-slate-300">
+              <History className="h-4 w-4 text-indigo-500" /> Recent chats
+            </p>
+            <button onClick={() => setSideOpen(false)} title="Hide panel"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 ring-1 ring-slate-200 transition-colors hover:text-slate-600 dark:text-slate-300 dark:ring-white/10">
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
           {/* Panel body */}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
-            {sidePanel === "mind" ? (
-              <TutorMind mind={mind} />
-            ) : (
-              <>
-                <button onClick={newChat} className={`mb-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
-                  <Plus className="h-4 w-4" /> New chat
-                  <span className="ml-auto hidden rounded-md bg-white/20 px-1.5 py-0.5 text-[10px] font-extrabold xl:inline">{MOD} J</span>
-                </button>
-                <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} searchRef={searchRef} />
-              </>
-            )}
+            <button onClick={newChat} className={`mb-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
+              <Plus className="h-4 w-4" /> New chat
+              <span className="ml-auto hidden rounded-md bg-white/20 px-1.5 py-0.5 text-[10px] font-extrabold xl:inline">{MOD} J</span>
+            </button>
+            <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} searchRef={searchRef} />
           </div>
           </div>
         </aside>
       </div>
-
-      {/* Mobile "tutor's mind" bottom sheet */}
-      {mindSheet && (
-        <div className="fixed inset-0 z-40 xl:hidden">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMindSheet(false)} />
-          <div className="drawer-in absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-3xl bg-gradient-to-b from-slate-50 to-indigo-50/60 p-4 shadow-2xl dark:from-slate-900 dark:to-slate-950">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="flex items-center gap-2 text-sm font-extrabold text-slate-700 dark:text-slate-200">
-                <Brain className="h-4 w-4 text-indigo-500" /> Tutor’s mind
-              </p>
-              <button onClick={() => setMindSheet(false)} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <TutorMind mind={mind} />
-          </div>
-        </div>
-      )}
 
       {/* Mobile history drawer */}
       {drawerOpen && (
@@ -1347,7 +1354,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           topicName={ctx.topic_name}
           topicId={ctx.topic_id}
           sessionId={sessionId}
-          onClose={() => { setAssessing(false); loadMind(sessionId); onProgressChange?.(); }}
+          onClose={() => { setAssessing(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); }}
         />
       )}
 
@@ -1358,17 +1365,18 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           topicId={ctx.topic_id}
           sessionId={sessionId}
           scope="exam"
-          onClose={() => { setBigAssess(false); loadMind(sessionId); onProgressChange?.(); }}
+          onClose={() => { setBigAssess(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); }}
         />
       )}
 
-      {/* Study hub: planner · notes · flashcards · mistakes */}
+      {/* Study hub: plan · what to work on · notes · cards */}
       {studyTab && (
         <StudyHub
           ctx={ctx}
           grad={t.grad}
           initialTab={studyTab}
-          onClose={() => { setStudyTab(null); loadExam(); }}
+          mind={mind}
+          onClose={() => { setStudyTab(null); loadGuide(); }}
           onBigAssessment={() => { setStudyTab(null); setBigAssess(true); }}
           onReExplain={reExplain}
         />
