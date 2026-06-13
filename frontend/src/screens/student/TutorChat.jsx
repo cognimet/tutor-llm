@@ -1359,6 +1359,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           topicId={ctx.topic_id}
           sessionId={sessionId}
           onClose={() => { setAssessing(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); }}
+          onSeeWork={() => { setAssessing(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); setStudyTab("fix"); }}
         />
       )}
 
@@ -1370,6 +1371,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           sessionId={sessionId}
           scope="exam"
           onClose={() => { setBigAssess(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); }}
+          onSeeWork={() => { setBigAssess(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); setStudyTab("fix"); }}
         />
       )}
 

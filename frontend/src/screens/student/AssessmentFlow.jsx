@@ -1,16 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { X, Check, ArrowRight, Sparkles, Target, ListChecks, Loader2, BookOpen } from "lucide-react";
-import { assessmentApi, planApi } from "../../api/endpoints.js";
+import { X, ArrowRight, Sparkles, Target, Loader2, BookOpen } from "lucide-react";
+import { assessmentApi } from "../../api/endpoints.js";
 
-// Stages: loading -> quiz -> result -> plan
+// Stages: loading -> quiz -> result. After the result, the student is pointed
+// to the Study hub's "What to work on" (real, actionable next steps) instead of
+// a throwaway in-modal checklist.
 // scope "exam" + a higher count = a bigger, multi-concept assessment.
-export default function AssessmentFlow({ topicName, topicId, sessionId, onClose, scope = "topic", count }) {
+export default function AssessmentFlow({ topicName, topicId, sessionId, onClose, onSeeWork, scope = "topic", count }) {
   const isBig = scope === "exam";
   const [stage, setStage] = useState("loading");
   const [assessment, setAssessment] = useState(null);
   const [answers, setAnswers] = useState({}); // questionId -> selectedIndex
   const [result, setResult] = useState(null);
-  const [plan, setPlan] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [gate, setGate] = useState(null); // soft learning-gate readiness payload
@@ -77,16 +78,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
     } finally { setBusy(false); }
   };
 
-  const buildPlan = async () => {
-    setBusy(true);
-    try { setPlan(await planApi.generate(topicName)); setStage("plan"); }
-    catch (err) { setError(err?.response?.data?.message || "Couldn't build a plan."); } finally { setBusy(false); }
-  };
-
-  const toggle = async (item) => {
-    const updated = await planApi.toggleItem(item.id);
-    setPlan((p) => ({ ...p, items: p.items.map((i) => (i.id === item.id ? updated : i)) }));
-  };
+  const seeWork = () => { if (onSeeWork) onSeeWork(); else onClose(); };
 
   const allAnswered = assessment && assessment.questions.every((q) => answers[q.id] != null);
 
@@ -191,25 +183,6 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
               )}
             </div>
           )}
-
-          {stage === "plan" && plan && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2"><ListChecks className="h-5 w-5 text-indigo-500" /><p className="font-extrabold text-slate-900 dark:text-white">{plan.title}</p></div>
-              {plan.items.map((item) => (
-                <button key={item.id} onClick={() => toggle(item)}
-                  className="flex w-full items-start gap-3 rounded-2xl border border-slate-100 dark:border-white/10 bg-white dark:bg-slate-800 p-4 text-left transition-all hover:border-indigo-200">
-                  <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${item.status === "done" ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300"}`}>
-                    {item.status === "done" && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
-                  </span>
-                  <div className="flex-1">
-                    <p className={`text-sm font-extrabold ${item.status === "done" ? "text-slate-400 line-through" : "text-slate-800 dark:text-slate-100"}`}>{item.title}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.detail}</p>
-                    <p className="mt-1 text-[11px] font-bold text-indigo-400">~{item.estimated_minutes} min · {item.concept}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Footer actions */}
@@ -221,13 +194,16 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
             </button>
           )}
           {stage === "result" && (
-            <button onClick={buildPlan} disabled={busy}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 px-5 py-3 font-extrabold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">
-              {busy ? "Building…" : "Get my next steps"} <ArrowRight className="h-4 w-4" />
-            </button>
-          )}
-          {stage === "plan" && (
-            <button onClick={onClose} className="w-full rounded-2xl bg-slate-900 px-5 py-3 font-extrabold text-white">Done — back to tutor</button>
+            <div className="flex gap-2">
+              <button onClick={onClose}
+                className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-extrabold text-slate-500 transition-colors hover:text-slate-800 dark:border-white/10 dark:text-slate-300">
+                Back to tutor
+              </button>
+              <button onClick={seeWork}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 px-5 py-3 font-extrabold text-white shadow-lg shadow-indigo-500/30">
+                See what to work on <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
           )}
         </div>
       </div>
