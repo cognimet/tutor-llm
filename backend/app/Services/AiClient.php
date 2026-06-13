@@ -134,6 +134,65 @@ class AiClient
         return $data;
     }
 
+    /**
+     * Extract plain text from an uploaded study file (pdf/docx/xlsx/txt/image).
+     * Returns ['text','kind','meta','error']; `error` holds the service's detail
+     * message on an unsupported/unreadable file (so the UI can be specific).
+     */
+    public function extract(string $filename, ?string $mime, string $contentBase64): array
+    {
+        try {
+            $r = Http::timeout($this->timeout)
+                ->withHeaders($this->headers())
+                ->post("{$this->url}/ai/extract", [
+                    'filename' => $filename, 'mime' => $mime, 'content_base64' => $contentBase64,
+                ]);
+
+            if ($r->successful()) {
+                $data = $r->json() ?? [];
+                $this->captureUsage($data);
+                return [
+                    'text' => (string) ($data['text'] ?? ''),
+                    'kind' => (string) ($data['kind'] ?? 'text'),
+                    'meta' => is_array($data['meta'] ?? null) ? $data['meta'] : [],
+                    'error' => null,
+                ];
+            }
+
+            $detail = $r->json('detail') ?: 'Could not read this file.';
+            Log::warning('AI extract error', ['status' => $r->status(), 'file' => $filename]);
+            return ['text' => '', 'kind' => 'text', 'meta' => [], 'error' => $detail];
+        } catch (\Throwable $e) {
+            Log::error('AI extract failed', ['error' => $e->getMessage()]);
+            return ['text' => '', 'kind' => 'text', 'meta' => [], 'error' => 'The extraction service is unavailable.'];
+        }
+    }
+
+    /** Summarise a student's notes -> {summary, flashcards:[{front,back}]}. */
+    public function notesIngest(int $studentId, string $text, ?string $topic = null): array
+    {
+        $data = $this->post('/ai/notes/ingest', array_filter([
+            'student_id' => $studentId, 'text' => $text, 'topic' => $topic,
+        ], fn ($v) => $v !== null));
+        $this->captureUsage($data);
+        return [
+            'summary' => (string) ($data['summary'] ?? ''),
+            'flashcards' => is_array($data['flashcards'] ?? null) ? $data['flashcards'] : [],
+        ];
+    }
+
+    /** Build a dated study schedule -> {title, summary, tasks:[...]}. */
+    public function studySchedule(array $payload): array
+    {
+        $data = $this->post('/ai/study/schedule', $payload);
+        $this->captureUsage($data);
+        return [
+            'title' => (string) ($data['title'] ?? 'Your study plan'),
+            'summary' => (string) ($data['summary'] ?? ''),
+            'tasks' => is_array($data['tasks'] ?? null) ? $data['tasks'] : [],
+        ];
+    }
+
     /* ----------------------- RAG / curriculum indexing --------------------- */
 
     /** Ensure the vector collection exists. */

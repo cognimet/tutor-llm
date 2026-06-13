@@ -3,7 +3,9 @@ import { X, Check, ArrowRight, Sparkles, Target, ListChecks, Loader2 } from "luc
 import { assessmentApi, planApi } from "../../api/endpoints.js";
 
 // Stages: loading -> quiz -> result -> plan
-export default function AssessmentFlow({ topicName, topicId, sessionId, onClose }) {
+// scope "exam" + a higher count = a bigger, multi-concept assessment.
+export default function AssessmentFlow({ topicName, topicId, sessionId, onClose, scope = "topic", count }) {
+  const isBig = scope === "exam";
   const [stage, setStage] = useState("loading");
   const [assessment, setAssessment] = useState(null);
   const [answers, setAnswers] = useState({}); // questionId -> selectedIndex
@@ -21,7 +23,10 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose 
     setStage("loading");
     setError("");
     try {
-      const a = await assessmentApi.generate({ topic_name: topicName, topic_id: topicId, chat_session_id: sessionId, count: 3 });
+      const a = await assessmentApi.generate({
+        topic_name: topicName, topic_id: topicId, chat_session_id: sessionId,
+        scope, ...(count ? { count } : {}),
+      });
       if (!a || !Array.isArray(a.questions) || a.questions.length === 0) {
         throw new Error("The AI returned an empty quiz. Please try again.");
       }
@@ -80,7 +85,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose 
           <div className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-2xl bg-indigo-50 text-indigo-600"><Target className="h-5 w-5" /></span>
             <div>
-              <p className="text-sm font-extrabold text-slate-900 dark:text-white">Mini-assessment</p>
+              <p className="text-sm font-extrabold text-slate-900 dark:text-white">{isBig ? "Big assessment" : "Mini-assessment"}</p>
               <p className="text-xs text-slate-400">{topicName}</p>
             </div>
           </div>
@@ -88,7 +93,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose 
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-5">
-          {stage === "loading" && <Centered><Loader2 className="h-6 w-6 animate-spin text-indigo-500" /> Generating your quiz…</Centered>}
+          {stage === "loading" && <Centered><Loader2 className="h-6 w-6 animate-spin text-indigo-500" /> {isBig ? "Building your big assessment…" : "Generating your quiz…"}</Centered>}
           {stage === "error" && (
             <Centered>
               <span>{error}</span>

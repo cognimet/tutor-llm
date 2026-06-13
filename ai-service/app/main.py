@@ -31,6 +31,8 @@ from .schemas import (
     GapAnalyzeRequest, GapAnalyzeResponse, Gap,
     PlanBuildRequest, PlanBuildResponse, PlanItem,
     NotesIngestRequest, NotesIngestResponse, Usage,
+    ExtractRequest, ExtractResponse,
+    StudyScheduleRequest, StudyScheduleResponse, ScheduleTask,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -163,34 +165,123 @@ class OcrRequest(BaseModel):
     languages: str = "eng+hin"      # tesseract language pack(s)
 
 
-@app.post("/ai/ocr")
-async def ai_ocr(req: OcrRequest, authorization: str | None = Header(None)):
-    """Extract text from a problem photo (architecture doc: OCR/vision -> text
-    -> same pipeline). Local tesseract: deterministic, free, offline."""
-    _auth(authorization)
-    import base64
+def _ocr_image_bytes(raw: bytes, languages: str = "eng+hin") -> str:
+    """Tesseract OCR on raw image bytes. Shared by /ai/ocr and /ai/extract."""
     import io
     try:
         from PIL import Image, ImageOps
         import pytesseract
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=501, detail=f"OCR not available: {e}")
-
     try:
-        raw = base64.b64decode(req.image_base64, validate=False)
         img = Image.open(io.BytesIO(raw))
         # Light preprocessing: orientation fix + grayscale helps handwriting/photos.
         img = ImageOps.exif_transpose(img).convert("L")
-        text = pytesseract.image_to_string(img, lang=req.languages) or ""
-    except HTTPException:
-        raise
+        text = pytesseract.image_to_string(img, lang=languages) or ""
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=422, detail=f"Could not read the image: {e}")
+    return "\n".join(line.rstrip() for line in text.splitlines()).strip()
 
-    text = "\n".join(line.rstrip() for line in text.splitlines()).strip()
+
+@app.post("/ai/ocr")
+async def ai_ocr(req: OcrRequest, authorization: str | None = Header(None)):
+    """Extract text from a problem photo (architecture doc: OCR/vision -> text
+    -> same pipeline). Local tesseract: deterministic, free, offline."""
+    _auth(authorization)
+    import base64
+    raw = base64.b64decode(req.image_base64, validate=False)
+    text = _ocr_image_bytes(raw, req.languages)
     # OCR is local — no LLM tokens consumed.
     usage = Usage(model="tesseract", mock=False)
     return {"text": text, "usage": usage.model_dump()}
+
+
+# ── File text extraction (notes upload): pdf/docx/xlsx/txt/image -> text ──
+def _extract_kind(filename: str, mime: str | None) -> str:
+    name = (filename or "").lower()
+    mime = (mime or "").lower()
+    if name.endswith(".pdf") or "pdf" in mime:
+        return "pdf"
+    if name.endswith((".docx", ".doc")) or "word" in mime or "msword" in mime:
+        return "doc"
+    if name.endswith((".xlsx", ".xls", ".csv")) or "spreadsheet" in mime or "excel" in mime:
+        # .csv is plain text, handled in the "sheet" branch via a quick decode.
+        return "sheet"
+    if name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff")) or mime.startswith("image/"):
+        return "image"
+    return "text"
+
+
+@app.post("/ai/extract", response_model=ExtractResponse)
+async def ai_extract(req: ExtractRequest, authorization: str | None = Header(None)):
+    """Pull plain text out of an uploaded study file so the tutor can read it.
+    Pure-Python parsers (no system deps); images fall back to tesseract OCR."""
+    _auth(authorization)
+    import base64
+    import io
+
+    raw = base64.b64decode(req.content_base64, validate=False)
+    kind = _extract_kind(req.filename, req.mime)
+    name = (req.filename or "").lower()
+    text = ""
+    meta: dict = {}
+
+    try:
+        if kind == "pdf":
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(raw))
+            pages = [(p.extract_text() or "") for p in reader.pages]
+            text = "\n\n".join(pages).strip()
+            meta["pages"] = len(reader.pages)
+            if len(text) < 20:
+                meta["note"] = "Little text found — this PDF may be scanned images."
+        elif kind == "doc":
+            if name.endswith(".doc") and not name.endswith(".docx"):
+                raise HTTPException(status_code=422,
+                                    detail="Old .doc isn't supported — please save as .docx and re-upload.")
+            import docx  # python-docx
+            d = docx.Document(io.BytesIO(raw))
+            parts = [p.text for p in d.paragraphs if p.text and p.text.strip()]
+            for table in d.tables:
+                for row in table.rows:
+                    cells = [c.text.strip() for c in row.cells]
+                    if any(cells):
+                        parts.append(" | ".join(cells))
+            text = "\n".join(parts).strip()
+            meta["paragraphs"] = len(parts)
+        elif kind == "sheet":
+            if name.endswith(".csv"):
+                text = raw.decode("utf-8", errors="replace").strip()
+            elif name.endswith(".xls") and not name.endswith(".xlsx"):
+                raise HTTPException(status_code=422,
+                                    detail="Old .xls isn't supported — please save as .xlsx and re-upload.")
+            else:
+                from openpyxl import load_workbook
+                wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+                lines: list[str] = []
+                for ws in wb.worksheets:
+                    lines.append(f"# Sheet: {ws.title}")
+                    for row in ws.iter_rows(values_only=True):
+                        cells = ["" if c is None else str(c) for c in row]
+                        if any(cells):
+                            lines.append(" | ".join(cells))
+                text = "\n".join(lines).strip()
+                meta["sheets"] = len(wb.worksheets)
+        elif kind == "image":
+            text = _ocr_image_bytes(raw, req.languages)
+            if len(text) < 3:
+                meta["note"] = "No readable text found in the image."
+        else:  # text | md | csv | unknown -> best-effort decode
+            text = raw.decode("utf-8", errors="replace").strip()
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"Could not read {req.filename}: {e}")
+
+    meta["chars"] = len(text)
+    # Extraction is local — no LLM tokens consumed.
+    usage = Usage(model="local", mock=False)
+    return ExtractResponse(text=text, kind=kind, meta=meta, usage=usage)
 
 
 @app.get("/ai/rag/status")
@@ -295,6 +386,21 @@ async def plan_build(req: PlanBuildRequest, authorization: str | None = Header(N
     return PlanBuildResponse(title=title, items=items, usage=usage)
 
 
+@app.post("/ai/study/schedule", response_model=StudyScheduleResponse)
+async def study_schedule(req: StudyScheduleRequest, authorization: str | None = Header(None)):
+    _auth(authorization)
+    system, user = prompts.study_schedule(
+        req.topic, req.horizon, req.days_remaining, req.exam_date,
+        req.notes_summary, req.gaps, req.mastery,
+    )
+    data, usage = await llm.json(system, user, {"title": "Your study plan", "summary": "", "tasks": []},
+                                 action="structured")
+    tasks = [ScheduleTask(**t) for t in _safe_list(data, "tasks")]
+    title = data.get("title", "Your study plan") if isinstance(data, dict) else "Your study plan"
+    summary = data.get("summary", "") if isinstance(data, dict) else ""
+    return StudyScheduleResponse(title=title, summary=summary, tasks=tasks, usage=usage)
+
+
 @app.post("/ai/notes/ingest", response_model=NotesIngestResponse)
 async def notes_ingest(req: NotesIngestRequest, authorization: str | None = Header(None)):
     _auth(authorization)
@@ -311,7 +417,7 @@ async def notes_ingest(req: NotesIngestRequest, authorization: str | None = Head
 def _safe_list(data, key: str) -> list:
     if isinstance(data, dict) and isinstance(data.get(key), list):
         return data[key]
-    if isinstance(data, list) and key in ("questions", "items", "graded", "gaps", "flashcards"):
+    if isinstance(data, list) and key in ("questions", "items", "graded", "gaps", "flashcards", "tasks"):
         return data
     return []
 

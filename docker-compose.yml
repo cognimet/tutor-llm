@@ -97,6 +97,9 @@ services:
       # Set DB_FRESH=true (once) to wipe + reseed explicitly; otherwise the
       # database is created + seeded only on first boot and then preserved.
       DB_FRESH: ${DB_FRESH:-false}
+    # Persist uploaded study notes (storage/app) across image rebuilds.
+    volumes:
+      - app_storage:/app/storage/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,3 +126,4 @@ volumes:
   pg_data:
   qdrant_data:
   fastembed_cache:
+  app_storage:

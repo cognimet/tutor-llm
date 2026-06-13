@@ -142,13 +142,20 @@ class TutorController extends Controller
         $this->authorizeSession($request, $session);
 
         $data = $request->validate([
-            'message' => ['required', 'string', 'max:4000'],
-            'mode'    => ['nullable', 'in:teach,socratic,quiz,exam,eli10'],
+            'message'    => ['required', 'string', 'max:4000'],
+            'mode'       => ['nullable', 'in:teach,socratic,quiz,exam,eli10'],
+            'note_ids'   => ['nullable', 'array'],
+            'note_ids.*' => ['integer'],
         ]);
 
         $user = $request->user();
+        $noteIds = $data['note_ids'] ?? [];
+        $notesContext = $this->notesContextFor($user, $noteIds);
 
-        $session->messages()->create(['role' => 'user', 'content' => $data['message']]);
+        $session->messages()->create([
+            'role' => 'user', 'content' => $data['message'],
+            'meta' => $noteIds ? ['note_ids' => array_values($noteIds)] : null,
+        ]);
 
         $reply = $this->tutor->explain(
             $user,
@@ -158,6 +165,7 @@ class TutorController extends Controller
             $this->historyFor($session),
             $data['message'],
             $data['mode'] ?? 'teach',
+            $notesContext,
         );
 
         $message = $session->messages()->create(['role' => 'tutor', 'content' => $reply]);
@@ -173,14 +181,22 @@ class TutorController extends Controller
         $this->authorizeSession($request, $session);
 
         $data = $request->validate([
-            'message' => ['required', 'string', 'max:4000'],
-            'mode'    => ['nullable', 'in:teach,socratic,quiz,exam,eli10'],
+            'message'    => ['required', 'string', 'max:4000'],
+            'mode'       => ['nullable', 'in:teach,socratic,quiz,exam,eli10'],
+            'note_ids'   => ['nullable', 'array'],
+            'note_ids.*' => ['integer'],
         ]);
 
         $user = $request->user();
-        $session->messages()->create(['role' => 'user', 'content' => $data['message']]);
+        $noteIds = $data['note_ids'] ?? [];
+        $notesContext = $this->notesContextFor($user, $noteIds);
 
-        return $this->streamReply($session, $user, $data['message'], $data['mode'] ?? 'teach');
+        $session->messages()->create([
+            'role' => 'user', 'content' => $data['message'],
+            'meta' => $noteIds ? ['note_ids' => array_values($noteIds)] : null,
+        ]);
+
+        return $this->streamReply($session, $user, $data['message'], $data['mode'] ?? 'teach', $notesContext);
     }
 
     // Discard the last tutor reply and stream a fresh answer to the last question.
@@ -201,7 +217,10 @@ class TutorController extends Controller
         $lastUser = $session->messages()->where('role', 'user')->reorder('id', 'desc')->first();
         abort_unless($lastUser, 422, 'Nothing to regenerate yet.');
 
-        return $this->streamReply($session, $user, $lastUser->content, $mode);
+        // Re-attach whatever notes rode with the original question.
+        $notesContext = $this->notesContextFor($user, $lastUser->meta['note_ids'] ?? []);
+
+        return $this->streamReply($session, $user, $lastUser->content, $mode, $notesContext);
     }
 
     // Record 👍 / 👎 feedback on a tutor message.
@@ -227,7 +246,7 @@ class TutorController extends Controller
      * Emits `delta` events with incremental text and a final `done` event with
      * the saved message id.
      */
-    protected function streamReply(ChatSession $session, $user, string $prompt, string $mode = 'teach'): StreamedResponse
+    protected function streamReply(ChatSession $session, $user, string $prompt, string $mode = 'teach', string $notesContext = ''): StreamedResponse
     {
         $history = $this->historyFor($session);
 
@@ -235,7 +254,7 @@ class TutorController extends Controller
         $chapter = $session->chapter_name ?? '';
         $subject = $session->subject_name ?? '';
 
-        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $topic, $chapter, $subject, $mode) {
+        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $topic, $chapter, $subject, $mode, $notesContext) {
             $emit = function (string $event, array $payload) {
                 echo "event: {$event}\n";
                 echo 'data: ' . json_encode($payload) . "\n\n";
@@ -248,14 +267,14 @@ class TutorController extends Controller
             $full = $this->tutor->explainStream(
                 $user, $topic, $chapter, $subject, $history, $prompt,
                 fn (string $delta) => $emit('delta', ['text' => $delta]),
-                $mode,
+                $mode, $notesContext,
             );
 
             // If streaming produced nothing (e.g. transient upstream error),
             // fall back to the retrying non-streaming path so the student still
             // gets an answer.
             if ($full === '') {
-                $full = $this->tutor->explain($user, $topic, $chapter, $subject, $history, $prompt, $mode);
+                $full = $this->tutor->explain($user, $topic, $chapter, $subject, $history, $prompt, $mode, $notesContext);
                 if ($full !== '') {
                     $emit('delta', ['text' => $full]);
                 }
@@ -316,5 +335,36 @@ class TutorController extends Controller
     protected function authorizeSession(Request $request, ChatSession $session): void
     {
         abort_unless($session->user_id === $request->user()->id, 403, 'Not your session.');
+    }
+
+    /**
+     * Build a budget-capped context block from the notes the student attached
+     * (owned + ready only). Prefers each note's summary, falls back to its raw
+     * extracted text. Returns '' when nothing usable is attached.
+     */
+    protected function notesContextFor($user, array $noteIds): string
+    {
+        $noteIds = array_values(array_filter(array_map('intval', $noteIds)));
+        if (empty($noteIds)) {
+            return '';
+        }
+
+        $notes = $user->notes()
+            ->whereIn('id', $noteIds)
+            ->where('status', 'ready')
+            ->get(['title', 'summary', 'extracted_text']);
+
+        $budget = 6000; // chars across all attached notes
+        $parts = [];
+        foreach ($notes as $n) {
+            $body = trim((string) ($n->summary ?: $n->extracted_text));
+            if ($body === '') continue;
+            $body = mb_substr($body, 0, $budget);
+            $parts[] = "[{$n->title}]\n{$body}";
+            $budget -= mb_strlen($body);
+            if ($budget <= 0) break;
+        }
+
+        return implode("\n\n", $parts);
     }
 }

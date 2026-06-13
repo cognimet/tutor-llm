@@ -8,6 +8,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && docker-php-ext-install pdo pdo_sqlite pdo_pgsql zip \
     && rm -rf /var/lib/apt/lists/*
 
+# Allow larger note uploads — the app caps notes at 50 MB/topic, but PHP's CLI
+# defaults (2M upload / 8M post) reject anything bigger with a generic
+# "file failed to upload". Lift them to fit a 50 MB file plus multipart overhead.
+RUN { \
+        echo "upload_max_filesize=51M"; \
+        echo "post_max_size=60M"; \
+        echo "max_file_uploads=30"; \
+    } > /usr/local/etc/php/conf.d/uploads.ini
+
 # Composer.
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 

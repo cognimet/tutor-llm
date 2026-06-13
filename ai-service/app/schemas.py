@@ -149,3 +149,45 @@ class NotesIngestResponse(BaseModel):
     flashcards: list[dict]  # [{front, back}]
     chunks_indexed: int = 0
     usage: Usage
+
+
+# ── File text extraction (notes upload) ────────────────────────────────
+class ExtractRequest(BaseModel):
+    filename: str
+    mime: str | None = None
+    content_base64: str            # raw base64 (no data: prefix)
+    languages: str = "eng+hin"     # tesseract languages for image files
+
+
+class ExtractResponse(BaseModel):
+    text: str
+    kind: str = "text"             # pdf | doc | sheet | image | text
+    meta: dict = Field(default_factory=dict)  # pages | sheets | chars ...
+    usage: Usage
+
+
+# ── Study scheduler (Day/Week/Month/Exam planner) ──────────────────────
+class StudyScheduleRequest(BaseModel):
+    topic: str
+    horizon: str = "week"          # day | week | month | exam
+    days_remaining: int | None = None   # to the exam (exam horizon)
+    exam_date: str | None = None        # ISO date, for context only
+    notes_summary: str = ""        # summary of the student's uploaded notes
+    gaps: list[dict] = Field(default_factory=list)
+    mastery: int = 0               # 0..100 composite mastery for the topic
+
+
+class ScheduleTask(BaseModel):
+    day_index: int = 0             # 0-based day offset within the horizon
+    title: str
+    detail: str = ""
+    concept: str | None = None
+    kind: str = "learn"            # learn | practice | revise | assess
+    estimated_minutes: int = 20
+
+
+class StudyScheduleResponse(BaseModel):
+    title: str = "Your study plan"
+    summary: str = ""
+    tasks: list[ScheduleTask] = Field(default_factory=list)
+    usage: Usage

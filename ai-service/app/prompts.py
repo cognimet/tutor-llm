@@ -128,6 +128,40 @@ def plan_build(topic: str, gaps: list) -> tuple[str, str]:
     return system, user
 
 
+def study_schedule(topic: str, horizon: str, days_remaining, exam_date,
+                   notes_summary: str, gaps: list, mastery: int) -> tuple[str, str]:
+    spans = {"day": "today (a single focused day)", "week": "the next 7 days",
+             "month": "the next 4 weeks", "exam": "the run-up to the exam"}
+    span = spans.get(horizon, "the next 7 days")
+    horizon_rule = {
+        "day":   "Plan ONE day only: 3–5 short tasks the student can finish today.",
+        "week":  "Plan 7 days. Use day_index 0..6. ~1–3 tasks per day; lighter near the end.",
+        "month": "Plan 4 weeks. Use day_index 0..27, but you may schedule on ~12–16 key days.",
+        "exam":  "Work backwards from the exam: learn weak concepts first, then practice, then "
+                 "revision + a final mock. Front-load the hardest gaps. End the last day with a "
+                 "light revise/assess task, not new material.",
+    }.get(horizon, "Plan 7 days using day_index 0..6.")
+    exam_ctx = ""
+    if days_remaining is not None:
+        exam_ctx = f"There are {days_remaining} day(s) until the exam. Fit the plan within them. "
+    system = (
+        "You are an expert study coach for Indian school students. You turn a topic, the "
+        "student's own notes, their concept gaps and mastery into a concrete, dated study "
+        "schedule that builds mastery without burning them out. Return ONLY JSON."
+    )
+    user = (
+        f'Topic: "{topic}". Horizon: {horizon} ({span}). {exam_ctx}'
+        f'Current mastery: {mastery}/100. Open gaps: {gaps}. '
+        f'{("Notes summary: " + notes_summary[:1500]) if notes_summary else "No notes uploaded yet."}\n'
+        f'{horizon_rule} Each task has a clear action and names the concept it builds. '
+        'Mix kinds: "learn" (study/understand), "practice" (solve problems), '
+        '"revise" (recap), "assess" (a quiz/mock). Prefer the student\'s weak concepts first.\n'
+        'JSON shape: {"title","summary","tasks":[{"day_index":int,"title","detail",'
+        '"concept","kind":"learn|practice|revise|assess","estimated_minutes":int}]}'
+    )
+    return system, user
+
+
 def notes_ingest(text: str, topic: str | None) -> tuple[str, str]:
     system = ("You summarise a student's own study notes and produce flashcards from them. "
               "Return ONLY JSON.")

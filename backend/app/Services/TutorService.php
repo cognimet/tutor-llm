@@ -42,9 +42,9 @@ class TutorService
     /**
      * @param array $history  [['role' => 'user'|'tutor', 'content' => '...'], ...]
      */
-    public function explain(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach'): string
+    public function explain(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = ''): string
     {
-        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode);
+        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext);
 
         // Pass the topic so the AI service grounds the reply in retrieved
         // curriculum (RAG); falls back to ungrounded if nothing is indexed.
@@ -59,9 +59,9 @@ class TutorService
      * returns the full reply. Returns '' if nothing streamed (caller may fall
      * back to explain()).
      */
-    public function explainStream(User $student, string $topic, string $chapter, string $subject, array $history, string $message, callable $onDelta, string $mode = 'teach'): string
+    public function explainStream(User $student, string $topic, string $chapter, string $subject, array $history, string $message, callable $onDelta, string $mode = 'teach', string $notesContext = ''): string
     {
-        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode);
+        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext);
 
         $reply = $this->ai->stream($system, $user, $onDelta, $topic);
         $this->meter($student, 'chat', ['topic' => $topic, 'streamed' => true, 'mode' => $mode]);
@@ -146,8 +146,13 @@ class TutorService
     }
 
     /** Shared prompt builder for the tutor chat (text + streaming). */
-    protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach'): array
+    protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = ''): array
     {
+        $notesBlock = trim($notesContext) === '' ? '' :
+            "\nThe student attached their own study notes for this question. Treat them as the "
+            . "primary reference — answer from them, quote/cite them where helpful, and gently flag "
+            . "anything in them that looks wrong:\n\"\"\"\n" . trim($notesContext) . "\n\"\"\"\n";
+
         $system = $this->tutorPersona($student)
             . $this->mind->promptContext($student, $topic)
             . "\nYou are tutoring strictly within this topic: \"{$topic}\" "
@@ -158,6 +163,7 @@ class TutorService
             . "bullet or numbered lists for steps, and `inline code` for variables. "
             . "Write mathematics in LaTeX: inline as \$...\$ and display equations as \$\$...\$\$. "
             . "Keep it concise and encouraging.\n"
+            . $notesBlock
             . $this->visualGuide();
 
         $convo = '';

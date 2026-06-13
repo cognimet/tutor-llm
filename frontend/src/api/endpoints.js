@@ -51,6 +51,53 @@ export const tutorApi = {
   },
 };
 
+// --- Student: study notes (uploaded files, kept per topic) ---
+export const notesApi = {
+  // params: { topic_id?, topic_name }
+  list: (params) => api.get("/tutor/notes", { params }).then((r) => r.data),
+  upload: (file, ctx, onProgress) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (ctx.topic_id) form.append("topic_id", ctx.topic_id);
+    form.append("topic_name", ctx.topic_name || "");
+    if (ctx.chapter_name) form.append("chapter_name", ctx.chapter_name);
+    if (ctx.subject_name) form.append("subject_name", ctx.subject_name);
+    return api.post("/tutor/notes", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 200000, // extraction + summarise can take a while
+      onUploadProgress: onProgress,
+    }).then((r) => r.data.note);
+  },
+  get: (id) => api.get(`/tutor/notes/${id}`).then((r) => r.data.note),
+  remove: (id) => api.delete(`/tutor/notes/${id}`).then((r) => r.data),
+};
+
+// --- Student: Day/Week/Month/Exam planner ---
+export const plannerApi = {
+  // params: { topic_id?, topic_name }
+  index: (params) => api.get("/tutor/planner", { params }).then((r) => r.data),
+  generate: (payload) =>
+    api.post("/tutor/planner/generate", payload, { timeout: 200000 }).then((r) => r.data.plan),
+  replan: (planId) =>
+    api.post(`/tutor/planner/${planId}/replan`, {}, { timeout: 200000 }).then((r) => r.data.plan),
+  toggleTask: (taskId) => api.patch(`/tutor/planner/tasks/${taskId}/toggle`).then((r) => r.data.task),
+  archive: (planId) => api.delete(`/tutor/planner/${planId}`).then((r) => r.data),
+};
+
+// --- Student: spaced-repetition flashcards ---
+export const flashcardsApi = {
+  index: (params) => api.get("/tutor/flashcards", { params }).then((r) => r.data),
+  due: (params) => api.get("/tutor/flashcards/due", { params }).then((r) => r.data.flashcards),
+  review: (cardId, grade) =>
+    api.post(`/tutor/flashcards/${cardId}/review`, { grade }).then((r) => r.data.flashcard),
+};
+
+// --- Student: Mistake Notebook ---
+export const mistakesApi = {
+  index: (params) => api.get("/tutor/mistakes", { params }).then((r) => r.data.mistakes),
+  resolve: (id) => api.patch(`/tutor/mistakes/${id}/resolve`).then((r) => r.data.mistake),
+};
+
 // --- Student: assessment + gaps ---
 // Generous per-call timeouts so a hung AI request fails (and shows a retry)
 // instead of leaving the modal stuck on "loading"/"Checking…" forever. The

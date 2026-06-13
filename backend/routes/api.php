@@ -8,8 +8,12 @@ use App\Http\Controllers\Api\AdminUsageController;
 use App\Http\Controllers\Api\AssessmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CurriculumController;
+use App\Http\Controllers\Api\FlashcardController;
 use App\Http\Controllers\Api\LearningPlanController;
+use App\Http\Controllers\Api\MistakeController;
+use App\Http\Controllers\Api\NotesController;
 use App\Http\Controllers\Api\ParentController;
+use App\Http\Controllers\Api\PlannerController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\TutorController;
 use App\Http\Controllers\Api\UsageController;
@@ -66,6 +70,31 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/plans/generate', [LearningPlanController::class, 'generate'])
             ->middleware('token.gate:plan');
         Route::patch('/plans/items/{item}/toggle', [LearningPlanController::class, 'toggleItem']);
+
+        // Study notes: upload files (pdf/doc/sheet/image/text) kept per topic.
+        Route::get('/tutor/notes', [NotesController::class, 'index']);
+        Route::post('/tutor/notes', [NotesController::class, 'store'])
+            ->middleware('token.gate:notes');
+        Route::get('/tutor/notes/{note}', [NotesController::class, 'show']);
+        Route::delete('/tutor/notes/{note}', [NotesController::class, 'destroy']);
+
+        // Day/Week/Month/Exam planner (notes + gaps + mastery + exam countdown)
+        Route::get('/tutor/planner', [PlannerController::class, 'index']);
+        Route::post('/tutor/planner/generate', [PlannerController::class, 'generate'])
+            ->middleware('token.gate:plan');
+        Route::post('/tutor/planner/{plan}/replan', [PlannerController::class, 'replan'])
+            ->middleware('token.gate:plan');
+        Route::patch('/tutor/planner/tasks/{task}/toggle', [PlannerController::class, 'toggleTask']);
+        Route::delete('/tutor/planner/{plan}', [PlannerController::class, 'destroy']);
+
+        // Spaced-repetition flashcards (from notes + mistakes)
+        Route::get('/tutor/flashcards', [FlashcardController::class, 'index']);
+        Route::get('/tutor/flashcards/due', [FlashcardController::class, 'due']);
+        Route::post('/tutor/flashcards/{card}/review', [FlashcardController::class, 'review']);
+
+        // Mistake Notebook (auto-collected from wrong assessment answers)
+        Route::get('/tutor/mistakes', [MistakeController::class, 'index']);
+        Route::patch('/tutor/mistakes/{mistake}/resolve', [MistakeController::class, 'resolve']);
 
         // Progress snapshot + credit meter
         Route::get('/progress', [ProgressController::class, 'summary']);

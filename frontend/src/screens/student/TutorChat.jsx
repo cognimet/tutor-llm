@@ -5,15 +5,18 @@ import {
   ChevronRight, ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
   Brain, Mic, MicOff, Camera, Maximize2, PenLine,
+  Sparkles as SparklesIcon, CalendarClock, Paperclip,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
-import { tutorApi } from "../../api/endpoints.js";
+import { tutorApi, plannerApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
 import Markdown from "../../ui/Markdown.jsx";
 import RichMessage from "../../ui/RichMessage.jsx";
 import AssessmentFlow from "./AssessmentFlow.jsx";
 import TutorMind from "./TutorMind.jsx";
 import Whiteboard from "../../ui/Whiteboard.jsx";
+import StudyHub from "../../ui/StudyHub.jsx";
+import NotesPicker from "../../ui/NotesPicker.jsx";
 
 const STARTERS = (t) => [
   { icon: "💡", label: `Explain "${t}" simply` },
@@ -305,7 +308,7 @@ function ResponseReader({ message, onClose }) {
         className="fixed right-4 top-4 z-10 grid h-10 w-10 place-items-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white">
         <X className="h-5 w-5" />
       </button>
-      <div className="mx-auto w-full max-w-3xl px-5 py-16 sm:px-8 sm:py-20">
+      <div className="mx-auto w-full max-w-3xl px-5 py-16 sm:px-8 sm:py-20 xl:max-w-4xl">
         <RichMessage text={message.content} className="md-lg" />
       </div>
     </div>
@@ -457,6 +460,10 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [listening, setListening] = useState(false); // voice-to-text active
   const [boardOpen, setBoardOpen] = useState(false); // whiteboard overlay
   const boardStrokes = useRef([]);                   // board survives close/reopen
+  const [studyTab, setStudyTab] = useState(null);    // open Study hub at this tab (null = closed)
+  const [bigAssess, setBigAssess] = useState(false); // big (exam-scope) assessment
+  const [attached, setAttached] = useState([]);      // notes riding with the next message [{id,title}]
+  const [examDate, setExamDate] = useState(null);    // soonest exam date for the countdown chip
 
   const scrollRef = useRef(null);
   const taRef = useRef(null);
@@ -479,6 +486,29 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     if (!id) return;
     try { setMind(await tutorApi.mind(id)); } catch { /* ignore */ }
   }, []);
+
+  // Soonest exam date for this topic → drives the header countdown chip.
+  const loadExam = useCallback(async () => {
+    try {
+      const params = ctx.topic_id ? { topic_id: ctx.topic_id } : { topic_name: ctx.topic_name };
+      const data = await plannerApi.index(params);
+      setExamDate(data.exam_date || null);
+    } catch { /* ignore */ }
+  }, [ctx.topic_id, ctx.topic_name]);
+
+  const examDaysLeft = useMemo(() => {
+    if (!examDate) return null;
+    const d = new Date(examDate); d.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return Math.round((d.getTime() - today.getTime()) / 86400000);
+  }, [examDate]);
+
+  // Re-explain from the Mistake Notebook: close the hub and ask the tutor.
+  const reExplain = useCallback((text) => {
+    setStudyTab(null);
+    send(text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, streaming, attached]);
 
   const stopSpeaking = useCallback(() => {
     try { window.speechSynthesis?.cancel(); } catch { /* */ }
@@ -524,6 +554,8 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
       }
     })();
     loadSessions();
+    loadExam();
+    setAttached([]); // don't carry attachments across topics
     return () => { alive = false; abortRef.current?.abort(); stopSpeaking(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.topic_id, ctx.topic_name]);
@@ -574,7 +606,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") {
-        if (boardOpen) { return; } // the whiteboard handles its own Esc
+        if (boardOpen || studyTab) { return; } // these overlays handle their own Esc
         if (showShortcuts) { setShowShortcuts(false); return; }
         if (menuOpen) { setMenuOpen(false); return; }
         if (drawerOpen) { setDrawerOpen(false); return; }
@@ -597,7 +629,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streaming, showShortcuts, menuOpen, drawerOpen, boardOpen]);
+  }, [streaming, showShortcuts, menuOpen, drawerOpen, boardOpen, studyTab]);
 
   const onScroll = () => {
     const el = scrollRef.current;
@@ -660,11 +692,18 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     const value = (text ?? input).trim();
     if (!value || streaming || !sessionId) return;
     stopSpeaking();
-    setMessages((m) => [...m, { role: "user", content: value, created_at: new Date().toISOString() }]);
+    const noteIds = attached.map((n) => n.id);
+    setMessages((m) => [...m, {
+      role: "user", content: value, created_at: new Date().toISOString(),
+      meta: noteIds.length ? { notes: attached } : undefined,
+    }]);
     setInput("");
     saveDraft(sessionId, "");
+    setAttached([]); // notes attach to this one message
     if (taRef.current) taRef.current.style.height = "auto";
-    runStream(`/tutor/sessions/${sessionId}/stream`, { message: value, mode });
+    runStream(`/tutor/sessions/${sessionId}/stream`, {
+      message: value, mode, ...(noteIds.length ? { note_ids: noteIds } : {}),
+    });
   };
 
   // Snap-a-doubt: photo -> OCR -> auto-send through the normal tutor flow.
@@ -924,8 +963,21 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             <span className={`hidden items-center gap-1.5 rounded-full ${t.soft} px-2.5 py-1 text-[11px] font-extrabold ${t.text} xl:inline-flex`}>
               <ShieldCheck className="h-3.5 w-3.5" /> Topic-scoped
             </span>
-            <button onClick={() => setAssessing(true)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br ${t.grad} px-3 py-2 text-xs font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
-              <ClipboardCheck className="h-4 w-4" /> <span className="hidden sm:inline">Check understanding</span><span className="sm:hidden">Quiz</span>
+            {/* Exam countdown — opens the planner */}
+            {examDaysLeft !== null && examDaysLeft >= 0 && (
+              <button onClick={() => setStudyTab("plan")} title="Open your exam plan"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-extrabold text-amber-600 transition-colors hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                <CalendarClock className="h-3.5 w-3.5" />
+                {examDaysLeft === 0 ? "Exam today" : `${examDaysLeft}d to exam`}
+              </button>
+            )}
+            <button onClick={() => setStudyTab("plan")} title="Study hub — notes, planner, flashcards"
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br ${t.grad} px-3 py-2 text-xs font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
+              <SparklesIcon className="h-4 w-4" /> <span className="hidden sm:inline">Study</span>
+            </button>
+            <button onClick={() => setAssessing(true)} title="Check understanding"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 transition-colors hover:text-indigo-600 dark:text-slate-300 dark:ring-white/10 dark:hover:text-indigo-300">
+              <ClipboardCheck className="h-5 w-5" />
             </button>
             <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-slate-200 dark:bg-white/10 sm:block" />
             <button onClick={() => toggleSide("chats")} title="Recent chats"
@@ -981,7 +1033,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                 onBoard={() => setBoardOpen(true)}
               />
             ) : (
-              <div className="mx-auto w-full max-w-3xl space-y-8 px-4 pb-10 pt-8 sm:px-6">
+              <div className="mx-auto w-full max-w-3xl space-y-8 px-4 pb-10 pt-8 sm:px-6 xl:max-w-4xl 2xl:max-w-5xl">
                 {messages.map((m, i) => {
                   const isUser = m.role === "user";
                   const isLastTutor = i === lastTutorIdx;
@@ -994,6 +1046,15 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                     return (
                       <div key={m.id ?? `tmp-${i}`} className="msg-in flex justify-end">
                         <div className="group flex min-w-0 max-w-[85%] flex-col items-end gap-1 sm:max-w-[75%]">
+                          {Array.isArray(m.meta?.notes) && m.meta.notes.length > 0 && (
+                            <div className="flex flex-wrap justify-end gap-1">
+                              {m.meta.notes.map((n) => (
+                                <span key={n.id} className="inline-flex max-w-[12rem] items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-500 ring-1 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/30">
+                                  <Paperclip className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{n.title}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           <div className={`rounded-3xl rounded-br-lg bg-gradient-to-br ${t.grad} px-4 py-2.5 text-[0.95rem] leading-relaxed text-white shadow-sm shadow-indigo-500/20`}>
                             <p className="whitespace-pre-wrap">{m.content}</p>
                           </div>
@@ -1074,7 +1135,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
 
           {/* Composer block — same reading column as the messages */}
           <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
-            <div className="mx-auto w-full max-w-3xl">
+            <div className="mx-auto w-full max-w-3xl xl:max-w-4xl 2xl:max-w-5xl">
             {showFollowups && (
               <div className="mb-2.5 flex flex-wrap gap-2">
                 {FOLLOWUPS.map((s) => (
@@ -1086,7 +1147,32 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
               </div>
             )}
 
+            {/* Notes attached to the next message */}
+            {attached.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {attached.map((n) => (
+                  <span key={n.id} className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-extrabold text-indigo-600 ring-1 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/30">
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{n.title}</span>
+                    <button onClick={() => setAttached((a) => a.filter((x) => x.id !== n.id))} title="Remove" className="shrink-0 hover:text-indigo-800 dark:hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-end gap-1.5 rounded-[1.75rem] bg-white dark:bg-slate-800 p-2 shadow-lg shadow-slate-200/60 dark:shadow-black/20 ring-1 ring-slate-200 dark:ring-white/10 transition-shadow focus-within:ring-2 focus-within:ring-indigo-300 sm:gap-2">
+              {/* Attach notes (upload + select) — rides with the next message */}
+              <NotesPicker
+                ctx={ctx}
+                grad={t.grad}
+                selectedIds={attached.map((n) => n.id)}
+                onToggle={(note) => setAttached((a) =>
+                  a.some((x) => x.id === note.id)
+                    ? a.filter((x) => x.id !== note.id)
+                    : [...a, { id: note.id, title: note.title }])}
+              />
               {/* Snap-a-doubt: photo -> OCR -> tutor solves it teaching-style */}
               <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onSnapFile} />
               <button
@@ -1262,6 +1348,29 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           topicId={ctx.topic_id}
           sessionId={sessionId}
           onClose={() => { setAssessing(false); loadMind(sessionId); onProgressChange?.(); }}
+        />
+      )}
+
+      {/* Big (exam-scope) assessment launched from the planner */}
+      {bigAssess && (
+        <AssessmentFlow
+          topicName={ctx.topic_name}
+          topicId={ctx.topic_id}
+          sessionId={sessionId}
+          scope="exam"
+          onClose={() => { setBigAssess(false); loadMind(sessionId); onProgressChange?.(); }}
+        />
+      )}
+
+      {/* Study hub: planner · notes · flashcards · mistakes */}
+      {studyTab && (
+        <StudyHub
+          ctx={ctx}
+          grad={t.grad}
+          initialTab={studyTab}
+          onClose={() => { setStudyTab(null); loadExam(); }}
+          onBigAssessment={() => { setStudyTab(null); setBigAssess(true); }}
+          onReExplain={reExplain}
         />
       )}
     </div>

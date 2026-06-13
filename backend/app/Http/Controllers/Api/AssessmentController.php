@@ -25,16 +25,19 @@ class AssessmentController extends Controller
             'topic_name'      => ['required', 'string', 'max:160'],
             'topic_id'        => ['nullable', 'exists:topics,id'],
             'chat_session_id' => ['nullable', 'exists:chat_sessions,id'],
-            'count'           => ['nullable', 'integer', 'min:1', 'max:8'],
+            'scope'           => ['nullable', 'in:topic,exam'],
+            'count'           => ['nullable', 'integer', 'min:1', 'max:20'],
         ]);
 
         $user = $request->user();
-        $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $data['count'] ?? 3);
+        // "exam" scope = a bigger, multi-concept assessment.
+        $count = $data['count'] ?? (($data['scope'] ?? 'topic') === 'exam' ? 12 : 3);
+        $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count);
 
         // Free-tier models occasionally rate-limit or return malformed JSON;
         // one immediate retry rescues most transient failures.
         if (empty($questions)) {
-            $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $data['count'] ?? 3);
+            $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count);
         }
 
         abort_if(
@@ -92,9 +95,10 @@ class AssessmentController extends Controller
         $user = $request->user();
         $questions = $assessment->questions->keyBy('id');
         $results = [];
+        $wrong = [];
         $score = 0;
 
-        DB::transaction(function () use ($data, $questions, $user, &$results, &$score) {
+        DB::transaction(function () use ($data, $questions, $user, &$results, &$wrong, &$score) {
             foreach ($data['answers'] as $a) {
                 $q = $questions->get($a['question_id']);
                 if (! $q) continue;
@@ -112,6 +116,18 @@ class AssessmentController extends Controller
                     'question'   => $q->question,
                     'is_correct' => $correct,
                 ];
+
+                // Keep wrong answers for the Mistake Notebook + flashcards.
+                if (! $correct) {
+                    $opts = is_array($q->options) ? $q->options : [];
+                    $wrong[] = [
+                        'concept'        => (string) ($q->concept ?: 'General'),
+                        'question'       => $q->question,
+                        'student_answer' => $opts[(int) $a['selected_index']] ?? null,
+                        'correct_answer' => $opts[(int) $q->correct_index] ?? null,
+                        'explanation'    => $q->explanation,
+                    ];
+                }
             }
         });
 
@@ -128,6 +144,35 @@ class AssessmentController extends Controller
 
         // AI gap detection.
         $detection = $this->tutor->detectGaps($user, $assessment->topic_name, $results);
+
+        // Mistake Notebook + spaced-repetition cards from every wrong answer.
+        foreach ($wrong as $w) {
+            $mistake = $user->mistakes()->create([
+                'topic_id'       => $assessment->topic_id,
+                'topic_name'     => $assessment->topic_name,
+                'concept'        => $w['concept'],
+                'question'       => $w['question'],
+                'student_answer' => $w['student_answer'],
+                'correct_answer' => $w['correct_answer'],
+                'explanation'    => $w['explanation'],
+                'source'         => 'assessment',
+                'source_id'      => $assessment->id,
+            ]);
+
+            $back = trim((string) $w['correct_answer']
+                . ($w['explanation'] ? "\n\n" . $w['explanation'] : ''));
+            if ($back !== '') {
+                $user->flashcards()->create([
+                    'topic_id'    => $assessment->topic_id,
+                    'topic_name'  => $assessment->topic_name,
+                    'source_type' => 'mistake',
+                    'source_id'   => $mistake->id,
+                    'front'       => $w['question'],
+                    'back'        => $back,
+                    'due_at'      => now(),
+                ]);
+            }
+        }
 
         foreach ($detection['gaps'] as $g) {
             $user->knowledgeGaps()->create([
