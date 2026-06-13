@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   X, CalendarDays, FileText, Layers, AlertTriangle, Upload, Loader2,
   Check, RefreshCw, Sparkles, Trash2, ClipboardCheck, RotateCcw,
-  BookOpen, Target, Repeat, PenLine, ChevronRight, CalendarClock,
+  BookOpen, Target, Repeat, PenLine, ChevronRight, CalendarClock, Activity,
 } from "lucide-react";
-import { notesApi, plannerApi, flashcardsApi, mistakesApi } from "../api/endpoints.js";
+import { notesApi, plannerApi, flashcardsApi, mistakesApi, telemetryApi } from "../api/endpoints.js";
 import { NoteIcon, fmtBytes } from "./NotesPicker.jsx";
 import TutorMind from "../screens/student/TutorMind.jsx";
+import Reminders from "./Reminders.jsx";
+import LearnerStage from "./LearnerStage.jsx";
 
 /* ----------------------------------------------------------------- dates */
 const MS_DAY = 86400000;
@@ -37,6 +39,7 @@ const TABS = [
   ["fix", "What to work on", Target],
   ["notes", "Notes", FileText],
   ["cards", "Cards", Layers],
+  ["me", "Me", Activity],
 ];
 
 /* ================================================================== shell */
@@ -50,6 +53,12 @@ export default function StudyHub({ ctx, grad, initialTab = "plan", mind, onClose
     document.body.style.overflow = "hidden";
     return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
   }, [onClose]);
+
+  // Engagement telemetry: which Study-hub panel the student opens (feeds the
+  // learner stage — "is the student using our tools?").
+  useEffect(() => {
+    telemetryApi.send([{ type: "panel_open", topic_name: ctx.topic_name, topic_id: ctx.topic_id, meta: { tab } }]);
+  }, [tab, ctx.topic_name, ctx.topic_id]);
 
   return (
     <div className="msg-in fixed inset-0 z-[60] flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -86,6 +95,7 @@ export default function StudyHub({ ctx, grad, initialTab = "plan", mind, onClose
           {tab === "fix" && <FixTab ctx={ctx} mind={mind} onReExplain={onReExplain} />}
           {tab === "notes" && <NotesTab ctx={ctx} grad={grad} />}
           {tab === "cards" && <FlashcardsTab ctx={ctx} grad={grad} />}
+          {tab === "me" && <LearnerStage />}
         </div>
       </div>
     </div>
@@ -154,6 +164,10 @@ function PlanTab({ ctx, grad, onBigAssessment }) {
 
   return (
     <div className="space-y-5">
+      {/* In-app Plan Reminders: next focus + exam countdowns + today/tomorrow/
+          overdue across every topic (re-fetches whenever this topic's plans change). */}
+      <Reminders grad={grad} onReload={plans.length} />
+
       {/* Exam countdown */}
       {(() => {
         const exam = plans.map((p) => p.exam_date).filter(Boolean).sort()[0];

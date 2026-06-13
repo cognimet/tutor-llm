@@ -20,6 +20,7 @@ collection is auto-recreated and content re-indexed on the next index run.
 import hashlib
 import logging
 import struct
+import uuid
 
 import httpx
 
@@ -147,31 +148,36 @@ def _client():
     return AsyncQdrantClient(url=settings.qdrant_url)
 
 
-async def ensure_collection() -> None:
-    """Create the collection, recreating it if the embedder's dim changed."""
+async def ensure_collection(collection: str | None = None) -> None:
+    """Create the collection, recreating it if the embedder's dim changed.
+
+    Defaults to the curriculum collection; pass a name to manage the
+    `documents` / `events` collections (all share the active embedder's dim).
+    """
     if not settings.qdrant_url:
         return
+    collection = collection or settings.qdrant_collection
     from qdrant_client import models as qm
     dim = embed_dim()
     client = _client()
     try:
-        exists = await client.collection_exists(settings.qdrant_collection)
+        exists = await client.collection_exists(collection)
         if exists:
             # If the existing collection's dimension no longer matches the
             # active embedder (e.g. switched gemini-768 -> local-384), drop and
             # recreate so indexing/retrieval don't fail on a size mismatch.
-            info = await client.get_collection(settings.qdrant_collection)
+            info = await client.get_collection(collection)
             current = info.config.params.vectors.size
             if current == dim:
                 return
             log.warning("collection dim %s != embedder dim %s — recreating", current, dim)
-            await client.delete_collection(settings.qdrant_collection)
+            await client.delete_collection(collection)
         await client.create_collection(
-            collection_name=settings.qdrant_collection,
+            collection_name=collection,
             vectors_config=qm.VectorParams(size=dim, distance=qm.Distance.COSINE),
         )
         log.info("created qdrant collection %s (dim=%s, embedder=%s)",
-                 settings.qdrant_collection, dim, embed_provider())
+                 collection, dim, embed_provider())
     finally:
         await client.close()
 
@@ -227,32 +233,138 @@ async def delete_topic(topic: str) -> None:
         await client.close()
 
 
-async def retrieve(query: str, topic: str | None = None, k: int | None = None) -> list[str]:
-    """Return up to k curriculum chunk bodies relevant to the query.
+async def index_documents(user_id: int, note_id: int, topic: str | None,
+                           chunks: list[str]) -> list[str]:
+    """Embed + upsert an uploaded note's text chunks into the `documents`
+    collection so the tutor can later retrieve the student's OWN material.
+    Returns the Qdrant point ids (referenced from the graph's :Note node)."""
+    chunks = [c for c in (c.strip() for c in chunks) if c]
+    if not settings.qdrant_url or not chunks:
+        return []
+    from qdrant_client import models as qm
+    await ensure_collection(settings.qdrant_doc_collection)
+    client = _client()
+    ids: list[str] = []
+    try:
+        structs = []
+        for ch in chunks:
+            pid = str(uuid.uuid4())
+            vector = await embed(f"{topic or ''}: {ch}")
+            structs.append(qm.PointStruct(id=pid, vector=vector, payload={
+                "kind": "document", "user_id": int(user_id), "note_id": int(note_id),
+                "topic": topic, "body": ch,
+            }))
+            ids.append(pid)
+        await client.upsert(collection_name=settings.qdrant_doc_collection, points=structs)
+        return ids
+    except Exception as e:  # noqa: BLE001
+        log.warning("index_documents failed: %s", e)
+        return ids
+    finally:
+        await client.close()
 
-    Returns [] (not an error) when retrieval is unavailable so the tutor still
-    works without a populated vector store.
+
+async def index_event(user_id: int, type: str, topic: str | None, text: str) -> str | None:
+    """Embed one tracked user action into the `events` collection for semantic
+    recall ("what has this student struggled with?"). Returns the point id."""
+    text = (text or "").strip()
+    if not settings.qdrant_url or not text:
+        return None
+    from qdrant_client import models as qm
+    await ensure_collection(settings.qdrant_event_collection)
+    client = _client()
+    pid = str(uuid.uuid4())
+    try:
+        vector = await embed(f"{type} {topic or ''}: {text}")
+        await client.upsert(collection_name=settings.qdrant_event_collection, points=[
+            qm.PointStruct(id=pid, vector=vector, payload={
+                "kind": "event", "user_id": int(user_id), "type": type,
+                "topic": topic, "body": text[:2000],
+            })])
+        return pid
+    except Exception as e:  # noqa: BLE001
+        log.warning("index_event failed: %s", e)
+        return None
+    finally:
+        await client.close()
+
+
+async def _search(collection: str, text: str, k: int, must: list | None = None) -> list[str]:
+    """Vector search one collection; returns chunk bodies ([] on any error)."""
+    if not settings.qdrant_url:
+        return []
+    try:
+        from qdrant_client import models as qm
+        vector = await embed(text)
+        client = _client()
+        try:
+            flt = qm.Filter(must=must) if must else None
+            res = await client.query_points(collection_name=collection, query=vector,
+                                            limit=k, query_filter=flt, with_payload=True)
+            return [p.payload.get("body", "") for p in res.points if p.payload]
+        finally:
+            await client.close()
+    except Exception as e:  # noqa: BLE001 — a missing collection / down store is fine
+        log.debug("search %s failed: %s", collection, e)
+        return []
+
+
+def _topic_filter(topic: str | None):
+    from qdrant_client import models as qm
+    return [qm.FieldCondition(key="topic", match=qm.MatchValue(value=topic))] if topic else None
+
+
+async def retrieve(query: str, topic: str | None = None, student_id: int | None = None,
+                   k: int | None = None) -> list[str]:
+    """Graph-aware retrieval. Layers vetted curriculum, prerequisite material,
+    the student's weak-concept material, and the student's own notes.
+
+    1) Qdrant `curriculum`, topic-filtered (the vetted source of truth).
+    2) Neo4j → prerequisite topics + the student's weak concepts → Qdrant those.
+    3) Qdrant `documents` filtered to the student (their uploaded notes).
+
+    Returns [] (never raises) when retrieval is unavailable, so the tutor still
+    works ungrounded.
     """
     if not settings.qdrant_url:
         return []
     k = k or settings.rag_top_k
-    try:
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def add(bodies: list[str]) -> None:
+        for b in bodies:
+            b = (b or "").strip()
+            key = b[:120]
+            if b and key not in seen:
+                seen.add(key)
+                out.append(b)
+
+    # 1) primary curriculum search (preserve the old topic-prefixed query)
+    add(await _search(settings.qdrant_collection,
+                      query if not topic else f"{topic}: {query}", k, _topic_filter(topic)))
+
+    # 2) graph expansion: prerequisite topics + this student's weak concepts
+    if topic:
+        try:
+            from . import graph
+            for pt in await graph.prereq_topics(topic, k=2):
+                add(await _search(settings.qdrant_collection, f"{pt}: {pt}", 2, _topic_filter(pt)))
+            if student_id:
+                for w in await graph.weak_concepts(student_id, topic, k=3):
+                    add(await _search(settings.qdrant_collection, f"{topic}: {w}", 2, _topic_filter(topic)))
+        except Exception as e:  # noqa: BLE001
+            log.debug("graph expansion skipped: %s", e)
+
+    # 3) the student's own uploaded documents for this topic
+    if student_id:
         from qdrant_client import models as qm
-        vector = await embed(query if not topic else f"{topic}: {query}")
-        client = _client()
-        flt = None
+        must = [qm.FieldCondition(key="user_id", match=qm.MatchValue(value=int(student_id)))]
         if topic:
-            flt = qm.Filter(must=[qm.FieldCondition(
-                key="topic", match=qm.MatchValue(value=topic))])
-        res = await client.query_points(
-            collection_name=settings.qdrant_collection,
-            query=vector, limit=k, query_filter=flt, with_payload=True,
-        )
-        await client.close()
-        return [p.payload.get("body", "") for p in res.points if p.payload]
-    except Exception as e:  # noqa: BLE001 — never let RAG break a chat turn
-        log.warning("qdrant retrieve failed: %s", e)
-        return []
+            must.append(qm.FieldCondition(key="topic", match=qm.MatchValue(value=topic)))
+        add(await _search(settings.qdrant_doc_collection, f"{topic or ''}: {query}", 3, must))
+
+    return out[: max(k, 6)]
 
 
 async def status() -> dict:
@@ -285,11 +397,13 @@ async def status() -> dict:
     try:
         client = _client()
         try:
-            if await client.collection_exists(settings.qdrant_collection):
-                info = await client.get_collection(settings.qdrant_collection)
-                out["points"] = info.points_count
-            else:
-                out["points"] = 0
+            async def _count(name):
+                if await client.collection_exists(name):
+                    return (await client.get_collection(name)).points_count
+                return 0
+            out["points"] = await _count(settings.qdrant_collection)
+            out["documents"] = await _count(settings.qdrant_doc_collection)
+            out["events"] = await _count(settings.qdrant_event_collection)
         finally:
             await client.close()
     except Exception as e:  # noqa: BLE001

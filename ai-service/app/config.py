@@ -68,7 +68,14 @@ class Settings(BaseSettings):
     # ── Vector DB (Qdrant) for RAG ─────────────────────────────────────
     qdrant_url: str | None = None      # e.g. http://qdrant:6333
     qdrant_collection: str = "curriculum"
+    qdrant_doc_collection: str = "documents"   # uploaded study-note chunks
+    qdrant_event_collection: str = "events"    # one embedding per tracked action
     rag_top_k: int = 5
+
+    # ── Neo4j knowledge graph (GraphRAG "AI mind"; no vectors stored) ──
+    neo4j_uri: str | None = None       # e.g. bolt://neo4j:7687 (blank = graph off)
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "tutopass"
 
     # Embedding backend: auto | local | gemini | openai | mock
     #   "auto" prefers LOCAL fastembed (free, no API key, no external call),

@@ -1,13 +1,14 @@
-# Full stack: Laravel API + Python AI service + Postgres + Redis + Qdrant + React.
+# Full stack: Laravel API + Python AI service + Postgres + Redis + Qdrant + Neo4j + React.
 # Usage:
 #   1) cp .env.example .env   (paste your Gemini key, or leave AI_MOCK=true)
 #   2) docker compose up --build
 #   3) open http://localhost:5173
 #
 # Architecture: Laravel owns data + orchestration and calls the Python AI
-# service (which owns all LLM/RAG work) over internal REST. Postgres is the
-# system of record; Redis backs cache/queue + token counters; Qdrant stores
-# curriculum embeddings for RAG.
+# service (which owns all LLM/RAG/graph work) over internal REST. Postgres is the
+# system of record; Redis backs cache/queue + token counters; Qdrant stores all
+# embeddings (curriculum, documents, events); Neo4j stores the knowledge graph
+# that powers the GraphRAG "AI mind" (no vectors — it references Qdrant points).
 services:
   postgres:
     image: postgres:16-alpine
@@ -37,6 +38,30 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  # Neo4j is the knowledge-graph / reasoning layer for the GraphRAG "AI mind":
+  # curriculum backbone, concepts + prerequisites, per-student mastery,
+  # misconceptions, focus, and an event node per user action. It stores NO
+  # embeddings — vectors live in Qdrant; graph nodes reference Qdrant point ids.
+  neo4j:
+    image: neo4j:5.24-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-tutopass}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_max__size: 1G
+    ports:
+      - "7474:7474"   # Neo4j Browser
+      - "7687:7687"   # Bolt
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-tutopass} 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      # Neo4j takes ~30-45s to open its Bolt listener; don't count early
+      # failures (avoids the ai-service connection-refused storm on first boot).
+      start_period: 45s
+
   ai-service:
     build: ./ai-service
     ports:
@@ -61,6 +86,14 @@ services:
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: curriculum
+      # Two more Qdrant collections back the GraphRAG flow: uploaded study-note
+      # chunks, and an embedding per tracked user action (for semantic recall).
+      QDRANT_DOC_COLLECTION: ${QDRANT_DOC_COLLECTION:-documents}
+      QDRANT_EVENT_COLLECTION: ${QDRANT_EVENT_COLLECTION:-events}
+      # Neo4j knowledge graph (graph + reasoning; no vectors).
+      NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-tutopass}
       # Embeddings: "auto" prefers local fastembed (free, no API key, no 404s).
       # Override with gemini/openai/mock if desired.
       EMBED_BACKEND: ${EMBED_BACKEND:-auto}
@@ -69,8 +102,13 @@ services:
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key}
     volumes:
       - fastembed_cache:/models
+    # Wait for Neo4j to be HEALTHY (Bolt accepting connections) before starting,
+    # so schema init + the first graph:sync don't race a half-booted Neo4j.
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
 
   backend:
     build: ./backend
@@ -125,5 +163,6 @@ services:
 volumes:
   pg_data:
   qdrant_data:
+  neo4j_data:
   fastembed_cache:
   app_storage:

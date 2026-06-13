@@ -85,6 +85,7 @@ if [ "$DB_CONNECTION" = "pgsql" ]; then
     echo "✅ Seeded demo accounts (password: password): admin@tuto.ai · student@tuto.ai · parent@tuto.ai"
     wait_for_ai_service || true
     php artisan rag:index || echo "⚠️  RAG index skipped (run 'php artisan rag:index' later)."
+    php artisan graph:sync || echo "⚠️  Graph sync skipped (run 'php artisan graph:sync' later)."
   elif [ "$HAS_MIGRATIONS_TABLE" = "0" ]; then
     echo "🆕 Fresh database detected — first-time create + seed…"
     php artisan migrate --seed --force
@@ -92,12 +93,14 @@ if [ "$DB_CONNECTION" = "pgsql" ]; then
     # Index seeded curriculum into the vector store (non-fatal).
     wait_for_ai_service || true
     php artisan rag:index || echo "⚠️  RAG index skipped (run 'php artisan rag:index' later)."
+    php artisan graph:sync || echo "⚠️  Graph sync skipped (run 'php artisan graph:sync' later)."
   else
     echo "♻️  Existing database detected — incremental migrations only (no reseed, data preserved)."
     php artisan migrate --force || true
     # Catch up any chunks that weren't indexed on a previous boot (self-healing).
     wait_for_ai_service || true
     php artisan rag:index --pending || true
+    php artisan graph:sync --pending || true
   fi
 else
   # SQLite fallback (local, no Postgres).

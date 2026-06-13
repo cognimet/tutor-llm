@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\TopicNote;
+use App\Services\EventTracker;
 use App\Services\NotesService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -18,7 +19,10 @@ class NotesController extends Controller
     /** Per-topic upload budget (bytes). */
     public const CAP_BYTES = 52428800; // 50 MB
 
-    public function __construct(protected NotesService $notes) {}
+    public function __construct(
+        protected NotesService $notes,
+        protected EventTracker $events,
+    ) {}
 
     /** GET /tutor/notes?topic_id=&topic_name= — notes for a topic + usage. */
     public function index(Request $request)
@@ -80,8 +84,18 @@ class NotesController extends Controller
 
         // Synchronous for the MVP (extraction is local; one cheap LLM summarise).
         $this->notes->process($note);
+        $note = $note->fresh();
 
-        return response()->json(['note' => $note->fresh()], 201);
+        if ($note->status === 'ready') {
+            $this->events->track(
+                $user, EventTracker::NOTE_UPLOAD,
+                "Uploaded note '{$note->title}'" . ($note->summary ? ': ' . mb_substr($note->summary, 0, 400) : ''),
+                $note->topic_name, $note->topic_id, [],
+                ['note_id' => $note->id, 'kind' => $note->kind],
+            );
+        }
+
+        return response()->json(['note' => $note], 201);
     }
 
     /** GET /tutor/notes/{note} — full note incl. extracted text. */

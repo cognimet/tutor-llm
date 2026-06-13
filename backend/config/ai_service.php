@@ -11,4 +11,9 @@ return [
     // for structured generation (assessments). Keep above the AI service's
     // LLM_TIMEOUT so Laravel doesn't abandon a call that will still succeed.
     'timeout' => env('AI_SERVICE_TIMEOUT', 180),
+
+    // Short ceiling for GraphRAG writes/reads (event tracking, state mirror,
+    // next-focus). The graph is an enhancement, so it must never stall a chat
+    // turn — a slow/offline graph just degrades to ungrounded + Postgres-only.
+    'graph_timeout' => env('AI_GRAPH_TIMEOUT', 12),
 ];

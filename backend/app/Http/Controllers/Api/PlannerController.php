@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\StudyPlan;
 use App\Models\StudyPlanTask;
+use App\Services\EventTracker;
 use App\Services\PlannerService;
 use App\Services\ProgressService;
 use Illuminate\Http\Request;
@@ -19,6 +20,7 @@ class PlannerController extends Controller
     public function __construct(
         protected PlannerService $planner,
         protected ProgressService $progress,
+        protected EventTracker $events,
     ) {}
 
     /** GET /tutor/planner?topic_id=&topic_name= — active plans + countdown. */
@@ -57,6 +59,13 @@ class PlannerController extends Controller
         abort_if($plan->tasks->isEmpty(), 422,
             'The planner couldn\'t build a schedule just now — it may be rate-limited. Try again in a moment.');
 
+        $this->events->track(
+            $request->user(), EventTracker::PLAN_GENERATED,
+            "Generated a {$data['horizon']} study plan for {$plan->topic_name} ({$plan->tasks->count()} tasks)",
+            $plan->topic_name, $plan->topic_id, [],
+            ['horizon' => $data['horizon'], 'plan_id' => $plan->id, 'exam_date' => $data['exam_date'] ?? null],
+        );
+
         return response()->json(['plan' => $plan], 201);
     }
 
@@ -78,6 +87,13 @@ class PlannerController extends Controller
 
         if ($task->status === 'done') {
             $this->progress->recordActivity($request->user(), masteryDelta: 1);
+            $this->events->track(
+                $request->user(), EventTracker::PLAN_TASK_DONE,
+                "Completed plan task: {$task->title}",
+                $plan->topic_name, $plan->topic_id,
+                $task->concept ? [$task->concept] : [],
+                ['task_id' => $task->id, 'kind' => $task->kind],
+            );
         }
 
         return response()->json(['task' => $task]);

@@ -73,4 +73,5 @@ class User extends Authenticatable
     public function studyPlans()        { return $this->hasMany(StudyPlan::class); }
     public function flashcards()        { return $this->hasMany(Flashcard::class); }
     public function mistakes()          { return $this->hasMany(Mistake::class); }
+    public function learningEvents()    { return $this->hasMany(LearningEvent::class); }
 }

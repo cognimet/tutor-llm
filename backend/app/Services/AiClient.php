@@ -45,19 +45,21 @@ class AiClient
      * @param ?string $topic  when set, the AI service injects RAG curriculum
      *                        context for that topic before generating.
      */
-    public function text(string $system, string $user, ?string $topic = null, ?string $action = null): string
+    public function text(string $system, string $user, ?string $topic = null, ?string $action = null, ?int $studentId = null): string
     {
         $data = $this->post('/ai/text', array_filter([
             'system' => $system, 'user' => $user, 'topic' => $topic, 'action' => $action,
+            'student_id' => $studentId,
         ], fn ($v) => $v !== null));
         $this->captureUsage($data);
         return (string) ($data['text'] ?? '');
     }
 
-    public function json(string $system, string $user, array $fallback = [], ?string $topic = null, ?string $action = null): array
+    public function json(string $system, string $user, array $fallback = [], ?string $topic = null, ?string $action = null, ?int $studentId = null): array
     {
         $data = $this->post('/ai/json', array_filter([
             'system' => $system, 'user' => $user, 'fallback' => $fallback, 'topic' => $topic, 'action' => $action,
+            'student_id' => $studentId,
         ], fn ($v) => $v !== null));
         $this->captureUsage($data);
         $out = $data['data'] ?? $fallback;
@@ -79,7 +81,7 @@ class AiClient
      * Stream tutor text. Reads the AI service's SSE stream and invokes $onDelta
      * per chunk. Returns the full accumulated text ('' if nothing streamed).
      */
-    public function stream(string $system, string $user, callable $onDelta, ?string $topic = null): string
+    public function stream(string $system, string $user, callable $onDelta, ?string $topic = null, ?int $studentId = null): string
     {
         $full = '';
         try {
@@ -88,6 +90,7 @@ class AiClient
                 ->withOptions(['stream' => true])
                 ->post("{$this->url}/ai/stream", array_filter([
                     'system' => $system, 'user' => $user, 'topic' => $topic,
+                    'student_id' => $studentId,
                 ], fn ($v) => $v !== null));
 
             if (! $response->successful()) {
@@ -168,17 +171,42 @@ class AiClient
         }
     }
 
-    /** Summarise a student's notes -> {summary, flashcards:[{front,back}]}. */
-    public function notesIngest(int $studentId, string $text, ?string $topic = null): array
+    /**
+     * Summarise a student's notes -> {summary, flashcards, chunks_indexed}.
+     * When $noteId is given, the AI service also chunks + embeds the note into
+     * the Qdrant `documents` collection and links it in the graph for RAG.
+     */
+    public function notesIngest(int $studentId, string $text, ?string $topic = null,
+                                ?int $noteId = null, ?string $title = null): array
     {
         $data = $this->post('/ai/notes/ingest', array_filter([
             'student_id' => $studentId, 'text' => $text, 'topic' => $topic,
+            'note_id' => $noteId, 'title' => $title,
         ], fn ($v) => $v !== null));
         $this->captureUsage($data);
         return [
             'summary' => (string) ($data['summary'] ?? ''),
             'flashcards' => is_array($data['flashcards'] ?? null) ? $data['flashcards'] : [],
+            'chunks_indexed' => (int) ($data['chunks_indexed'] ?? 0),
         ];
+    }
+
+    /**
+     * Validate generated questions against the topic's curriculum (RAG).
+     * @return int[]  0-based indices (into $questions) to KEEP. Falls back to
+     *               all indices if the service is unavailable/returns nothing.
+     */
+    public function validateAssessment(string $topic, array $questions): array
+    {
+        $data = $this->roleCall('/ai/assessment/validate', [
+            'topic' => $topic, 'questions' => array_values($questions),
+        ]);
+        $keep = $data['keep'] ?? null;
+        if (! is_array($keep)) {
+            return array_keys(array_values($questions)); // service down -> keep all
+        }
+        return array_values(array_filter(array_map('intval', $keep),
+            fn ($i) => $i >= 0 && $i < count($questions)));
     }
 
     /** Build a dated study schedule -> {title, summary, tasks:[...]}. */

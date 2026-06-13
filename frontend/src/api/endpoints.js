@@ -84,6 +84,21 @@ export const plannerApi = {
   archive: (planId) => api.delete(`/tutor/planner/${planId}`).then((r) => r.data),
 };
 
+// --- Student: in-app Plan Reminders (today/tomorrow/overdue/exam + next focus) ---
+export const remindersApi = {
+  feed: () => api.get("/tutor/reminders").then((r) => r.data),
+};
+
+// --- Student: learner profile / "current stage" + behavioural telemetry ---
+export const profileApi = {
+  get: () => api.get("/tutor/profile").then((r) => r.data.profile),
+};
+export const telemetryApi = {
+  // Best-effort, fire-and-forget. events: [{type, topic_name?, topic_id?, duration_ms?, meta?}]
+  send: (events) =>
+    api.post("/tutor/telemetry", { events }).then((r) => r.data).catch(() => {}),
+};
+
 // --- Student: spaced-repetition flashcards ---
 export const flashcardsApi = {
   index: (params) => api.get("/tutor/flashcards", { params }).then((r) => r.data),
@@ -103,6 +118,8 @@ export const mistakesApi = {
 // instead of leaving the modal stuck on "loading"/"Checking…" forever. The
 // backend's AI_SERVICE_TIMEOUT is ~180s, so allow a little more than that.
 export const assessmentApi = {
+  // Soft learning-gate: { learned, mastery, recommend_learn, reason }.
+  readiness: (params) => api.get("/assessments/readiness", { params }).then((r) => r.data),
   generate: (payload) => api.post("/assessments/generate", payload, { timeout: 200000 }).then((r) => r.data.assessment),
   submit: (id, answers) => api.post(`/assessments/${id}/submit`, { answers }, { timeout: 120000 }).then((r) => r.data),
   history: () => api.get("/assessments/history").then((r) => r.data.assessments),

@@ -9,12 +9,15 @@ use App\Http\Controllers\Api\AssessmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CurriculumController;
 use App\Http\Controllers\Api\FlashcardController;
+use App\Http\Controllers\Api\LearnerProfileController;
 use App\Http\Controllers\Api\LearningPlanController;
 use App\Http\Controllers\Api\MistakeController;
 use App\Http\Controllers\Api\NotesController;
 use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\PlannerController;
 use App\Http\Controllers\Api\ProgressController;
+use App\Http\Controllers\Api\ReminderController;
+use App\Http\Controllers\Api\TelemetryController;
 use App\Http\Controllers\Api\TutorController;
 use App\Http\Controllers\Api\UsageController;
 use Illuminate\Support\Facades\Route;
@@ -59,6 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/tutor/messages/{message}/feedback', [TutorController::class, 'feedback']);
 
         // Mini-assessment + gap detection
+        Route::get('/assessments/readiness', [AssessmentController::class, 'readiness']); // soft learning-gate
         Route::post('/assessments/generate', [AssessmentController::class, 'generate'])
             ->middleware('token.gate:assess_gen');
         Route::post('/assessments/{assessment}/submit', [AssessmentController::class, 'submit'])
@@ -95,6 +99,13 @@ Route::middleware('auth:sanctum')->group(function () {
         // Mistake Notebook (auto-collected from wrong assessment answers)
         Route::get('/tutor/mistakes', [MistakeController::class, 'index']);
         Route::patch('/tutor/mistakes/{mistake}/resolve', [MistakeController::class, 'resolve']);
+
+        // In-app Plan Reminders (today/tomorrow/overdue/exam countdown + next focus)
+        Route::get('/tutor/reminders', [ReminderController::class, 'index']);
+
+        // Learner profile / "current stage" dashboard + behavioural telemetry
+        Route::get('/tutor/profile', [LearnerProfileController::class, 'show']);
+        Route::post('/tutor/telemetry', [TelemetryController::class, 'store']);
 
         // Progress snapshot + credit meter
         Route::get('/progress', [ProgressController::class, 'summary']);

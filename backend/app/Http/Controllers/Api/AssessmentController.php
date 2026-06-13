@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Assessment;
+use App\Services\EventTracker;
+use App\Services\LearnerProfileService;
 use App\Services\MindService;
 use App\Services\ProgressService;
+use App\Services\ReadinessService;
 use App\Services\TutorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +19,24 @@ class AssessmentController extends Controller
         protected TutorService $tutor,
         protected ProgressService $progress,
         protected MindService $mind,
+        protected EventTracker $events,
+        protected ReadinessService $readiness,
+        protected LearnerProfileService $profile,
     ) {}
+
+    // Soft learning-gate: should the student learn this topic before testing on
+    // it? Read-only; the UI nudges but never blocks (GET /assessments/readiness).
+    public function readiness(Request $request)
+    {
+        $data = $request->validate([
+            'topic_name' => ['required', 'string', 'max:160'],
+            'topic_id'   => ['nullable', 'exists:topics,id'],
+        ]);
+
+        return response()->json(
+            $this->readiness->check($request->user(), $data['topic_name'], $data['topic_id'] ?? null)
+        );
+    }
 
     // Generate a mini-assessment for a topic (AI).
     public function generate(Request $request)
@@ -192,6 +212,22 @@ class AssessmentController extends Controller
             questionsAnswered: $assessment->total,
             masteryDelta: $masteryDelta,
         );
+
+        // Mirror the updated mastery/misconceptions into the GraphRAG mind and
+        // log the assessment as a tracked event (weak concepts feed next-focus).
+        $wrongConcepts = array_values(array_unique(array_map(fn ($w) => $w['concept'], $wrong)));
+        $this->mind->syncToGraph($user, $assessment->topic_name);
+        $this->events->track(
+            $user, EventTracker::ASSESSMENT,
+            "Assessment on {$assessment->topic_name}: scored {$score}/{$assessment->total}."
+            . ($wrongConcepts ? ' Weak: ' . implode(', ', $wrongConcepts) . '.' : ''),
+            $assessment->topic_name, $assessment->topic_id, $wrongConcepts,
+            ['score' => $score, 'total' => $assessment->total],
+        );
+
+        // Recompute the learner stage and embed a snapshot into the GraphRAG
+        // mind — a milestone the AI can semantically recall ("where am I now?").
+        try { $this->profile->snapshot($user); } catch (\Throwable) { /* best-effort */ }
 
         return response()->json([
             'score'   => $score,

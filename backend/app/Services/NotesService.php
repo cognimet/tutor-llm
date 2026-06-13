@@ -48,13 +48,17 @@ class NotesService
                 return;
             }
 
-            // 2) Summarise + flashcards (one structured LLM call), metered.
-            $ingest = $this->ai->notesIngest($note->user_id, $text, $note->topic_name);
+            // 2) Summarise + flashcards (one structured LLM call), metered. The
+            //    AI service also chunks + embeds the note into Qdrant `documents`
+            //    and links it in the graph (note_id), so the tutor can later
+            //    retrieve the student's OWN material.
+            $ingest = $this->ai->notesIngest($note->user_id, $text, $note->topic_name, $note->id, $note->title);
             $this->meter($note, 'notes');
 
             $note->summary = $ingest['summary'] ?? '';
             $cards = is_array($ingest['flashcards'] ?? null) ? $ingest['flashcards'] : [];
             $meta['flashcards_count'] = count($cards);
+            $meta['chunks_indexed'] = (int) ($ingest['chunks_indexed'] ?? 0);
             $note->meta = $meta;
             $note->status = 'ready';
             $note->save();

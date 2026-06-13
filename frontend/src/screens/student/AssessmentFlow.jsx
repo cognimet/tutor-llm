@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { X, Check, ArrowRight, Sparkles, Target, ListChecks, Loader2 } from "lucide-react";
+import { X, Check, ArrowRight, Sparkles, Target, ListChecks, Loader2, BookOpen } from "lucide-react";
 import { assessmentApi, planApi } from "../../api/endpoints.js";
 
 // Stages: loading -> quiz -> result -> plan
@@ -13,6 +13,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
   const [plan, setPlan] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [gate, setGate] = useState(null); // soft learning-gate readiness payload
   // Guards: generate exactly once (React 18 StrictMode runs mount effects
   // twice in dev, which otherwise creates two assessments), and never let a
   // second submit fire while one is in flight.
@@ -43,10 +44,22 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
     loadQuiz();
   };
 
+  // Soft learning-gate: for a quick topic check, nudge the student to learn
+  // first if they haven't studied this topic / mastery is low. Never blocks —
+  // they can take it anyway. Plan-driven big assessments (scope=exam) skip it.
+  const start = async () => {
+    if (isBig) { loadQuiz(); return; }
+    try {
+      const r = await assessmentApi.readiness({ topic_name: topicName, topic_id: topicId });
+      if (r?.recommend_learn) { setGate(r); setStage("gate"); return; }
+    } catch { /* readiness is optional — fall through to the quiz */ }
+    loadQuiz();
+  };
+
   useEffect(() => {
     if (generatedRef.current) return;
     generatedRef.current = true;
-    loadQuiz();
+    start();
   }, []);
 
   const submit = async () => {
@@ -102,6 +115,29 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
                 <Sparkles className="h-4 w-4" /> Try again
               </button>
             </Centered>
+          )}
+
+          {stage === "gate" && gate && (
+            <div className="flex flex-col items-center py-10 text-center">
+              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-amber-50 text-amber-500 dark:bg-amber-500/15 dark:text-amber-300">
+                <BookOpen className="h-7 w-7" />
+              </span>
+              <p className="mt-4 text-base font-extrabold text-slate-900 dark:text-white">Learn this first?</p>
+              <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">{gate.reason}</p>
+              {typeof gate.mastery === "number" && gate.mastery > 0 && (
+                <p className="mt-2 text-[11px] font-bold text-slate-400">Current mastery: {gate.mastery}%</p>
+              )}
+              <div className="mt-6 flex w-full max-w-xs flex-col gap-2">
+                <button onClick={onClose}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 px-5 py-3 text-sm font-extrabold text-white shadow-md transition-transform active:scale-95">
+                  <BookOpen className="h-4 w-4" /> Learn first
+                </button>
+                <button onClick={loadQuiz}
+                  className="w-full rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-extrabold text-slate-500 transition-colors hover:text-slate-800 dark:border-white/10 dark:text-slate-300">
+                  Take the check anyway
+                </button>
+              </div>
+            </div>
           )}
 
           {stage === "quiz" && assessment && (

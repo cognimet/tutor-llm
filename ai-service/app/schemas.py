@@ -32,6 +32,7 @@ class StudentContext(BaseModel):
 
 class ChatTurnRequest(BaseModel):
     student: StudentContext = Field(default_factory=StudentContext)
+    student_id: int | None = None   # personalises graph-aware retrieval
     subject: str
     chapter: str
     topic: str
@@ -142,6 +143,8 @@ class NotesIngestRequest(BaseModel):
     student_id: int
     text: str  # already OCR'd text (Laravel/worker does OCR upload first)
     topic: str | None = None
+    note_id: int | None = None   # when set, the note is chunked + indexed for RAG
+    title: str | None = None
 
 
 class NotesIngestResponse(BaseModel):

@@ -46,9 +46,10 @@ class TutorService
     {
         [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext);
 
-        // Pass the topic so the AI service grounds the reply in retrieved
-        // curriculum (RAG); falls back to ungrounded if nothing is indexed.
-        $reply = $this->ai->text($system, $user, $topic);
+        // Pass the topic + student so the AI service grounds the reply in
+        // graph-aware RAG (curriculum + prerequisites + the student's weak spots
+        // and own notes); falls back to ungrounded if nothing is indexed.
+        $reply = $this->ai->text($system, $user, $topic, null, $student->id);
         $this->meter($student, 'chat', ['topic' => $topic, 'mode' => $mode]);
 
         return $reply;
@@ -63,7 +64,7 @@ class TutorService
     {
         [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext);
 
-        $reply = $this->ai->stream($system, $user, $onDelta, $topic);
+        $reply = $this->ai->stream($system, $user, $onDelta, $topic, $student->id);
         $this->meter($student, 'chat', ['topic' => $topic, 'streamed' => true, 'mode' => $mode]);
 
         return $reply;
@@ -234,7 +235,20 @@ GUIDE;
         $data = $this->ai->json($system, $user, ['questions' => []], $topic);
         $this->meter($student, 'assess_gen', ['topic' => $topic]);
 
-        return $this->normaliseQuestions($data['questions'] ?? []);
+        $questions = $this->normaliseQuestions($data['questions'] ?? []);
+
+        // Post-hoc curriculum validation: drop off-syllabus / wrongly-keyed
+        // questions. Keeps the quiz on-syllabus; never empties it (the AI service
+        // falls back to keeping all when it can't validate).
+        if (! empty($questions)) {
+            $keep = $this->ai->validateAssessment($topic, $questions);
+            $this->meter($student, 'grade', ['topic' => $topic, 'kind' => 'assess_validate']);
+            if (! empty($keep) && count($keep) < count($questions)) {
+                $questions = array_values(array_intersect_key($questions, array_flip($keep)));
+            }
+        }
+
+        return $questions;
     }
 
     /* ---------------- 3. Knowledge-gap detection --------------------- */
@@ -319,7 +333,12 @@ GUIDE;
         return "You are 'Tuto', a warm, patient AI teacher for {$context}. "
             . "Calibrate the depth, vocabulary, examples and exam framing precisely to that level "
             . "(e.g. board exams for school, entrance patterns for coaching, university rigour for college). "
-            . "Explain in {$lang}.";
+            . "Explain in {$lang}. "
+            // MVP focus: classes 6–10 — teach SHARP and SIMPLE so they learn fast.
+            . "Teach sharp and simple: introduce ONE idea at a time, use short sentences and a concrete "
+            . "everyday example, and **bold** the key term. Reach for a quick visual (use a `viz` block) "
+            . "whenever a picture makes it clearer. Keep replies tight, build the student up to understanding "
+            . "fast, and end with one short check-for-understanding question.";
     }
 
     protected function normaliseQuestions(array $items): array

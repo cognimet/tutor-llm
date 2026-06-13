@@ -16,6 +16,7 @@ Roles -> endpoints:
 """
 import json
 import logging
+import uuid
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
@@ -23,7 +24,7 @@ from pydantic import BaseModel
 
 from .config import settings
 from .llm import llm
-from . import prompts, rag
+from . import prompts, rag, graph
 from .schemas import (
     ChatTurnRequest, ChatTurnResponse,
     AssessmentGenerateRequest, AssessmentGenerateResponse, Question,
@@ -37,6 +38,20 @@ from .schemas import (
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="AI Tutor — AI Service", version="1.0.0")
+
+
+@app.on_event("startup")
+async def _on_startup() -> None:
+    """Ensure the Neo4j constraints exist (idempotent, non-fatal)."""
+    try:
+        await graph.ensure_schema()
+    except Exception as e:  # noqa: BLE001
+        logging.warning("graph schema init skipped: %s", e)
+
+
+@app.on_event("shutdown")
+async def _on_shutdown() -> None:
+    await graph.close()
 
 
 def _auth(authorization: str | None) -> None:
@@ -59,6 +74,7 @@ async def health() -> dict:
         "single_model": bool(settings.ai_model),
         "rag": bool(settings.qdrant_url),
         "embedder": rag.embed_provider(),
+        "graph": await graph.status(),
     }
 
 
@@ -69,6 +85,7 @@ class TextRequest(BaseModel):
     user: str
     topic: str | None = None        # when set, RAG curriculum context is injected
     rag_query: str | None = None    # text to retrieve on (defaults to `user`)
+    student_id: int | None = None   # personalises graph-aware retrieval
     action: str = "chat"            # model-routing group: chat|structured|grade
 
 
@@ -78,21 +95,24 @@ class JsonRequest(BaseModel):
     fallback: dict = {}
     topic: str | None = None
     rag_query: str | None = None
+    student_id: int | None = None
     action: str = "structured"      # model-routing group: chat|structured|grade
 
 
-async def _ground(system: str, topic: str | None, query: str) -> str:
-    """Prepend retrieved curriculum context to a system prompt when a topic is set."""
+async def _ground(system: str, topic: str | None, query: str, student_id: int | None = None) -> str:
+    """Prepend retrieved curriculum context to a system prompt when a topic is set.
+    When `student_id` is given, retrieval is graph-aware (prerequisites + the
+    student's weak concepts + their own uploaded notes)."""
     if not topic:
         return system
-    chunks = await rag.retrieve(query, topic=topic)
+    chunks = await rag.retrieve(query, topic=topic, student_id=student_id)
     return system + rag.as_context(chunks)
 
 
 @app.post("/ai/text")
 async def ai_text(req: TextRequest, authorization: str | None = Header(None)):
     _auth(authorization)
-    system = await _ground(req.system, req.topic, req.rag_query or req.user)
+    system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id)
     out, usage = await llm.text(system, req.user, action=req.action)
     return {"text": out, "usage": usage.model_dump()}
 
@@ -100,7 +120,7 @@ async def ai_text(req: TextRequest, authorization: str | None = Header(None)):
 @app.post("/ai/json")
 async def ai_json(req: JsonRequest, authorization: str | None = Header(None)):
     _auth(authorization)
-    system = await _ground(req.system, req.topic, req.rag_query or req.user)
+    system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id)
     out, usage = await llm.json(system, req.user, req.fallback, action=req.action)
     return {"data": out, "usage": usage.model_dump()}
 
@@ -108,7 +128,7 @@ async def ai_json(req: JsonRequest, authorization: str | None = Header(None)):
 @app.post("/ai/stream")
 async def ai_stream(req: TextRequest, authorization: str | None = Header(None)):
     _auth(authorization)
-    system = await _ground(req.system, req.topic, req.rag_query or req.user)
+    system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id)
 
     async def gen():
         final_usage = None
@@ -291,10 +311,117 @@ async def rag_status(authorization: str | None = Header(None)):
     return await rag.status()
 
 
+# ── Knowledge graph (GraphRAG "AI mind") ────────────────────────────────
+class CurriculumTopicNode(BaseModel):
+    stage_id: int
+    stage: str
+    track_id: int
+    track: str
+    level_id: int
+    level: str
+    subject_id: int
+    subject: str
+    chapter_id: int
+    chapter: str
+    topic_id: int
+    topic: str
+    position: int = 0
+
+
+class CurriculumUpsertRequest(BaseModel):
+    topics: list[CurriculumTopicNode] = []
+    next_pairs: list[list[str]] = []      # [[prev_topic_name, topic_name], ...]
+    concepts: list[dict] = []             # [{topic, name}, ...]
+
+
+@app.post("/ai/graph/curriculum/upsert")
+async def graph_curriculum_upsert(req: CurriculumUpsertRequest, authorization: str | None = Header(None)):
+    _auth(authorization)
+    n = await graph.upsert_curriculum([t.model_dump() for t in req.topics], req.next_pairs, req.concepts)
+    return {"upserted": n, "graph_enabled": graph.enabled()}
+
+
+class GraphEventRequest(BaseModel):
+    user_id: int
+    type: str
+    text: str = ""
+    topic: str | None = None
+    concepts: list[str] = []
+    meta: dict = {}
+    embed: bool = True       # false for high-frequency timing/engagement pings
+    ts: str | None = None
+
+
+@app.post("/ai/graph/event")
+async def graph_event(req: GraphEventRequest, authorization: str | None = Header(None)):
+    """Record one tracked user action. Meaningful actions are embedded into
+    Qdrant `events` for semantic recall; high-frequency timing/engagement pings
+    (`embed=false`) skip the vector and only create the graph :Event node."""
+    _auth(authorization)
+    qid = await rag.index_event(req.user_id, req.type, req.topic, req.text) if req.embed else None
+    eid = qid or str(uuid.uuid4())
+    await graph.record_event(eid, req.user_id, req.type, req.text, req.topic,
+                             req.concepts, qid, req.ts, req.meta)
+    return {"id": eid, "qdrant_id": qid, "graph_enabled": graph.enabled()}
+
+
+class MasteryItem(BaseModel):
+    topic: str
+    concept: str
+    score: float = 0
+    confidence: int = 0
+
+
+class MisconceptionItem(BaseModel):
+    topic: str
+    description: str
+    status: str = "open"
+
+
+class FocusItem(BaseModel):
+    topic: str | None = None
+    concept: str | None = None
+    reason: str | None = None
+
+
+class GraphStateRequest(BaseModel):
+    user_id: int
+    name: str | None = None
+    mastery: list[MasteryItem] = []
+    misconceptions: list[MisconceptionItem] = []
+    focus: FocusItem | None = None
+
+
+@app.post("/ai/graph/state")
+async def graph_state(req: GraphStateRequest, authorization: str | None = Header(None)):
+    """Mirror MindService state (mastery, misconceptions, next focus) into the graph."""
+    _auth(authorization)
+    await graph.set_state(
+        req.user_id, req.name,
+        [m.model_dump() for m in req.mastery],
+        [m.model_dump() for m in req.misconceptions],
+        req.focus.model_dump() if req.focus else None,
+    )
+    return {"ok": True, "graph_enabled": graph.enabled()}
+
+
+@app.get("/ai/graph/focus")
+async def graph_focus(student_id: int, authorization: str | None = Header(None)):
+    """The student's single cross-topic next focused area."""
+    _auth(authorization)
+    return {"focus": await graph.next_focus(student_id)}
+
+
+@app.get("/ai/graph/status")
+async def graph_status_ep(authorization: str | None = Header(None)):
+    _auth(authorization)
+    return await graph.status()
+
+
 @app.post("/ai/chat/turn", response_model=ChatTurnResponse)
 async def chat_turn(req: ChatTurnRequest, authorization: str | None = Header(None)):
     _auth(authorization)
-    chunks = await rag.retrieve(req.message, topic=req.topic)
+    chunks = await rag.retrieve(req.message, topic=req.topic, student_id=req.student_id)
     system, user = prompts.chat_turn(req, rag.as_context(chunks))
     reply, usage = await llm.text(system, user, action="chat")
 
@@ -320,7 +447,7 @@ async def chat_turn(req: ChatTurnRequest, authorization: str | None = Header(Non
 @app.post("/ai/chat/stream")
 async def chat_stream(req: ChatTurnRequest, authorization: str | None = Header(None)):
     _auth(authorization)
-    chunks = await rag.retrieve(req.message, topic=req.topic)
+    chunks = await rag.retrieve(req.message, topic=req.topic, student_id=req.student_id)
     system, user = prompts.chat_turn(req, rag.as_context(chunks))
 
     async def gen():
@@ -343,6 +470,47 @@ async def assessment_generate(req: AssessmentGenerateRequest, authorization: str
     data, usage = await llm.json(system, user, {"questions": []}, action="structured")
     questions = [Question(**_q) for _q in _safe_list(data, "questions")]
     return AssessmentGenerateResponse(questions=questions, usage=usage)
+
+
+class AssessmentValidateRequest(BaseModel):
+    topic: str
+    questions: list[dict] = []   # [{question, options, correct_index, concept}]
+
+
+@app.post("/ai/assessment/validate")
+async def assessment_validate(req: AssessmentValidateRequest, authorization: str | None = Header(None)):
+    """Post-hoc curriculum validation: given the topic's curriculum (RAG) and a
+    set of generated questions, return the indices that are on-syllabus AND
+    correctly keyed. Falls back to keeping all if there's nothing to validate
+    against, so it never empties a quiz on a flaky check."""
+    _auth(authorization)
+    n = len(req.questions)
+    if n == 0:
+        return {"keep": [], "usage": Usage(model="none", mock=settings.is_mock).model_dump()}
+
+    chunks = await rag.retrieve(req.topic, topic=req.topic)
+    if not chunks:  # no curriculum indexed for this topic — can't validate
+        return {"keep": list(range(n)), "usage": Usage(model="none", mock=settings.is_mock).model_dump()}
+
+    lines = []
+    for i, q in enumerate(req.questions):
+        opts = q.get("options") or []
+        ci = q.get("correct_index", 0)
+        correct = opts[ci] if isinstance(ci, int) and 0 <= ci < len(opts) else ""
+        lines.append(f'{i}. Q: {q.get("question", "")} | Marked correct: {correct}')
+
+    system = (
+        "You are a strict exam moderator. You are given CURRICULUM and a numbered list of quiz "
+        "questions. Return ONLY JSON {\"keep\":[indices]} — the indices of questions that are "
+        "(a) on-syllabus for this curriculum AND (b) have a correct marked answer. Drop anything "
+        "off-syllabus, ambiguous, or wrongly keyed."
+    )
+    user = rag.as_context(chunks) + "\n\nQuestions:\n" + "\n".join(lines) + "\n\nReturn {\"keep\":[...]}."
+    data, usage = await llm.json(system, user, {"keep": list(range(n))}, action="grade")
+    keep = [i for i in (data.get("keep", []) if isinstance(data, dict) else []) if isinstance(i, int) and 0 <= i < n]
+    if not keep:  # never nuke the whole quiz if the moderator returns nothing
+        keep = list(range(n))
+    return {"keep": keep, "usage": usage.model_dump()}
 
 
 @app.post("/ai/assessment/grade", response_model=AssessmentGradeResponse)
@@ -408,12 +576,45 @@ async def notes_ingest(req: NotesIngestRequest, authorization: str | None = Head
     data, usage = await llm.json(system, user, {"summary": "", "flashcards": []}, action="structured")
     summary = data.get("summary", "") if isinstance(data, dict) else ""
     flashcards = _safe_list(data, "flashcards")
-    # (Indexing the notes into Qdrant for RAG is a worker job; reported as 0 here.)
+
+    # Chunk + index the note text so the tutor can later retrieve the student's
+    # OWN material (Qdrant `documents`), and link the note in the graph.
+    chunks_indexed = 0
+    if req.note_id is not None:
+        qids = await rag.index_documents(req.student_id, req.note_id, req.topic, _chunk_text(req.text))
+        await graph.link_note(req.note_id, req.title or "Note", req.topic, req.student_id, qids)
+        chunks_indexed = len(qids)
+
     return NotesIngestResponse(summary=summary, flashcards=flashcards,
-                               chunks_indexed=0, usage=usage)
+                               chunks_indexed=chunks_indexed, usage=usage)
 
 
 # ── helpers ────────────────────────────────────────────────────────────
+def _chunk_text(text: str, size: int = 800, overlap: int = 100, max_chunks: int = 40) -> list[str]:
+    """Split note text into overlapping chunks for embedding. Splits on
+    paragraph/sentence boundaries where possible, hard-wrapping long runs."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    paras = [p.strip() for p in text.split("\n") if p.strip()]
+    chunks: list[str] = []
+    buf = ""
+    for p in paras:
+        if len(buf) + len(p) + 1 <= size:
+            buf = f"{buf}\n{p}".strip()
+        else:
+            if buf:
+                chunks.append(buf)
+            # hard-wrap a paragraph longer than `size`
+            while len(p) > size:
+                chunks.append(p[:size])
+                p = p[max(0, size - overlap):]
+            buf = p
+    if buf:
+        chunks.append(buf)
+    return chunks[:max_chunks]
+
+
 def _safe_list(data, key: str) -> list:
     if isinstance(data, dict) and isinstance(data.get(key), list):
         return data[key]

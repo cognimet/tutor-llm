@@ -17,6 +17,8 @@ use App\Models\User;
  */
 class MindService
 {
+    public function __construct(protected GraphClient $graph) {}
+
     /* ----------------------------- memory ----------------------------- */
 
     /** Persist durable facts about the student (learning style, struggles…). */
@@ -171,6 +173,7 @@ class MindService
             'misconceptions' => $misconceptions,
             'memory' => $memory,
             'next_step' => $nextStep,
+            'focus' => $this->nextFocus($user),
         ];
     }
 
@@ -180,7 +183,7 @@ class MindService
         $bits = [];
 
         $memory = collect($this->memory($user))
-            ->reject(fn ($v, $k) => str_starts_with($k, 'next_step::'))
+            ->reject(fn ($v, $k) => str_starts_with($k, 'next_step::') || str_starts_with($k, 'learner_summary::'))
             ->take(8);
         if ($memory->isNotEmpty()) {
             $bits[] = 'What you remember about this student: '
@@ -206,6 +209,21 @@ class MindService
             $bits[] = 'Open misconceptions to watch for and FIX: ' . $open->implode('; ') . '.';
         }
 
+        $focus = $this->nextFocus($user);
+        if ($focus) {
+            $where = $focus['concept'] ? "{$focus['concept']} (in {$focus['topic']})" : $focus['topic'];
+            $bits[] = "The student's overall next focus right now is {$where} — {$focus['reason']}. "
+                . 'Gently steer toward it when relevant.';
+        }
+
+        // The computed learner-stage snapshot (refreshed on assessments) — lets
+        // the tutor calibrate to exactly where the student is right now.
+        $stage = StudentMemory::where('user_id', $user->id)
+            ->where('key', 'learner_summary::global')->value('value');
+        if ($stage) {
+            $bits[] = 'Learner snapshot: ' . $stage;
+        }
+
         return $bits ? "\n" . implode("\n", $bits) : '';
     }
 
@@ -220,5 +238,69 @@ class MindService
             ['user_id' => $user->id, 'key' => "next_step::{$topic}"],
             ['value' => mb_substr($nextStep, 0, 400)],
         );
+    }
+
+    /* ----------------------- next focused area ------------------------ */
+
+    /**
+     * The single cross-topic "next focused area" for the student, computed from
+     * their state: an open misconception to clear up first, else the weakest
+     * observed concept. Returns ['topic','concept','reason','source'] or null.
+     */
+    public function nextFocus(User $user): ?array
+    {
+        $openMis = Misconception::where('user_id', $user->id)
+            ->where('status', 'open')->latest('id')->first();
+        if ($openMis) {
+            return [
+                'topic'   => $openMis->topic_name,
+                'concept' => null,
+                'reason'  => 'Clear up: ' . $openMis->description,
+                'source'  => 'misconception',
+            ];
+        }
+
+        $weak = ConceptMastery::where('user_id', $user->id)
+            ->where('confidence', '>', 0)
+            ->orderBy('score')->first();
+        if ($weak && $weak->score < 0.6) {
+            return [
+                'topic'   => $weak->topic_name,
+                'concept' => $weak->concept,
+                'reason'  => 'Weakest concept (' . round($weak->score * 100) . '% mastery)',
+                'source'  => 'mastery',
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Mirror the student's current state for a topic into the GraphRAG "AI mind"
+     * (mastery edges, misconceptions, and the cross-topic next focus). Called
+     * once per chat turn / assessment so graph writes stay batched. Best-effort.
+     */
+    public function syncToGraph(User $user, string $topic): void
+    {
+        $mastery = ConceptMastery::where('user_id', $user->id)
+            ->where('topic_name', $topic)->get()
+            ->map(fn ($r) => [
+                'topic' => $topic, 'concept' => $r->concept,
+                'score' => (float) $r->score, 'confidence' => (int) $r->confidence,
+            ])->all();
+
+        $misconceptions = Misconception::where('user_id', $user->id)
+            ->where('topic_name', $topic)->get()
+            ->map(fn ($m) => [
+                'topic' => $topic, 'description' => $m->description, 'status' => $m->status,
+            ])->all();
+
+        $this->graph->setState([
+            'user_id'        => $user->id,
+            'name'           => $user->name,
+            'mastery'        => $mastery,
+            'misconceptions' => $misconceptions,
+            'focus'          => $this->nextFocus($user),
+        ]);
     }
 }

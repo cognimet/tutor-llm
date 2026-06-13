@@ -17,6 +17,7 @@ import Whiteboard from "../../ui/Whiteboard.jsx";
 import StudyHub from "../../ui/StudyHub.jsx";
 import NotesPicker from "../../ui/NotesPicker.jsx";
 import NextStep from "../../ui/NextStep.jsx";
+import ScreenTimeTracker from "../../ui/ScreenTimeTracker.jsx";
 import { flashcardsApi, mistakesApi } from "../../api/endpoints.js";
 
 const STARTERS = (t) => [
@@ -1331,6 +1332,9 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           </div>
         </div>
       )}
+
+      {/* Passive screen-time tracking for the active topic (feeds the AI mind) */}
+      <ScreenTimeTracker topicName={ctx.topic_name} topicId={ctx.topic_id} />
 
       {/* Built-in whiteboard: sketch the working, send it to the tutor */}
       {boardOpen && (

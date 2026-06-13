@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use App\Services\AiClient;
+use App\Services\EventTracker;
 use App\Services\MindService;
 use App\Services\ProgressService;
 use App\Services\TokenMeter;
 use App\Services\TutorService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TutorController extends Controller
@@ -21,6 +23,7 @@ class TutorController extends Controller
         protected MindService $mindService,
         protected AiClient $ai,
         protected TokenMeter $meter,
+        protected EventTracker $events,
     ) {}
 
     // List the student's chat sessions (most recent first).
@@ -172,7 +175,15 @@ class TutorController extends Controller
         $session->update(['last_message_at' => now()]);
         $this->progress->recordActivity($user, topicsStudied: 0, questionsAnswered: 0);
 
-        return response()->json(['message' => $message]);
+        // Same post-turn processing as the streaming path: extract mind signals,
+        // mirror state to the graph, and log the action (previously skipped here).
+        $topic = $session->topic_name ?? $session->title;
+        $this->postTurn($user, $topic, $session->topic_id, $data['message'], $reply, $session->id, $data['mode'] ?? 'teach');
+
+        return response()->json([
+            'message' => $message,
+            'mind' => $this->mindService->mind($user, $topic, $session),
+        ]);
     }
 
     // Send a message and stream the AI tutor's reply over SSE.
@@ -291,14 +302,14 @@ class TutorController extends Controller
 
             $emit('done', ['id' => $message->id, 'created_at' => $message->created_at->toIso8601String()]);
 
-            // After the reply is delivered, extract structured signals (cheap
-            // grade-routed call) and push the refreshed "mind" to the panel.
+            // After the reply is delivered, extract structured signals, mirror
+            // state to the GraphRAG mind, log the action, then push the refreshed
+            // "mind" to the panel. Never let any of this break the chat turn.
+            $this->postTurn($user, $topic, $session->topic_id, $prompt, $full, $session->id, $mode);
             try {
-                $this->tutor->extractSignals($user, $topic, $prompt, $full, $session->id);
                 $emit('mind', ['mind' => $this->mindService->mind($user, $topic, $session)]);
             } catch (\Throwable $e) {
-                // The mind is an enhancement — never let it break a chat turn.
-                \Illuminate\Support\Facades\Log::warning('mind update failed', ['error' => $e->getMessage()]);
+                Log::warning('mind panel refresh failed', ['error' => $e->getMessage()]);
             }
         });
 
@@ -308,6 +319,31 @@ class TutorController extends Controller
         $response->headers->set('Connection', 'keep-alive');
 
         return $response;
+    }
+
+    /**
+     * Shared post-turn processing for BOTH the streaming and non-streaming
+     * paths: extract mind signals (cheap grade-routed call), mirror the
+     * student's state into the GraphRAG "AI mind", and log the chat turn as a
+     * tracked event. Best-effort — never breaks the chat turn.
+     */
+    protected function postTurn($user, string $topic, ?int $topicId, string $prompt,
+                                string $reply, ?int $sessionId, string $mode = 'teach'): void
+    {
+        try {
+            $signals = $this->tutor->extractSignals($user, $topic, $prompt, $reply, $sessionId);
+            $this->mindService->syncToGraph($user, $topic);
+
+            $concepts = array_values(array_filter((array) ($signals['concept_tags'] ?? []), 'is_string'));
+            $this->events->track(
+                $user, EventTracker::CHAT_TURN,
+                "Q: {$prompt}\nA: " . mb_substr($reply, 0, 600),
+                $topic, $topicId, $concepts,
+                ['mode' => $mode, 'session_id' => $sessionId],
+            );
+        } catch (\Throwable $e) {
+            Log::warning('post-turn processing failed', ['error' => $e->getMessage()]);
+        }
     }
 
     /**
