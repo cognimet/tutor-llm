@@ -21,20 +21,69 @@ class MindService
 
     /* ----------------------------- memory ----------------------------- */
 
+    // Values that signal "no fact" — the grade model sometimes emits these.
+    private const JUNK_VALUES = ['null', 'none', 'n/a', 'na', 'unknown', '-', 'nil'];
+
+    // Decay / pruning policy.
+    private const MEMORY_TTL_DAYS = 180;        // facts older than this aren't injected
+    private const MEMORY_HARD_TTL_DAYS = 365;   // facts older than this are deleted
+    private const MEMORY_KEEP_MAX = 40;         // per-student cap on durable facts (LRU)
+    private const MISCONCEPTION_STALE_DAYS = 45; // open misconceptions auto-expire after this
+
     /** Persist durable facts about the student (learning style, struggles…). */
     public function remember(User $user, array $facts): void
     {
+        $existing = StudentMemory::where('user_id', $user->id)->get(['id', 'key', 'value']);
+
         foreach ($facts as $key => $value) {
             $key = trim((string) $key);
             $value = trim((string) $value);
             if ($key === '' || $value === '' || mb_strlen($key) > 60 || mb_strlen($value) > 400) {
                 continue;
             }
+            // Reject non-durable / junk values the model occasionally returns.
+            if (in_array(mb_strtolower($value), self::JUNK_VALUES, true)) {
+                continue;
+            }
+            // Fuzzy de-dup: if a fact under a *different* key already states
+            // essentially the same thing, skip rather than fragment memory.
+            // Keyed by VALUE similarity — the same fact often arrives under a
+            // differently-worded key, so key overlap is not required.
+            $dupe = $existing->first(fn ($m) => $m->key !== $key
+                && $this->similar($m->value, $value) >= 0.7);
+            if ($dupe) {
+                continue;
+            }
+
             StudentMemory::updateOrCreate(
                 ['user_id' => $user->id, 'key' => $key],
-                ['value' => $value],
+                ['value' => $value, 'last_used_at' => now()],
             );
         }
+    }
+
+    // Stopwords dropped before similarity so content words drive the score.
+    private const STOPWORDS = [
+        'the', 'and', 'for', 'are', 'but', 'not', 'you', 'your', 'with', 'this',
+        'that', 'they', 'them', 'their', 'its', 'it', 'is', 'to', 'of', 'in', 'on',
+        'as', 'at', 'by', 'be', 'do', 'does', 'did', 'get', 'got', 'a', 'an', 'or',
+        'so', 'we', 'i', 'he', 'she', 'has', 'have', 'will', 'can', 'about',
+    ];
+
+    /** Jaccard overlap of two short strings over content tokens (≥3 chars, no stopwords). */
+    protected function similar(string $a, string $b): float
+    {
+        $tok = fn (string $s) => collect(preg_split('/\W+/u', mb_strtolower($s)))
+            ->filter(fn ($w) => mb_strlen($w) >= 3 && ! in_array($w, self::STOPWORDS, true))
+            ->unique();
+        $ta = $tok($a);
+        $tb = $tok($b);
+        if ($ta->isEmpty() || $tb->isEmpty()) {
+            return 0.0;
+        }
+        $inter = $ta->intersect($tb)->count();
+        $union = $ta->merge($tb)->unique()->count();
+        return $union ? $inter / $union : 0.0;
     }
 
     /** @return array<string,string> key => value */
@@ -92,13 +141,15 @@ class MindService
             return;
         }
 
-        $exists = Misconception::where('user_id', $user->id)
+        // Fuzzy de-dup: don't create a near-paraphrase of an open misconception.
+        $open = Misconception::where('user_id', $user->id)
             ->where('topic_name', $topic)
             ->where('status', 'open')
-            ->where('description', $description)
-            ->exists();
+            ->get(['description']);
+        $dupe = $open->contains(fn ($m) => $m->description === $description
+            || $this->similar($m->description, $description) >= 0.6);
 
-        if (! $exists) {
+        if (! $dupe) {
             Misconception::create([
                 'user_id' => $user->id,
                 'chat_session_id' => $sessionId,
@@ -182,12 +233,21 @@ class MindService
     {
         $bits = [];
 
-        $memory = collect($this->memory($user))
-            ->reject(fn ($v, $k) => str_starts_with($k, 'next_step::') || str_starts_with($k, 'learner_summary::'))
-            ->take(8);
-        if ($memory->isNotEmpty()) {
+        // Durable facts, ranked by RECENCY (most-recently-used first) and filtered
+        // to a freshness window, so stale facts don't pollute the prompt. The
+        // injected rows get their last_used_at bumped (recency reinforcement).
+        $facts = StudentMemory::where('user_id', $user->id)
+            ->where('key', 'not like', 'next\_step::%')
+            ->where('key', 'not like', 'learner\_summary::%')
+            ->where(fn ($q) => $q->whereNull('last_used_at')->orWhere('last_used_at', '>=', now()->subDays(self::MEMORY_TTL_DAYS)))
+            ->orderByRaw('last_used_at DESC NULLS LAST')
+            ->orderByDesc('id')
+            ->take(8)
+            ->get(['id', 'key', 'value']);
+        if ($facts->isNotEmpty()) {
             $bits[] = 'What you remember about this student: '
-                . $memory->map(fn ($v, $k) => str_replace('_', ' ', $k) . ': ' . $v)->implode('; ') . '.';
+                . $facts->map(fn ($m) => str_replace('_', ' ', $m->key) . ': ' . $m->value)->implode('; ') . '.';
+            StudentMemory::whereIn('id', $facts->pluck('id'))->update(['last_used_at' => now()]);
         }
 
         $mastery = ConceptMastery::where('user_id', $user->id)
@@ -236,8 +296,43 @@ class MindService
         }
         StudentMemory::updateOrCreate(
             ['user_id' => $user->id, 'key' => "next_step::{$topic}"],
-            ['value' => mb_substr($nextStep, 0, 400)],
+            ['value' => mb_substr($nextStep, 0, 400), 'last_used_at' => now()],
         );
+    }
+
+    /* ----------------------------- decay ------------------------------ */
+
+    /**
+     * Age out stale memory so it can't pollute future prompts. Best-effort,
+     * runs off the hot path (ProcessChatTurn):
+     *   - open misconceptions untouched for MISCONCEPTION_STALE_DAYS -> resolved
+     *   - durable facts past the hard TTL -> deleted
+     *   - durable facts beyond the per-student LRU cap -> deleted (oldest first)
+     * Reserved keys (next_step::, learner_summary::) are never pruned.
+     */
+    public function decayMemory(User $user): void
+    {
+        Misconception::where('user_id', $user->id)
+            ->where('status', 'open')
+            ->where('detected_at', '<', now()->subDays(self::MISCONCEPTION_STALE_DAYS))
+            ->update(['status' => 'resolved', 'resolved_at' => now()]);
+
+        $generic = StudentMemory::where('user_id', $user->id)
+            ->where('key', 'not like', 'next\_step::%')
+            ->where('key', 'not like', 'learner\_summary::%');
+
+        (clone $generic)
+            ->whereNotNull('last_used_at')
+            ->where('last_used_at', '<', now()->subDays(self::MEMORY_HARD_TTL_DAYS))
+            ->delete();
+
+        $ids = (clone $generic)
+            ->orderByRaw('last_used_at DESC NULLS LAST')
+            ->orderByDesc('id')
+            ->pluck('id');
+        if ($ids->count() > self::MEMORY_KEEP_MAX) {
+            StudentMemory::whereIn('id', $ids->slice(self::MEMORY_KEEP_MAX)->values())->delete();
+        }
     }
 
     /* ----------------------- next focused area ------------------------ */

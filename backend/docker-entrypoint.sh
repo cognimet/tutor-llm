@@ -27,6 +27,8 @@ env_put AI_SERVICE_URL "${AI_SERVICE_URL:-http://ai-service:8001}"
 env_put AI_SERVICE_KEY "${AI_SERVICE_KEY:-dev-internal-key}"
 env_put AI_SERVICE_TIMEOUT "${AI_SERVICE_TIMEOUT:-180}"
 env_put FRONTEND_URL   "${FRONTEND_URL:-http://localhost:5173}"
+# Async post-turn processing (signals/graph/summary/decay) runs on the queue.
+env_put QUEUE_CONNECTION "${QUEUE_CONNECTION:-database}"
 
 # Block until the Python AI service is accepting connections, so the first-boot
 # `rag:index` doesn't race ahead of it and silently skip embedding (compose only
@@ -117,6 +119,11 @@ else
     php artisan migrate --force || true
   fi
 fi
+
+# Background queue worker for async post-turn processing. Restarts itself if it
+# exits (e.g. after --max-time) so it survives the container's lifetime.
+echo "🧵 Starting queue worker (QUEUE_CONNECTION=${QUEUE_CONNECTION:-database})…"
+( while true; do php artisan queue:work --sleep=1 --tries=2 --max-time=3600 >>/tmp/queue-worker.log 2>&1 || true; sleep 2; done ) &
 
 echo "🚀 Laravel API on http://localhost:8000"
 exec php artisan serve --host=0.0.0.0 --port=8000

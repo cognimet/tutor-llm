@@ -9,5 +9,7 @@ class StudentMemory extends Model
 {
     protected $table = 'student_memory';
 
-    protected $fillable = ['user_id', 'key', 'value'];
+    protected $fillable = ['user_id', 'key', 'value', 'last_used_at'];
+
+    protected $casts = ['last_used_at' => 'datetime'];
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ChatSession;
 use App\Models\User;
 
 /**
@@ -42,9 +43,9 @@ class TutorService
     /**
      * @param array $history  [['role' => 'user'|'tutor', 'content' => '...'], ...]
      */
-    public function explain(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = ''): string
+    public function explain(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = ''): string
     {
-        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext);
+        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary);
 
         // Pass the topic + student so the AI service grounds the reply in
         // graph-aware RAG (curriculum + prerequisites + the student's weak spots
@@ -60,9 +61,9 @@ class TutorService
      * returns the full reply. Returns '' if nothing streamed (caller may fall
      * back to explain()).
      */
-    public function explainStream(User $student, string $topic, string $chapter, string $subject, array $history, string $message, callable $onDelta, string $mode = 'teach', string $notesContext = ''): string
+    public function explainStream(User $student, string $topic, string $chapter, string $subject, array $history, string $message, callable $onDelta, string $mode = 'teach', string $notesContext = '', string $summary = ''): string
     {
-        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext);
+        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary);
 
         $reply = $this->ai->stream($system, $user, $onDelta, $topic, $student->id);
         $this->meter($student, 'chat', ['topic' => $topic, 'streamed' => true, 'mode' => $mode]);
@@ -147,7 +148,7 @@ class TutorService
     }
 
     /** Shared prompt builder for the tutor chat (text + streaming). */
-    protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = ''): array
+    protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = ''): array
     {
         $notesBlock = trim($notesContext) === '' ? '' :
             "\nThe student attached their own study notes for this question. Treat them as the "
@@ -172,9 +173,74 @@ class TutorService
             $who = ($m['role'] ?? '') === 'user' ? 'Student' : 'Tutor';
             $convo .= "{$who}: {$m['content']}\n";
         }
-        $user = "Topic: \"{$topic}\"\n\nConversation so far:\n{$convo}\nStudent: {$message}\n\nTutor:";
+
+        // Token-budgeted context: a rolling summary of older turns (when the chat
+        // has grown past the recent window) precedes the verbatim recent turns.
+        $summaryBlock = trim($summary) === '' ? '' :
+            "Summary of earlier conversation (older turns, condensed):\n" . trim($summary) . "\n\n";
+
+        $user = "Topic: \"{$topic}\"\n\n{$summaryBlock}Recent conversation:\n{$convo}\nStudent: {$message}\n\nTutor:";
 
         return [$system, $user];
+    }
+
+    /* --------------- conversation window / rolling summary ---------------- */
+
+    /** Most recent turns kept verbatim; older turns are condensed into a summary. */
+    public const KEEP_RECENT = 10;
+
+    /**
+     * Regenerate the rolling conversation summary for a session when it has more
+     * than KEEP_RECENT messages past what's already summarised. Off the hot path
+     * (called from ProcessChatTurn). No-op in mock mode (the mock LLM would store
+     * filler) and for short chats.
+     */
+    public function refreshConversationSummary(ChatSession $session): void
+    {
+        if ($this->isMock()) {
+            return;
+        }
+
+        $cut = (int) ($session->summary_upto_id ?? 0);
+        $msgs = $session->messages()->where('id', '>', $cut)->orderBy('id')->get(['id', 'role', 'content']);
+        if ($msgs->count() <= self::KEEP_RECENT) {
+            return; // recent window still covers everything unsummarised
+        }
+
+        $older = $msgs->slice(0, $msgs->count() - self::KEEP_RECENT)->values();
+        $newCut = (int) $older->last()->id;
+        $summary = $this->summariseConversation(
+            $session->user,
+            $older->map(fn ($m) => ['role' => $m->role, 'content' => $m->content])->all(),
+            (string) ($session->summary ?? ''),
+        );
+        if ($summary !== '') {
+            $session->update(['summary' => $summary, 'summary_upto_id' => $newCut]);
+        }
+    }
+
+    /** Merge a prior summary with newly-rolled-off turns into one concise summary. */
+    public function summariseConversation(User $student, array $older, string $prior = ''): string
+    {
+        if (empty($older)) {
+            return $prior;
+        }
+        $convo = '';
+        foreach ($older as $m) {
+            $who = ($m['role'] ?? '') === 'user' ? 'Student' : 'Tutor';
+            $convo .= "{$who}: " . mb_substr((string) $m['content'], 0, 600) . "\n";
+        }
+
+        $system = 'You maintain a running summary of a tutoring conversation. Merge the prior summary '
+            . 'with the new exchange into ONE concise summary (max 180 words) that preserves what the '
+            . 'student asked, what was taught, where they showed or lacked understanding, and any open '
+            . 'questions. Output only the summary prose — no preamble.';
+        $user = ($prior !== '' ? "Prior summary:\n{$prior}\n\n" : '') . "New turns to fold in:\n{$convo}";
+
+        $out = trim($this->ai->text($system, $user, null, 'grade'));
+        $this->meter($student, 'grade', ['kind' => 'chat_summary']);
+
+        return $out !== '' ? $out : $prior;
     }
 
     /**
