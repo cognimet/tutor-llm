@@ -5,10 +5,11 @@ import { authApi, curriculumApi, progressApi } from "../../api/endpoints.js";
 import CreditMeter from "../../ui/CreditMeter.jsx";
 import StudentHome from "./StudentHome.jsx";
 import TutorChat from "./TutorChat.jsx";
+import NotebookHub from "./NotebookHub.jsx";
 
 export default function StudentApp() {
   const { user, logout, patchUser } = useAuth();
-  const [view, setView] = useState("home"); // home | chat
+  const [view, setView] = useState("home"); // home | chat | notebooks
   const [subjects, setSubjects] = useState([]);
   const [curriculum, setCurriculum] = useState({ level: null, path: null });
   const [progress, setProgress] = useState(null);
@@ -52,6 +53,14 @@ export default function StudentApp() {
       <AppHeader user={user} onLogout={logout} right={<CreditMeter />} />
       {loading ? (
         <Spinner label="Loading your classroom…" />
+      ) : view === "notebooks" ? (
+        <NotebookHub
+          subjects={subjects}
+          onBack={backHome}
+          onStudy={(s) => openTopic({
+            topic_name: s.name, subject_name: s.name, tint: s.tint, emoji: s.emoji, from_notes: true,
+          })}
+        />
       ) : view === "home" ? (
         <StudentHome
           user={user}
@@ -59,6 +68,7 @@ export default function StudentApp() {
           subjects={subjects}
           progress={progress}
           onOpenTopic={openTopic}
+          onOpenNotebooks={() => setView("notebooks")}
           onRefresh={loadProgress}
           onSetLevel={setLevel}
         />

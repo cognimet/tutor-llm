@@ -234,10 +234,13 @@ async def delete_topic(topic: str) -> None:
 
 
 async def index_documents(user_id: int, note_id: int, topic: str | None,
-                           chunks: list[str]) -> list[str]:
+                           chunks: list[str], subject_id: int | None = None,
+                           chapter_id: int | None = None, topic_id: int | None = None,
+                           is_primary: bool = False) -> list[str]:
     """Embed + upsert an uploaded note's text chunks into the `documents`
     collection so the tutor can later retrieve the student's OWN material.
-    Returns the Qdrant point ids (referenced from the graph's :Note node)."""
+    The scope ids (subject/chapter/topic) let subject- and chapter-level notes
+    surface for every topic underneath them. Returns the Qdrant point ids."""
     chunks = [c for c in (c.strip() for c in chunks) if c]
     if not settings.qdrant_url or not chunks:
         return []
@@ -252,7 +255,8 @@ async def index_documents(user_id: int, note_id: int, topic: str | None,
             vector = await embed(f"{topic or ''}: {ch}")
             structs.append(qm.PointStruct(id=pid, vector=vector, payload={
                 "kind": "document", "user_id": int(user_id), "note_id": int(note_id),
-                "topic": topic, "body": ch,
+                "topic": topic, "subject_id": subject_id, "chapter_id": chapter_id,
+                "topic_id": topic_id, "is_primary": bool(is_primary), "body": ch,
             }))
             ids.append(pid)
         await client.upsert(collection_name=settings.qdrant_doc_collection, points=structs)
@@ -262,6 +266,120 @@ async def index_documents(user_id: int, note_id: int, topic: str | None,
         return ids
     finally:
         await client.close()
+
+
+def _figure_pid(note_id: int, page: int) -> str:
+    """Deterministic point id for a textbook page figure, so re-running a page
+    overwrites (idempotent) rather than duplicating — key to resumable ingest."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"figure:{note_id}:{page}"))
+
+
+async def index_figure(user_id: int, note_id: int, page: int, title: str,
+                        description: str, labels: list[str], image_rel: str,
+                        subject_id: int | None = None, chapter_id: int | None = None,
+                        topic_id: int | None = None, topic: str | None = None,
+                        is_primary: bool = False) -> str | None:
+    """Embed ONE textbook page's diagram/figure (its VLM description + labels)
+    into the `documents` collection so the tutor retrieves and teaches from it
+    exactly like the student's own notes — and the UI can show the page image
+    (`image_rel` points at the rendered PNG on the shared volume).
+
+    Lives in `documents` (not a new collection) so existing notes-first
+    `retrieve()` surfaces it automatically for the subject/topic. Idempotent."""
+    title = (title or "").strip()
+    description = (description or "").strip()
+    body = "\n".join(p for p in (title, description, " ".join(labels or [])) if p).strip()
+    if not settings.qdrant_url or not body:
+        return None
+    from qdrant_client import models as qm
+    await ensure_collection(settings.qdrant_doc_collection)
+    client = _client()
+    pid = _figure_pid(note_id, page)
+    try:
+        vector = await embed(f"{topic or ''} {title}: {description}")
+        await client.upsert(collection_name=settings.qdrant_doc_collection, points=[
+            qm.PointStruct(id=pid, vector=vector, payload={
+                "kind": "figure", "user_id": int(user_id), "note_id": int(note_id),
+                "page": int(page), "title": title or f"Figure (p.{page})",
+                "labels": labels or [], "image_rel": image_rel,
+                "topic": topic, "subject_id": subject_id, "chapter_id": chapter_id,
+                "topic_id": topic_id, "is_primary": bool(is_primary),
+                "body": body[:2000],
+            })])
+        return pid
+    except Exception as e:  # noqa: BLE001
+        log.warning("index_figure failed (note %s p%s): %s", note_id, page, e)
+        return None
+    finally:
+        await client.close()
+
+
+def _curriculum_pid(note_id: int, page: int) -> str:
+    """Deterministic id for a textbook page's CURRICULUM chunk (distinct from the
+    figure id), so re-running a page overwrites — resumable + no duplicates."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"textbook-curriculum:{note_id}:{page}"))
+
+
+async def index_curriculum_doc(note_id: int, page: int, body: str,
+                                subject_id: int | None = None, topic: str | None = None,
+                                source: str = "textbook") -> str | None:
+    """Embed a textbook page's TEXT into the vetted `curriculum` collection,
+    subject-scoped. This is how an uploaded book becomes the subject's curriculum
+    grounding (vs. AI-authored content) — retrieved via subject-scoped search.
+    Idempotent."""
+    body = (body or "").strip()
+    if not settings.qdrant_url or not body:
+        return None
+    from qdrant_client import models as qm
+    await ensure_collection(settings.qdrant_collection)
+    client = _client()
+    pid = _curriculum_pid(note_id, page)
+    try:
+        vector = await embed(f"{topic or ''}: {body[:1500]}")
+        await client.upsert(collection_name=settings.qdrant_collection, points=[
+            qm.PointStruct(id=pid, vector=vector, payload={
+                "topic": topic, "type": "textbook", "body": body[:2000],
+                "subject_id": subject_id, "note_id": int(note_id), "page": int(page),
+                "source": source,
+            })])
+        return pid
+    except Exception as e:  # noqa: BLE001
+        log.warning("index_curriculum_doc failed (note %s p%s): %s", note_id, page, e)
+        return None
+    finally:
+        await client.close()
+
+
+async def search_figures(user_id: int, subject_id: int | None = None,
+                         topic: str | None = None, query: str = "",
+                         k: int = 12) -> list[dict]:
+    """List textbook figures relevant to a topic/subject for the UI strip.
+    Vector-ranked by the topic when given, else most recent for the subject."""
+    if not settings.qdrant_url:
+        return []
+    from qdrant_client import models as qm
+    must = [
+        qm.FieldCondition(key="user_id", match=qm.MatchValue(value=int(user_id))),
+        qm.FieldCondition(key="kind", match=qm.MatchValue(value="figure")),
+    ]
+    if subject_id:
+        must.append(qm.FieldCondition(key="subject_id", match=qm.MatchValue(value=int(subject_id))))
+    payloads = await _search_payload(
+        settings.qdrant_doc_collection,
+        f"{topic or ''} {query} diagram figure".strip(), k, must)
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for p in payloads:
+        key = (p.get("note_id"), p.get("page"))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "note_id": p.get("note_id"), "page": p.get("page"),
+            "title": p.get("title"), "image_rel": p.get("image_rel"),
+            "labels": p.get("labels") or [], "description": p.get("body"),
+        })
+    return out
 
 
 async def index_event(user_id: int, type: str, topic: str | None, text: str) -> str | None:
@@ -309,22 +427,43 @@ async def _search(collection: str, text: str, k: int, must: list | None = None) 
         return []
 
 
+async def _search_payload(collection: str, text: str, k: int, must: list | None = None) -> list[dict]:
+    """Vector search returning full payloads (so we can rank by is_primary)."""
+    if not settings.qdrant_url:
+        return []
+    try:
+        from qdrant_client import models as qm
+        vector = await embed(text)
+        client = _client()
+        try:
+            flt = qm.Filter(must=must) if must else None
+            res = await client.query_points(collection_name=collection, query=vector,
+                                            limit=k, query_filter=flt, with_payload=True)
+            return [p.payload for p in res.points if p.payload]
+        finally:
+            await client.close()
+    except Exception as e:  # noqa: BLE001
+        log.debug("search %s failed: %s", collection, e)
+        return []
+
+
 def _topic_filter(topic: str | None):
     from qdrant_client import models as qm
     return [qm.FieldCondition(key="topic", match=qm.MatchValue(value=topic))] if topic else None
 
 
 async def retrieve(query: str, topic: str | None = None, student_id: int | None = None,
-                   k: int | None = None) -> list[str]:
-    """Graph-aware retrieval. Layers vetted curriculum, prerequisite material,
-    the student's weak-concept material, and the student's own notes.
+                   k: int | None = None, subject_id: int | None = None) -> list[str]:
+    """Graph-aware, NOTES-FIRST retrieval. Order of priority:
 
-    1) Qdrant `curriculum`, topic-filtered (the vetted source of truth).
-    2) Neo4j → prerequisite topics + the student's weak concepts → Qdrant those.
-    3) Qdrant `documents` filtered to the student (their uploaded notes).
+    1) The student's OWN notes (Qdrant `documents`) — topic-specific + subject-wide,
+       with ★ primary notes ranked first. These are the priority source.
+    2) Vetted curriculum (`curriculum`), topic-filtered.
+    3) Graph expansion: prerequisite topics + the student's weak concepts.
 
     Returns [] (never raises) when retrieval is unavailable, so the tutor still
-    works ungrounded.
+    works ungrounded. Note chunks are prefixed "[Student's own notes]" so the
+    model knows to prefer them (see as_context).
     """
     if not settings.qdrant_url:
         return []
@@ -332,19 +471,46 @@ async def retrieve(query: str, topic: str | None = None, student_id: int | None 
     out: list[str] = []
     seen: set[str] = set()
 
-    def add(bodies: list[str]) -> None:
+    def add(bodies: list[str], prefix: str = "") -> None:
         for b in bodies:
             b = (b or "").strip()
             key = b[:120]
             if b and key not in seen:
                 seen.add(key)
-                out.append(b)
+                out.append(prefix + b if prefix else b)
 
-    # 1) primary curriculum search (preserve the old topic-prefixed query)
+    # 1) the student's own notes first (topic-specific + subject-wide; ★ first)
+    if student_id:
+        from qdrant_client import models as qm
+        base = [qm.FieldCondition(key="user_id", match=qm.MatchValue(value=int(student_id)))]
+        docs: list[dict] = []
+        if topic:
+            docs += await _search_payload(settings.qdrant_doc_collection, f"{topic}: {query}", 4,
+                                          base + [qm.FieldCondition(key="topic", match=qm.MatchValue(value=topic))])
+        if subject_id:
+            docs += await _search_payload(settings.qdrant_doc_collection, f"{topic or ''}: {query}", 4,
+                                          base + [qm.FieldCondition(key="subject_id", match=qm.MatchValue(value=int(subject_id)))])
+        uniq: dict[str, dict] = {}
+        for p in docs:
+            b = (p.get("body") or "").strip()
+            if b and b[:120] not in uniq:
+                uniq[b[:120]] = p
+        ordered = sorted(uniq.values(), key=lambda p: 0 if p.get("is_primary") else 1)
+        add([p.get("body", "") for p in ordered[:5]], prefix="[Student's own notes] ")
+
+    # 2) vetted curriculum (topic-filtered)
     add(await _search(settings.qdrant_collection,
                       query if not topic else f"{topic}: {query}", k, _topic_filter(topic)))
 
-    # 2) graph expansion: prerequisite topics + this student's weak concepts
+    # 2b) subject-scoped curriculum — textbook-derived curriculum (no exact
+    #     topic match) is tagged by subject_id, so surface it for any topic
+    #     underneath the subject, just like the student's subject-wide notes.
+    if subject_id:
+        from qdrant_client import models as qm
+        add(await _search(settings.qdrant_collection, f"{topic or ''} {query}".strip(), 4,
+                          [qm.FieldCondition(key="subject_id", match=qm.MatchValue(value=int(subject_id)))]))
+
+    # 3) graph expansion: prerequisite topics + this student's weak concepts
     if topic:
         try:
             from . import graph
@@ -356,15 +522,7 @@ async def retrieve(query: str, topic: str | None = None, student_id: int | None 
         except Exception as e:  # noqa: BLE001
             log.debug("graph expansion skipped: %s", e)
 
-    # 3) the student's own uploaded documents for this topic
-    if student_id:
-        from qdrant_client import models as qm
-        must = [qm.FieldCondition(key="user_id", match=qm.MatchValue(value=int(student_id)))]
-        if topic:
-            must.append(qm.FieldCondition(key="topic", match=qm.MatchValue(value=topic)))
-        add(await _search(settings.qdrant_doc_collection, f"{topic or ''}: {query}", 3, must))
-
-    return out[: max(k, 6)]
+    return out[: max(k, 8)]
 
 
 async def status() -> dict:
@@ -416,7 +574,10 @@ def as_context(chunks: list[str]) -> str:
         return ""
     joined = "\n---\n".join(c.strip() for c in chunks if c.strip())
     return (
-        "\n\nUse ONLY the following curriculum material as your source of truth. "
-        "If it doesn't cover the question, say so briefly and teach from first principles:\n"
-        f"<curriculum>\n{joined}\n</curriculum>\n"
+        "\n\nGround your answer in the material below. Items marked "
+        "\"[Student's own notes]\" are the student's OWN uploaded notes — treat them as the "
+        "PRIMARY source of truth and prefer their wording, examples and emphasis; the rest is "
+        "supporting curriculum. If the material doesn't cover the question, say so briefly and "
+        "teach from first principles:\n"
+        f"<material>\n{joined}\n</material>\n"
     )

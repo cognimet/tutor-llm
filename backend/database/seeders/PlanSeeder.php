@@ -25,11 +25,13 @@ class PlanSeeder extends Seeder
             'snap'       => 2,   // snap-a-doubt OCR (local tesseract, cheap)
         ];
 
+        // Generous limits so an exam-crunch student (incl. vision note-reading,
+        // which costs more) isn't cut off mid-revision. Tune down later if needed.
         Plan::updateOrCreate(['key' => 'free'], [
             'name' => 'Free',
             'price_inr' => 0,
-            'daily_credit_limit' => 30,
-            'monthly_credit_limit' => 400,
+            'daily_credit_limit' => 120,
+            'monthly_credit_limit' => 2500,
             'per_action_weights' => $weights,
             'is_active' => true,
         ]);
@@ -37,8 +39,8 @@ class PlanSeeder extends Seeder
         Plan::updateOrCreate(['key' => 'plus'], [
             'name' => 'Plus',
             'price_inr' => 499,
-            'daily_credit_limit' => 200,
-            'monthly_credit_limit' => 4000,
+            'daily_credit_limit' => 400,
+            'monthly_credit_limit' => 8000,
             'per_action_weights' => $weights,
             'is_active' => true,
         ]);
@@ -46,8 +48,8 @@ class PlanSeeder extends Seeder
         Plan::updateOrCreate(['key' => 'family'], [
             'name' => 'Family',
             'price_inr' => 899,
-            'daily_credit_limit' => 200,
-            'monthly_credit_limit' => 4000,
+            'daily_credit_limit' => 400,
+            'monthly_credit_limit' => 8000,
             'per_action_weights' => $weights,
             'is_active' => true,
         ]);

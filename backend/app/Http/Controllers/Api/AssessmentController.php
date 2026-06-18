@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Assessment;
+use App\Services\CurriculumResolver;
 use App\Services\EventTracker;
 use App\Services\LearnerProfileService;
 use App\Services\MindService;
@@ -22,6 +23,7 @@ class AssessmentController extends Controller
         protected EventTracker $events,
         protected ReadinessService $readiness,
         protected LearnerProfileService $profile,
+        protected CurriculumResolver $resolver,
     ) {}
 
     // Soft learning-gate: should the student learn this topic before testing on
@@ -52,12 +54,15 @@ class AssessmentController extends Controller
         $user = $request->user();
         // "exam" scope = a bigger, multi-concept assessment.
         $count = $data['count'] ?? (($data['scope'] ?? 'topic') === 'exam' ? 12 : 3);
-        $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count);
+        // Subject id (from the topic) makes generation notes-first — questions
+        // lean on the student's own uploaded notes for this subject.
+        $subjectId = $this->resolver->subjectId($user, $data['topic_id'] ?? null, null);
+        $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count, $subjectId);
 
         // Free-tier models occasionally rate-limit or return malformed JSON;
         // one immediate retry rescues most transient failures.
         if (empty($questions)) {
-            $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count);
+            $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count, $subjectId);
         }
 
         abort_if(

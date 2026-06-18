@@ -42,14 +42,15 @@ class TutorService
     /**
      * @param array $history  [['role' => 'user'|'tutor', 'content' => '...'], ...]
      */
-    public function explain(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = ''): string
+    public function explain(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', ?int $subjectId = null): string
     {
         [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext);
 
-        // Pass the topic + student so the AI service grounds the reply in
-        // graph-aware RAG (curriculum + prerequisites + the student's weak spots
-        // and own notes); falls back to ungrounded if nothing is indexed.
-        $reply = $this->ai->text($system, $user, $topic, null, $student->id);
+        // Pass the topic + student + subject so the AI service grounds the reply
+        // in NOTES-FIRST, graph-aware RAG (the student's own notes — incl.
+        // subject/chapter-wide ones — then curriculum, prerequisites and weak
+        // spots); falls back to ungrounded if nothing is indexed.
+        $reply = $this->ai->text($system, $user, $topic, null, $student->id, $subjectId);
         $this->meter($student, 'chat', ['topic' => $topic, 'mode' => $mode]);
 
         return $reply;
@@ -60,11 +61,11 @@ class TutorService
      * returns the full reply. Returns '' if nothing streamed (caller may fall
      * back to explain()).
      */
-    public function explainStream(User $student, string $topic, string $chapter, string $subject, array $history, string $message, callable $onDelta, string $mode = 'teach', string $notesContext = ''): string
+    public function explainStream(User $student, string $topic, string $chapter, string $subject, array $history, string $message, callable $onDelta, string $mode = 'teach', string $notesContext = '', ?int $subjectId = null): string
     {
         [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext);
 
-        $reply = $this->ai->stream($system, $user, $onDelta, $topic, $student->id);
+        $reply = $this->ai->stream($system, $user, $onDelta, $topic, $student->id, $subjectId);
         $this->meter($student, 'chat', ['topic' => $topic, 'streamed' => true, 'mode' => $mode]);
 
         return $reply;
@@ -219,11 +220,14 @@ GUIDE;
 
     /* ---------------- 2. Mini-assessment generation ------------------ */
 
-    public function generateAssessment(User $student, string $topic, int $count = 3): array
+    public function generateAssessment(User $student, string $topic, int $count = 3, ?int $subjectId = null): array
     {
         $system = $this->tutorPersona($student)
             . "\nYou create a short diagnostic assessment to reveal what the student "
-            . "truly understands. Return ONLY JSON.";
+            . "truly understands. When the provided material includes the student's own notes "
+            . "(marked \"[Student's own notes]\"), base the questions PRIMARILY on those notes — "
+            . "their definitions, examples and emphasis — and use the curriculum only to supplement. "
+            . "Return ONLY JSON.";
 
         $user = "Create {$count} multiple-choice questions for the topic \"{$topic}\". "
             . "Each question must probe a distinct sub-concept and include a plausible "
@@ -232,7 +236,9 @@ GUIDE;
             . '{"questions":[{"question":"...","options":["..","..","..",".."],'
             . '"correct_index":0,"concept":"sub-concept name","explanation":"why correct"}]}';
 
-        $data = $this->ai->json($system, $user, ['questions' => []], $topic);
+        // student_id + subject_id make the grounding notes-first (their uploaded
+        // material is injected ahead of curriculum).
+        $data = $this->ai->json($system, $user, ['questions' => []], $topic, null, $student->id, $subjectId);
         $this->meter($student, 'assess_gen', ['topic' => $topic]);
 
         $questions = $this->normaliseQuestions($data['questions'] ?? []);

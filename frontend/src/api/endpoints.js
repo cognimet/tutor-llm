@@ -55,13 +55,17 @@ export const tutorApi = {
 export const notesApi = {
   // params: { topic_id?, topic_name }
   list: (params) => api.get("/tutor/notes", { params }).then((r) => r.data),
-  upload: (file, ctx, onProgress) => {
+  // opts: { scope: "subject"|"chapter"|"topic", is_primary: bool, force: bool }
+  upload: (file, ctx, opts = {}, onProgress) => {
     const form = new FormData();
     form.append("file", file);
     if (ctx.topic_id) form.append("topic_id", ctx.topic_id);
-    form.append("topic_name", ctx.topic_name || "");
+    if (ctx.topic_name) form.append("topic_name", ctx.topic_name);
     if (ctx.chapter_name) form.append("chapter_name", ctx.chapter_name);
     if (ctx.subject_name) form.append("subject_name", ctx.subject_name);
+    form.append("scope", opts.scope || "topic");
+    if (opts.is_primary) form.append("is_primary", "1");
+    if (opts.force) form.append("force", "1");
     return api.post("/tutor/notes", form, {
       headers: { "Content-Type": "multipart/form-data" },
       timeout: 200000, // extraction + summarise can take a while
@@ -87,6 +91,19 @@ export const plannerApi = {
 // --- Student: in-app Plan Reminders (today/tomorrow/overdue/exam + next focus) ---
 export const remindersApi = {
   feed: () => api.get("/tutor/reminders").then((r) => r.data),
+};
+
+// --- Student: textbook diagrams (figures ingested from an uploaded book) ---
+export const figuresApi = {
+  // params: { topic_name?, topic_id?, subject_name?, k? }
+  list: (params) => api.get("/tutor/figures", { params }).then((r) => r.data.figures || []),
+  // The image route is auth-gated, so load it via axios (bearer token attached)
+  // and hand back an object URL the <img> can use. Caller must revoke it.
+  image: (noteId, page) =>
+    api
+      .get(`/tutor/figures/${noteId}/${page}/image`, { responseType: "blob" })
+      .then((r) => URL.createObjectURL(r.data)),
+  status: (noteId) => api.get(`/tutor/textbooks/${noteId}/status`).then((r) => r.data),
 };
 
 // --- Student: learner profile / "current stage" + behavioural telemetry ---

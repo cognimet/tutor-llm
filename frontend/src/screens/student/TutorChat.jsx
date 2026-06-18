@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
   Mic, MicOff, Camera, Maximize2, PenLine,
-  Sparkles as SparklesIcon, CalendarClock, Paperclip,
+  Sparkles as SparklesIcon, CalendarClock, Paperclip, ListChecks,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
 import { tutorApi, plannerApi } from "../../api/endpoints.js";
@@ -18,6 +18,8 @@ import StudyHub from "../../ui/StudyHub.jsx";
 import NotesPicker from "../../ui/NotesPicker.jsx";
 import NextStep from "../../ui/NextStep.jsx";
 import ScreenTimeTracker from "../../ui/ScreenTimeTracker.jsx";
+import NotesChecklist from "../../ui/NotesChecklist.jsx";
+import FigureStrip from "../../ui/FigureStrip.jsx";
 import { flashcardsApi, mistakesApi } from "../../api/endpoints.js";
 
 const STARTERS = (t) => [
@@ -446,6 +448,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
   const [hasNew, setHasNew] = useState(false);
   const [booting, setBooting] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [checklistDrawer, setChecklistDrawer] = useState(false); // mobile study-notes checklist
   const [menuOpen, setMenuOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [copiedTranscript, setCopiedTranscript] = useState(false);
@@ -563,10 +566,18 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     try { localStorage.setItem("tutorchat:sidepanel", sideOpen ? "open" : "closed"); } catch { /* */ }
   }, [sideOpen]);
 
-  // Recents panel: inline on desktop, drawer on mobile.
+  // Opened from "Study from my notes": pin the plan checklist beside the chat.
+  useEffect(() => {
+    if (ctx.from_notes && window.matchMedia("(min-width: 1024px)").matches) {
+      setSidePanel("checklist");
+      setSideOpen(true);
+    }
+  }, [ctx.from_notes]);
+
+  // Side panel: inline on desktop, drawer on mobile.
   const toggleSide = useCallback((tab) => {
     if (!window.matchMedia("(min-width: 1024px)").matches) {
-      setDrawerOpen(true);
+      if (tab === "checklist") setChecklistDrawer(true); else setDrawerOpen(true);
       return;
     }
     setSideOpen((open) => {
@@ -1021,6 +1032,13 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
               className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 transition-colors hover:text-indigo-600 dark:text-slate-300 dark:ring-white/10 dark:hover:text-indigo-300">
               <ClipboardCheck className="h-5 w-5" />
             </button>
+            {/* Study-from-notes: the plan checklist, pinned beside the chat */}
+            {ctx.from_notes && (
+              <button onClick={() => toggleSide("checklist")} title="My study-notes checklist"
+                className={headerToggle(sideOpen && sidePanel === "checklist")}>
+                <ListChecks className="h-5 w-5" />
+              </button>
+            )}
             <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-slate-200 dark:bg-white/10 sm:block" />
             <button onClick={() => toggleSide("chats")} title="Recent chats"
               className={headerToggle(sideOpen && sidePanel === "chats")}>
@@ -1058,6 +1076,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           </div>
 
           <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
+            {!booting && <FigureStrip ctx={ctx} />}
             {booting ? (
               <div className="flex h-full items-center justify-center gap-3 text-slate-400">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
@@ -1292,7 +1311,9 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           <div className="flex h-full w-[21.5rem] flex-col border-l border-slate-200/60 bg-white/55 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/50">
           <div className="flex items-center gap-2 px-3 pt-3">
             <p className="flex flex-1 items-center gap-1.5 px-1 text-xs font-extrabold text-slate-600 dark:text-slate-300">
-              <History className="h-4 w-4 text-indigo-500" /> Recent chats
+              {sidePanel === "checklist"
+                ? <><ListChecks className="h-4 w-4 text-indigo-500" /> My study plan</>
+                : <><History className="h-4 w-4 text-indigo-500" /> Recent chats</>}
             </p>
             <button onClick={() => setSideOpen(false)} title="Hide panel"
               className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 ring-1 ring-slate-200 transition-colors hover:text-slate-600 dark:text-slate-300 dark:ring-white/10">
@@ -1302,11 +1323,17 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
 
           {/* Panel body */}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
-            <button onClick={newChat} className={`mb-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
-              <Plus className="h-4 w-4" /> New chat
-              <span className="ml-auto hidden rounded-md bg-white/20 px-1.5 py-0.5 text-[10px] font-extrabold xl:inline">{MOD} J</span>
-            </button>
-            <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} searchRef={searchRef} />
+            {sidePanel === "checklist" ? (
+              <NotesChecklist subjectName={ctx.subject_name || ctx.topic_name} grad={t.grad} />
+            ) : (
+              <>
+                <button onClick={newChat} className={`mb-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
+                  <Plus className="h-4 w-4" /> New chat
+                  <span className="ml-auto hidden rounded-md bg-white/20 px-1.5 py-0.5 text-[10px] font-extrabold xl:inline">{MOD} J</span>
+                </button>
+                <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} searchRef={searchRef} />
+              </>
+            )}
           </div>
           </div>
         </aside>
@@ -1328,6 +1355,24 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
             </button>
             <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/60 dark:border-white/10 bg-white/70 p-3 backdrop-blur-sm">
               <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile study-notes checklist drawer (right side) */}
+      {checklistDrawer && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setChecklistDrawer(false)} />
+          <div className="drawer-in absolute inset-y-0 right-0 flex w-[88%] max-w-sm flex-col gap-3 bg-gradient-to-b from-slate-50 to-indigo-50/60 p-4 shadow-2xl dark:from-slate-900 dark:to-slate-950">
+            <div className="flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-sm font-extrabold text-slate-700 dark:text-slate-200"><ListChecks className="h-4 w-4 text-indigo-500" /> My study plan</p>
+              <button onClick={() => setChecklistDrawer(false)} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <NotesChecklist subjectName={ctx.subject_name || ctx.topic_name} grad={t.grad} />
             </div>
           </div>
         </div>

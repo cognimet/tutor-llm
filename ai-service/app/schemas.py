@@ -145,6 +145,11 @@ class NotesIngestRequest(BaseModel):
     topic: str | None = None
     note_id: int | None = None   # when set, the note is chunked + indexed for RAG
     title: str | None = None
+    # Scope for retrieval (subject/chapter/topic notes) + ★ primary weighting.
+    subject_id: int | None = None
+    chapter_id: int | None = None
+    topic_id: int | None = None
+    is_primary: bool = False
 
 
 class NotesIngestResponse(BaseModel):
@@ -175,9 +180,10 @@ class StudyScheduleRequest(BaseModel):
     horizon: str = "week"          # day | week | month | exam
     days_remaining: int | None = None   # to the exam (exam horizon)
     exam_date: str | None = None        # ISO date, for context only
-    notes_summary: str = ""        # summary of the student's uploaded notes
+    notes_summary: str = ""        # the student's uploaded notes (content, not just a gist)
     gaps: list[dict] = Field(default_factory=list)
     mastery: int = 0               # 0..100 composite mastery for the topic
+    from_notes: bool = False       # build the plan STRICTLY from the student's own notes
 
 
 class ScheduleTask(BaseModel):

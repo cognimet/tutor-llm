@@ -43,8 +43,10 @@ abstract class NcertContentSeeder extends Seeder
         $subject = $this->findSubject($data);
         if (! $subject) {
             $this->command?->error(sprintf(
-                '%s Class %d %s subject not found — seed the curriculum first.',
-                $data['board'], $data['class_number'], $data['subject']));
+                '%s %s %s subject not found — seed the curriculum first.',
+                $data['board'] ?? ($data['level_slug'] ?? ''),
+                isset($data['class_number']) ? 'Class '.$data['class_number'] : '',
+                $data['subject'] ?? ''));
 
             return;
         }
@@ -99,8 +101,9 @@ abstract class NcertContentSeeder extends Seeder
         $this->command?->info("Seeded {$made} {$this->sourcePrefix()} chunk(s). Now run: php artisan rag:index --pending");
     }
 
-    /** Resolve Stage · <board> · Class <n> · <subject> from the JSON metadata. */
-    private function findSubject(array $data): ?Subject
+    /** Resolve Stage · <board> · Class <n> · <subject> from the JSON metadata.
+     *  Overridable so non-board curricula (e.g. MBBS) can resolve differently. */
+    protected function findSubject(array $data): ?Subject
     {
         $level = Level::whereHas('track', fn ($q) => $q->where('slug', Str::slug($data['board'])))
             ->where('class_number', $data['class_number'])

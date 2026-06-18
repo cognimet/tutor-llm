@@ -129,7 +129,8 @@ def plan_build(topic: str, gaps: list) -> tuple[str, str]:
 
 
 def study_schedule(topic: str, horizon: str, days_remaining, exam_date,
-                   notes_summary: str, gaps: list, mastery: int) -> tuple[str, str]:
+                   notes_summary: str, gaps: list, mastery: int,
+                   from_notes: bool = False) -> tuple[str, str]:
     spans = {"day": "today (a single focused day)", "week": "the next 7 days",
              "month": "the next 4 weeks", "exam": "the run-up to the exam"}
     span = spans.get(horizon, "the next 7 days")
@@ -144,6 +145,28 @@ def study_schedule(topic: str, horizon: str, days_remaining, exam_date,
     exam_ctx = ""
     if days_remaining is not None:
         exam_ctx = f"There are {days_remaining} day(s) until the exam. Fit the plan within them. "
+
+    if from_notes and notes_summary.strip():
+        # NOTES-DRIVEN: the plan must mirror what's actually in the student's notes.
+        system = (
+            "You are an expert study coach for Indian school students. Build a concrete, dated study "
+            "plan STRICTLY from the student's OWN uploaded notes given below. EVERY task must cover a "
+            "topic, heading or section that ACTUALLY APPEARS in their notes — walk through the notes in "
+            "order. Do NOT invent topics that are not in the notes, and do NOT pad with generic "
+            "syllabus items. Use the notes' own wording for concept names. Return ONLY JSON."
+        )
+        user = (
+            f'Subject: "{topic}". Horizon: {horizon} ({span}). {exam_ctx}'
+            f'Current mastery: {mastery}/100. Open gaps: {gaps}.\n'
+            f'=== THE STUDENT\'S OWN NOTES (build the plan from THESE) ===\n{notes_summary[:6000]}\n=== END NOTES ===\n'
+            f'{horizon_rule} Break the notes into a sequence of tasks; each names the concept (from the '
+            'notes) it builds. Mix kinds: "learn" (understand a section), "practice" (solve problems on '
+            'it), "revise" (recap), "assess" (a quick quiz on it). Cover the weak concepts first.\n'
+            'JSON shape: {"title","summary","tasks":[{"day_index":int,"title","detail",'
+            '"concept","kind":"learn|practice|revise|assess","estimated_minutes":int}]}'
+        )
+        return system, user
+
     system = (
         "You are an expert study coach for Indian school students. You turn a topic, the "
         "student's own notes, their concept gaps and mastery into a concrete, dated study "

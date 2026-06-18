@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use App\Services\AiClient;
+use App\Services\CurriculumResolver;
 use App\Services\EventTracker;
 use App\Services\MindService;
 use App\Services\ProgressService;
@@ -24,6 +25,7 @@ class TutorController extends Controller
         protected AiClient $ai,
         protected TokenMeter $meter,
         protected EventTracker $events,
+        protected CurriculumResolver $resolver,
     ) {}
 
     // List the student's chat sessions (most recent first).
@@ -160,6 +162,7 @@ class TutorController extends Controller
             'meta' => $noteIds ? ['note_ids' => array_values($noteIds)] : null,
         ]);
 
+        $subjectId = $this->resolver->subjectId($user, $session->topic_id, $session->subject_name);
         $reply = $this->tutor->explain(
             $user,
             $session->topic_name ?? $session->title,
@@ -169,6 +172,7 @@ class TutorController extends Controller
             $data['message'],
             $data['mode'] ?? 'teach',
             $notesContext,
+            $subjectId,
         );
 
         $message = $session->messages()->create(['role' => 'tutor', 'content' => $reply]);
@@ -264,8 +268,9 @@ class TutorController extends Controller
         $topic   = $session->topic_name ?? $session->title;
         $chapter = $session->chapter_name ?? '';
         $subject = $session->subject_name ?? '';
+        $subjectId = $this->resolver->subjectId($user, $session->topic_id, $subject);
 
-        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $topic, $chapter, $subject, $mode, $notesContext) {
+        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $topic, $chapter, $subject, $subjectId, $mode, $notesContext) {
             $emit = function (string $event, array $payload) {
                 echo "event: {$event}\n";
                 echo 'data: ' . json_encode($payload) . "\n\n";
@@ -278,14 +283,14 @@ class TutorController extends Controller
             $full = $this->tutor->explainStream(
                 $user, $topic, $chapter, $subject, $history, $prompt,
                 fn (string $delta) => $emit('delta', ['text' => $delta]),
-                $mode, $notesContext,
+                $mode, $notesContext, $subjectId,
             );
 
             // If streaming produced nothing (e.g. transient upstream error),
             // fall back to the retrying non-streaming path so the student still
             // gets an answer.
             if ($full === '') {
-                $full = $this->tutor->explain($user, $topic, $chapter, $subject, $history, $prompt, $mode, $notesContext);
+                $full = $this->tutor->explain($user, $topic, $chapter, $subject, $history, $prompt, $mode, $notesContext, $subjectId);
                 if ($full !== '') {
                     $emit('delta', ['text' => $full]);
                 }

@@ -19,10 +19,13 @@ Model routing (per-action, with a single-model override):
 
   Precedence per action:  AI_MODEL  >  AI_MODEL_<ACTION>  >  provider default
 """
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_MODELS = {
     "gemini": "gemini-2.5-flash",
+    "google": "gemini-2.5-flash",   # google-genai SDK (ADC or key; supports Vertex)
     "openai": "gpt-4o-mini",
     "anthropic": "claude-sonnet-4-5",
 }
@@ -35,19 +38,32 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # ── Provider selection ─────────────────────────────────────────────
-    ai_provider: str = "auto"          # auto | gemini | openai | anthropic
+    ai_provider: str = "auto"          # auto | gemini | google | openai | anthropic
     ai_model: str | None = None        # SINGLE-MODEL switch (overrides routing)
 
     # ── Per-action model routing (ignored when AI_MODEL is set) ───────
     ai_model_chat: str | None = None
     ai_model_structured: str | None = None
     ai_model_grade: str | None = None
+    # Vision-language model (OpenAI-compatible / OpenRouter) for reading
+    # uploaded diagrams, figures and handwriting. Falls back to tesseract OCR.
+    ai_model_vision: str | None = None
 
-    # ── Gemini ─────────────────────────────────────────────────────────
+    # ── Gemini (legacy REST, API key) ──────────────────────────────────
     gemini_api_key: str | None = None
     gemini_model: str | None = None    # legacy alias for AI_MODEL on gemini
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_timeout: int = 45
+
+    # ── Google Gen AI SDK (AI_PROVIDER=google) ─────────────────────────
+    # Uses the `google-genai` client, which auto-detects auth from the env:
+    # GEMINI_API_KEY/GOOGLE_API_KEY, or ADC (GOOGLE_APPLICATION_CREDENTIALS),
+    # and Vertex AI when GOOGLE_GENAI_USE_VERTEXAI=true (+ project/location).
+    google_api_key: str | None = None
+    google_genai_use_vertexai: bool = False
+    google_cloud_project: str | None = None
+    google_cloud_location: str | None = None
+    gemini_vision_model: str | None = None   # VLM model for reading images
 
     # ── OpenAI ─────────────────────────────────────────────────────────
     openai_api_key: str | None = None
@@ -86,17 +102,36 @@ class Settings(BaseSettings):
     # Shared secret so only Laravel can call this service (simple bearer).
     internal_api_key: str | None = None
 
+    # ── Shared upload volume (textbook ingest) ────────────────────────
+    # Same path the Laravel container mounts its storage/app at, so this
+    # service can read uploaded PDFs in place (no 200 MB HTTP transfer) and
+    # write rendered page images back where Laravel can serve them.
+    upload_root: str = "/app/storage/app"
+    # Page rasterisation DPI for the vision model (higher = sharper, bigger).
+    pdf_render_dpi: int = 150
+    # Polite pause (seconds) between per-page VLM calls so a free-tier model
+    # isn't hammered into rate limits during an 800-page ingest.
+    pdf_page_pause: float = 1.2
+
     # ------------------------------------------------------------------
     def key_for(self, provider: str) -> str | None:
         return {
             "gemini": self.gemini_api_key,
+            "google": self.gemini_api_key or self.google_api_key,
             "openai": self.openai_api_key,
             "anthropic": self.anthropic_api_key,
         }.get(provider)
 
     @property
+    def google_configured(self) -> bool:
+        """The google-genai SDK has usable auth (API key, ADC file, or Vertex)."""
+        return bool(self.gemini_api_key or self.google_api_key
+                    or self.google_genai_use_vertexai
+                    or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+
+    @property
     def resolved_provider(self) -> str:
-        if self.ai_provider in ("gemini", "openai", "anthropic"):
+        if self.ai_provider in ("gemini", "google", "openai", "anthropic"):
             return self.ai_provider
         for p in ("gemini", "openai", "anthropic"):  # auto-detect by key
             if self.key_for(p):
@@ -133,7 +168,36 @@ class Settings(BaseSettings):
 
     @property
     def is_mock(self) -> bool:
-        return self.ai_mock or not self.key_for(self.resolved_provider)
+        if self.ai_mock:
+            return True
+        if self.resolved_provider == "google":
+            return not self.google_configured   # ADC has no "key" but is live
+        return not self.key_for(self.resolved_provider)
+
+    # ── Vision (image reading) ─────────────────────────────────────────
+    @property
+    def vision_model(self) -> str:
+        """The VLM used to read uploaded images/diagrams (OpenRouter default)."""
+        return self.ai_model_vision or "nvidia/nemotron-nano-12b-v2-vl:free"
+
+    @property
+    def vision_provider(self) -> str:
+        """Which backend reads images: 'gemini' (google-genai SDK) when
+        AI_PROVIDER=google, else 'openai' (OpenAI-compatible / OpenRouter)."""
+        return "gemini" if self.resolved_provider == "google" else "openai"
+
+    @property
+    def google_vision_model(self) -> str:
+        return self.gemini_vision_model or "gemini-2.5-flash"
+
+    @property
+    def vision_enabled(self) -> bool:
+        """Can we read images with a VLM at all? Else -> tesseract OCR."""
+        if self.ai_mock:
+            return False
+        if self.vision_provider == "gemini":
+            return self.google_configured
+        return bool(self.openai_api_key) and bool(self.vision_model)
 
 
 settings = Settings()

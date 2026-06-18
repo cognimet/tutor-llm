@@ -45,21 +45,21 @@ class AiClient
      * @param ?string $topic  when set, the AI service injects RAG curriculum
      *                        context for that topic before generating.
      */
-    public function text(string $system, string $user, ?string $topic = null, ?string $action = null, ?int $studentId = null): string
+    public function text(string $system, string $user, ?string $topic = null, ?string $action = null, ?int $studentId = null, ?int $subjectId = null): string
     {
         $data = $this->post('/ai/text', array_filter([
             'system' => $system, 'user' => $user, 'topic' => $topic, 'action' => $action,
-            'student_id' => $studentId,
+            'student_id' => $studentId, 'subject_id' => $subjectId,
         ], fn ($v) => $v !== null));
         $this->captureUsage($data);
         return (string) ($data['text'] ?? '');
     }
 
-    public function json(string $system, string $user, array $fallback = [], ?string $topic = null, ?string $action = null, ?int $studentId = null): array
+    public function json(string $system, string $user, array $fallback = [], ?string $topic = null, ?string $action = null, ?int $studentId = null, ?int $subjectId = null): array
     {
         $data = $this->post('/ai/json', array_filter([
             'system' => $system, 'user' => $user, 'fallback' => $fallback, 'topic' => $topic, 'action' => $action,
-            'student_id' => $studentId,
+            'student_id' => $studentId, 'subject_id' => $subjectId,
         ], fn ($v) => $v !== null));
         $this->captureUsage($data);
         $out = $data['data'] ?? $fallback;
@@ -81,7 +81,7 @@ class AiClient
      * Stream tutor text. Reads the AI service's SSE stream and invokes $onDelta
      * per chunk. Returns the full accumulated text ('' if nothing streamed).
      */
-    public function stream(string $system, string $user, callable $onDelta, ?string $topic = null, ?int $studentId = null): string
+    public function stream(string $system, string $user, callable $onDelta, ?string $topic = null, ?int $studentId = null, ?int $subjectId = null): string
     {
         $full = '';
         try {
@@ -90,7 +90,7 @@ class AiClient
                 ->withOptions(['stream' => true])
                 ->post("{$this->url}/ai/stream", array_filter([
                     'system' => $system, 'user' => $user, 'topic' => $topic,
-                    'student_id' => $studentId,
+                    'student_id' => $studentId, 'subject_id' => $subjectId,
                 ], fn ($v) => $v !== null));
 
             if (! $response->successful()) {
@@ -172,16 +172,41 @@ class AiClient
     }
 
     /**
+     * Check an uploaded document's content belongs to the chosen scope.
+     * @return array{match:bool,detected:?string,confidence:float,reason:string}
+     *         Defaults to match=true when the service is unavailable (never block on failure).
+     */
+    public function validateNoteScope(string $text, string $scope, array $names): array
+    {
+        $data = $this->roleCall('/ai/notes/validate-scope', [
+            'text' => mb_substr($text, 0, 6000), 'scope' => $scope,
+            'subject' => $names['subject'] ?? null,
+            'chapter' => $names['chapter'] ?? null,
+            'topic' => $names['topic'] ?? null,
+        ]);
+        return [
+            'match'      => (bool) ($data['match'] ?? true),
+            'detected'   => $data['detected'] ?? null,
+            'confidence' => (float) ($data['confidence'] ?? 0),
+            'reason'     => (string) ($data['reason'] ?? ''),
+        ];
+    }
+
+    /**
      * Summarise a student's notes -> {summary, flashcards, chunks_indexed}.
      * When $noteId is given, the AI service also chunks + embeds the note into
      * the Qdrant `documents` collection and links it in the graph for RAG.
      */
     public function notesIngest(int $studentId, string $text, ?string $topic = null,
-                                ?int $noteId = null, ?string $title = null): array
+                                ?int $noteId = null, ?string $title = null, array $scope = []): array
     {
         $data = $this->post('/ai/notes/ingest', array_filter([
             'student_id' => $studentId, 'text' => $text, 'topic' => $topic,
             'note_id' => $noteId, 'title' => $title,
+            'subject_id' => $scope['subject_id'] ?? null,
+            'chapter_id' => $scope['chapter_id'] ?? null,
+            'topic_id' => $scope['topic_id'] ?? null,
+            'is_primary' => $scope['is_primary'] ?? null,
         ], fn ($v) => $v !== null));
         $this->captureUsage($data);
         return [
@@ -221,6 +246,40 @@ class AiClient
         ];
     }
 
+    /* ----------------------- Textbook diagram ingest ----------------------- */
+
+    /**
+     * Start (or resume) ingesting a big textbook PDF: the AI service rasterises
+     * every page, reads it with the vision model, and embeds each diagram as a
+     * retrievable FIGURE. $relPath is relative to the shared storage volume.
+     */
+    public function startTextbookIngest(int $noteId, string $relPath, int $userId, array $scope = []): array
+    {
+        return $this->post('/ai/pdf/ingest', array_filter([
+            'note_id' => $noteId, 'rel_path' => $relPath, 'user_id' => $userId,
+            'subject_id' => $scope['subject_id'] ?? null,
+            'subject' => $scope['subject'] ?? null,
+            'topic' => $scope['topic'] ?? null,
+            'topic_id' => $scope['topic_id'] ?? null,
+            'is_primary' => $scope['is_primary'] ?? null,
+        ], fn ($v) => $v !== null));
+    }
+
+    /** Progress for a textbook ingest: {state,total,done,figures,blank,failed,...}. */
+    public function textbookIngestStatus(int $noteId): array
+    {
+        return $this->get("/ai/pdf/ingest/{$noteId}");
+    }
+
+    /** Textbook figures relevant to a topic/subject (for the in-chat strip). */
+    public function figures(int $userId, ?int $subjectId = null, ?string $topic = null, int $k = 12): array
+    {
+        $data = $this->get('/ai/figures', array_filter([
+            'user_id' => $userId, 'subject_id' => $subjectId, 'topic' => $topic, 'k' => $k,
+        ], fn ($v) => $v !== null));
+        return is_array($data['figures'] ?? null) ? $data['figures'] : [];
+    }
+
     /* ----------------------- RAG / curriculum indexing --------------------- */
 
     /** Ensure the vector collection exists. */
@@ -254,6 +313,23 @@ class AiClient
             $r = Http::timeout($this->timeout)
                 ->withHeaders($this->headers())
                 ->post("{$this->url}{$path}", $payload);
+
+            if ($r->successful()) {
+                return $r->json() ?? [];
+            }
+            Log::warning('AI service error', ['path' => $path, 'status' => $r->status()]);
+        } catch (\Throwable $e) {
+            Log::error('AI service request failed', ['path' => $path, 'error' => $e->getMessage()]);
+        }
+        return [];
+    }
+
+    protected function get(string $path, array $query = []): array
+    {
+        try {
+            $r = Http::timeout($this->timeout)
+                ->withHeaders($this->headers())
+                ->get("{$this->url}{$path}", $query);
 
             if ($r->successful()) {
                 return $r->json() ?? [];

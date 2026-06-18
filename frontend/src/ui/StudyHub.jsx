@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   X, CalendarDays, FileText, Layers, AlertTriangle, Upload, Loader2,
   Check, RefreshCw, Sparkles, Trash2, ClipboardCheck, RotateCcw,
-  BookOpen, Target, Repeat, PenLine, ChevronRight, CalendarClock, Activity,
+  BookOpen, Target, Repeat, PenLine, ChevronRight, CalendarClock, Activity, Star,
 } from "lucide-react";
 import { notesApi, plannerApi, flashcardsApi, mistakesApi, telemetryApi } from "../api/endpoints.js";
 import { NoteIcon, fmtBytes } from "./NotesPicker.jsx";
@@ -314,8 +314,17 @@ function NotesTab({ ctx, grad }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [openId, setOpenId] = useState(null);
+  const [scope, setScope] = useState("topic");      // topic | chapter | subject
+  const [isPrimary, setIsPrimary] = useState(false); // ★ exam-critical
   const fileRef = useRef(null);
-  const params = ctx.topic_id ? { topic_id: ctx.topic_id } : { topic_name: ctx.topic_name };
+  // Pass the full context so the backend returns every note that APPLIES here
+  // (this topic's + its chapter's + its subject's).
+  const params = {
+    ...(ctx.topic_id ? { topic_id: ctx.topic_id } : {}),
+    ...(ctx.topic_name ? { topic_name: ctx.topic_name } : {}),
+    ...(ctx.chapter_name ? { chapter_name: ctx.chapter_name } : {}),
+    ...(ctx.subject_name ? { subject_name: ctx.subject_name } : {}),
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -332,16 +341,23 @@ function NotesTab({ ctx, grad }) {
     if (!file) return;
     setError("");
     if (file.size > usage.cap_bytes - usage.used_bytes) {
-      setError(`Not enough space — ${fmtBytes(usage.cap_bytes - usage.used_bytes)} left in this topic.`); return;
+      setError(`Not enough space — ${fmtBytes(usage.cap_bytes - usage.used_bytes)} left in this subject.`); return;
     }
     setUploading(true);
     try {
-      const note = await notesApi.upload(file, ctx);
+      const note = await notesApi.upload(file, ctx, { scope, is_primary: isPrimary });
       if (note?.status === "failed") setError(note?.meta?.error || "That file couldn't be read.");
       await load();
     } catch (err) { setError(err?.response?.data?.message || "Upload failed."); await load(); }
     finally { setUploading(false); }
   };
+
+  // Which scope levels are available depends on what context we have.
+  const SCOPES = [
+    ["topic", "This topic", ctx.topic_name],
+    ["chapter", "This chapter", ctx.chapter_name],
+    ["subject", "Whole subject", ctx.subject_name],
+  ].filter(([, , label]) => !!label);
 
   const remove = async (id) => { try { await notesApi.remove(id); load(); } catch { /* */ } };
 
@@ -357,11 +373,32 @@ function NotesTab({ ctx, grad }) {
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
           <div className={`h-full rounded-full ${pct > 90 ? "bg-rose-400" : "bg-gradient-to-r from-indigo-400 to-violet-500"}`} style={{ width: `${Math.max(2, pct)}%` }} />
         </div>
+        {/* Which level do these notes belong to? Subject/chapter notes apply to
+            every topic underneath them; ★ marks them as the priority source. */}
+        {SCOPES.length > 1 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Apply to</span>
+            {SCOPES.map(([id, label, sub]) => (
+              <button key={id} onClick={() => setScope(id)} title={sub}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold transition-colors ${
+                  scope === id ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-700 dark:bg-white/10 dark:text-slate-400"}`}>
+                {label}
+              </button>
+            ))}
+            <button onClick={() => setIsPrimary((v) => !v)} title="Prioritise these notes everywhere (exam-critical)"
+              className={`ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold transition-colors ${
+                isPrimary ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+                  : "bg-slate-100 text-slate-500 hover:text-slate-700 dark:bg-white/10 dark:text-slate-400"}`}>
+              <Star className={`h-3 w-3 ${isPrimary ? "fill-amber-500 text-amber-500" : ""}`} /> Exam-critical
+            </button>
+          </div>
+        )}
         <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff" className="hidden" onChange={onFile} />
         <button onClick={() => fileRef.current?.click()} disabled={uploading}
           className={`mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${grad} px-4 py-2.5 text-sm font-extrabold text-white shadow-md transition-all hover:shadow-lg disabled:opacity-60`}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          {uploading ? "Reading your file…" : "Upload PDF, Word, Excel, image or text"}
+          {uploading ? "Reading your file…" : `Upload to ${SCOPES.find(([id]) => id === scope)?.[1] || "this topic"}`}
         </button>
         {error && <p className="mt-2 flex items-start gap-1.5 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{error}</p>}
       </div>
@@ -373,8 +410,14 @@ function NotesTab({ ctx, grad }) {
           <div className="flex items-center gap-2.5">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500 dark:bg-white/10"><NoteIcon kind={n.kind} /></span>
             <button onClick={() => setOpenId(openId === n.id ? null : n.id)} className="min-w-0 flex-1 text-left">
-              <span className="block truncate text-sm font-extrabold text-slate-800 dark:text-slate-100">{n.title}</span>
+              <span className="block truncate text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                {n.is_primary && <Star className="mr-1 inline h-3 w-3 fill-amber-500 text-amber-500" />}{n.title}
+              </span>
               <span className="block text-[11px] font-bold text-slate-400">
+                {n.scope === "subject" ? `Subject · ${n.subject_name || ""}`
+                  : n.scope === "chapter" ? `Chapter · ${n.chapter_name || ""}`
+                  : `Topic · ${n.topic_name || ""}`}
+                {" · "}
                 {n.status === "processing" ? "Processing…" : n.status === "failed" ? (n.meta?.error || "Couldn't read this file") : fmtBytes(n.size_bytes)}
               </span>
             </button>

@@ -383,8 +383,133 @@ class AnthropicProvider:
                         total_tokens=prompt_tokens + completion_tokens)
 
 
+# ═══════════════════ Google Gen AI SDK (Gemini / Vertex) ═══════════════
+class GoogleGenAIProvider:
+    """Gemini via the official `google-genai` SDK. Auth is auto-detected from
+    the environment: GEMINI_API_KEY/GOOGLE_API_KEY, or ADC, or Vertex AI when
+    GOOGLE_GENAI_USE_VERTEXAI=true. Selected with AI_PROVIDER=google."""
+    name = "google"
+
+    def __init__(self, model: str):
+        self.model = model
+        self._client = None
+
+    def _client_(self):
+        if self._client is None:
+            from google import genai  # lazy: only imported when this provider is used
+            self._client = genai.Client()
+        return self._client
+
+    def _config(self, system: str, json_mode: bool):
+        from google.genai import types
+        kw = {"temperature": 0.4 if json_mode else 0.7, "max_output_tokens": _MAX_TOKENS}
+        if system:
+            kw["system_instruction"] = system
+        if json_mode:
+            kw["response_mime_type"] = "application/json"
+        return types.GenerateContentConfig(**kw)
+
+    def _usage(self, resp) -> Usage:
+        um = getattr(resp, "usage_metadata", None)
+        p = int(getattr(um, "prompt_token_count", 0) or 0)
+        c = int(getattr(um, "candidates_token_count", 0) or 0)
+        return Usage(model=self.model, prompt_tokens=p, completion_tokens=c,
+                     total_tokens=int(getattr(um, "total_token_count", 0) or (p + c)))
+
+    async def text(self, system: str, user: str) -> tuple[str, Usage]:
+        try:
+            resp = await self._client_().aio.models.generate_content(
+                model=self.model, contents=user, config=self._config(system, False))
+            return (resp.text or ""), self._usage(resp)
+        except Exception as e:  # noqa: BLE001
+            log.error("google text failed: %s", e)
+            return "", Usage(model=self.model)
+
+    async def json(self, system: str, user: str, fallback) -> tuple[dict, Usage]:
+        try:
+            resp = await self._client_().aio.models.generate_content(
+                model=self.model, contents=user, config=self._config(system, True))
+            decoded = decode_json(resp.text or "")
+            return (decoded if isinstance(decoded, (dict, list)) else fallback), self._usage(resp)
+        except Exception as e:  # noqa: BLE001
+            log.error("google json failed: %s", e)
+            return fallback, Usage(model=self.model)
+
+    async def stream(self, system: str, user: str):
+        try:
+            it = await self._client_().aio.models.generate_content_stream(
+                model=self.model, contents=user, config=self._config(system, False))
+            last = None
+            async for chunk in it:
+                last = chunk
+                delta = getattr(chunk, "text", "") or ""
+                if delta:
+                    yield delta, None
+            yield "", (self._usage(last) if last is not None else Usage(model=self.model))
+            return
+        except Exception as e:  # noqa: BLE001
+            log.warning("google stream failed (%s); falling back to non-stream", e)
+        text, usage = await self.text(system, user)
+        if text:
+            yield text, None
+        yield "", usage
+
+
+async def read_image_genai(image_b64: str, mime: str | None, instruction: str) -> tuple[str, Usage]:
+    """Read an image with Gemini via the google-genai SDK (AI_PROVIDER=google).
+    Returns (text, Usage); empty text on failure so the caller falls back to OCR."""
+    import base64 as _b64
+    model = settings.google_vision_model
+    try:
+        from google import genai
+        from google.genai import types
+        client = genai.Client()
+        img = types.Part.from_bytes(data=_b64.b64decode(image_b64), mime_type=mime or "image/jpeg")
+        resp = await client.aio.models.generate_content(
+            model=model, contents=[instruction, img],
+            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=1800))
+        um = getattr(resp, "usage_metadata", None)
+        p = int(getattr(um, "prompt_token_count", 0) or 0)
+        c = int(getattr(um, "candidates_token_count", 0) or 0)
+        return (resp.text or ""), Usage(model=model, prompt_tokens=p, completion_tokens=c,
+                                        total_tokens=int(getattr(um, "total_token_count", 0) or (p + c)))
+    except Exception as e:  # noqa: BLE001
+        log.warning("gemini vision read failed: %s", e)
+        return "", Usage(model="none")
+
+
+async def read_image(image_b64: str, mime: str | None, instruction: str) -> tuple[str, Usage]:
+    """Read an image with a vision-language model via the OpenAI-compatible
+    endpoint (OpenRouter). Transcribes text AND describes diagrams/figures.
+    Returns (text, Usage); empty text on failure so the caller can fall back to
+    tesseract OCR."""
+    model = settings.vision_model
+    key = settings.openai_api_key
+    if not key or not model:
+        return "", Usage(model="none")
+    base = settings.openai_base_url.rstrip("/")
+    data_url = f"data:{mime or 'image/jpeg'};base64,{image_b64}"
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": [
+            {"type": "text", "text": instruction},
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ]}],
+        "temperature": 0.2,
+        "max_tokens": 1800,
+    }
+    data = await _post_with_retry(f"{base}/chat/completions", payload,
+                                  {"Authorization": f"Bearer {key}"}, settings.llm_timeout)
+    text = OpenAIProvider._text_of(data)
+    u = data.get("usage", {}) if isinstance(data, dict) else {}
+    p, c = int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))
+    return text, Usage(model=model, prompt_tokens=p, completion_tokens=c,
+                       total_tokens=int(u.get("total_tokens", p + c)))
+
+
 PROVIDERS = {
     "gemini": GeminiProvider,
+    "google": GoogleGenAIProvider,
     "openai": OpenAIProvider,
     "anthropic": AnthropicProvider,
 }

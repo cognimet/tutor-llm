@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\CurriculumController;
 use App\Http\Controllers\Api\FlashcardController;
 use App\Http\Controllers\Api\LearnerProfileController;
 use App\Http\Controllers\Api\LearningPlanController;
+use App\Http\Controllers\Api\FigureController;
 use App\Http\Controllers\Api\MistakeController;
 use App\Http\Controllers\Api\NotesController;
 use App\Http\Controllers\Api\ParentController;
@@ -81,6 +82,13 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('token.gate:notes');
         Route::get('/tutor/notes/{note}', [NotesController::class, 'show']);
         Route::delete('/tutor/notes/{note}', [NotesController::class, 'destroy']);
+
+        // Textbook diagrams: figures ingested from an uploaded book (page images
+        // the chat shows beside the lesson) + ingest progress for the upload UI.
+        Route::get('/tutor/figures', [FigureController::class, 'index']);
+        Route::get('/tutor/figures/{noteId}/{page}/image', [FigureController::class, 'image'])
+            ->whereNumber('noteId')->whereNumber('page');
+        Route::get('/tutor/textbooks/{note}/status', [FigureController::class, 'status']);
 
         // Day/Week/Month/Exam planner (notes + gaps + mastery + exam countdown)
         Route::get('/tutor/planner', [PlannerController::class, 'index']);

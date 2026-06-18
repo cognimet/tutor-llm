@@ -24,7 +24,8 @@ from pydantic import BaseModel
 
 from .config import settings
 from .llm import llm
-from . import prompts, rag, graph
+from .providers import read_image, read_image_genai
+from . import prompts, rag, graph, pdfjobs
 from .schemas import (
     ChatTurnRequest, ChatTurnResponse,
     AssessmentGenerateRequest, AssessmentGenerateResponse, Question,
@@ -86,6 +87,7 @@ class TextRequest(BaseModel):
     topic: str | None = None        # when set, RAG curriculum context is injected
     rag_query: str | None = None    # text to retrieve on (defaults to `user`)
     student_id: int | None = None   # personalises graph-aware retrieval
+    subject_id: int | None = None   # surfaces subject/chapter-scoped notes
     action: str = "chat"            # model-routing group: chat|structured|grade
 
 
@@ -96,23 +98,25 @@ class JsonRequest(BaseModel):
     topic: str | None = None
     rag_query: str | None = None
     student_id: int | None = None
+    subject_id: int | None = None
     action: str = "structured"      # model-routing group: chat|structured|grade
 
 
-async def _ground(system: str, topic: str | None, query: str, student_id: int | None = None) -> str:
-    """Prepend retrieved curriculum context to a system prompt when a topic is set.
-    When `student_id` is given, retrieval is graph-aware (prerequisites + the
-    student's weak concepts + their own uploaded notes)."""
+async def _ground(system: str, topic: str | None, query: str, student_id: int | None = None,
+                  subject_id: int | None = None) -> str:
+    """Prepend retrieved context to a system prompt when a topic is set. When
+    `student_id` is given, retrieval is NOTES-FIRST + graph-aware (the student's
+    own notes, then curriculum, prerequisites and their weak concepts)."""
     if not topic:
         return system
-    chunks = await rag.retrieve(query, topic=topic, student_id=student_id)
+    chunks = await rag.retrieve(query, topic=topic, student_id=student_id, subject_id=subject_id)
     return system + rag.as_context(chunks)
 
 
 @app.post("/ai/text")
 async def ai_text(req: TextRequest, authorization: str | None = Header(None)):
     _auth(authorization)
-    system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id)
+    system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id, req.subject_id)
     out, usage = await llm.text(system, req.user, action=req.action)
     return {"text": out, "usage": usage.model_dump()}
 
@@ -120,7 +124,7 @@ async def ai_text(req: TextRequest, authorization: str | None = Header(None)):
 @app.post("/ai/json")
 async def ai_json(req: JsonRequest, authorization: str | None = Header(None)):
     _auth(authorization)
-    system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id)
+    system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id, req.subject_id)
     out, usage = await llm.json(system, req.user, req.fallback, action=req.action)
     return {"data": out, "usage": usage.model_dump()}
 
@@ -128,7 +132,7 @@ async def ai_json(req: JsonRequest, authorization: str | None = Header(None)):
 @app.post("/ai/stream")
 async def ai_stream(req: TextRequest, authorization: str | None = Header(None)):
     _auth(authorization)
-    system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id)
+    system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id, req.subject_id)
 
     async def gen():
         final_usage = None
@@ -203,16 +207,49 @@ def _ocr_image_bytes(raw: bytes, languages: str = "eng+hin") -> str:
     return "\n".join(line.rstrip() for line in text.splitlines()).strip()
 
 
+# Vision-language reading of uploaded images. Reads diagrams, figures, tables
+# and handwriting far better than OCR (important for MBBS/med + science notes).
+_VISION_NOTES = (
+    "You are reading a student's study material — it may be a textbook page, handwritten notes, a "
+    "diagram, a flowchart, a table or a figure. Transcribe ALL text exactly. For any diagram, figure, "
+    "flowchart or table, add a clear, well-labelled description a student can revise from (structures "
+    "and their labels, arrows/steps, relationships, key values). Output clean study text only — no "
+    "preamble or commentary."
+)
+_VISION_PROBLEM = (
+    "You are reading a photo of a question or problem a student is stuck on. Transcribe the full "
+    "question and any diagram, data or values exactly as text, so a tutor can understand and solve "
+    "it. Output only the transcription."
+)
+
+
+async def _read_image(raw: bytes, mime: str | None, languages: str, kind: str = "notes") -> tuple[str, Usage]:
+    """Read an image: prefer the vision model (diagrams + handwriting), fall back
+    to local tesseract OCR. Returns (text, usage)."""
+    if settings.vision_enabled:
+        import base64
+        instruction = _VISION_NOTES if kind == "notes" else _VISION_PROBLEM
+        # AI_PROVIDER=google → read with Gemini (google-genai SDK); else the
+        # OpenAI-compatible / OpenRouter VLM.
+        reader = read_image_genai if settings.vision_provider == "gemini" else read_image
+        try:
+            text, usage = await reader(base64.b64encode(raw).decode(), mime, instruction)
+            if text.strip():
+                return text.strip(), usage
+        except Exception as e:  # noqa: BLE001 — any vision error → fall back to OCR
+            logging.warning("vision read failed, falling back to OCR: %s", e)
+    return _ocr_image_bytes(raw, languages), Usage(model="tesseract", mock=False)
+
+
 @app.post("/ai/ocr")
 async def ai_ocr(req: OcrRequest, authorization: str | None = Header(None)):
-    """Extract text from a problem photo (architecture doc: OCR/vision -> text
-    -> same pipeline). Local tesseract: deterministic, free, offline."""
+    """Read a problem photo (snap-a-doubt) -> text -> the normal tutor pipeline.
+    Uses the vision model when configured (reads diagrams/handwriting), else
+    local tesseract."""
     _auth(authorization)
     import base64
     raw = base64.b64decode(req.image_base64, validate=False)
-    text = _ocr_image_bytes(raw, req.languages)
-    # OCR is local — no LLM tokens consumed.
-    usage = Usage(model="tesseract", mock=False)
+    text, usage = await _read_image(raw, None, req.languages, kind="problem")
     return {"text": text, "usage": usage.model_dump()}
 
 
@@ -245,6 +282,7 @@ async def ai_extract(req: ExtractRequest, authorization: str | None = Header(Non
     name = (req.filename or "").lower()
     text = ""
     meta: dict = {}
+    vision_usage: Usage | None = None   # set when a VLM reads an image
 
     try:
         if kind == "pdf":
@@ -288,7 +326,8 @@ async def ai_extract(req: ExtractRequest, authorization: str | None = Header(Non
                 text = "\n".join(lines).strip()
                 meta["sheets"] = len(wb.worksheets)
         elif kind == "image":
-            text = _ocr_image_bytes(raw, req.languages)
+            text, vision_usage = await _read_image(raw, req.mime, req.languages, kind="notes")
+            meta["read_by"] = vision_usage.model if vision_usage else "tesseract"
             if len(text) < 3:
                 meta["note"] = "No readable text found in the image."
         else:  # text | md | csv | unknown -> best-effort decode
@@ -299,8 +338,8 @@ async def ai_extract(req: ExtractRequest, authorization: str | None = Header(Non
         raise HTTPException(status_code=422, detail=f"Could not read {req.filename}: {e}")
 
     meta["chars"] = len(text)
-    # Extraction is local — no LLM tokens consumed.
-    usage = Usage(model="local", mock=False)
+    # Local parsers cost no tokens; a VLM image read does — report its usage.
+    usage = vision_usage or Usage(model="local", mock=False)
     return ExtractResponse(text=text, kind=kind, meta=meta, usage=usage)
 
 
@@ -559,7 +598,7 @@ async def study_schedule(req: StudyScheduleRequest, authorization: str | None = 
     _auth(authorization)
     system, user = prompts.study_schedule(
         req.topic, req.horizon, req.days_remaining, req.exam_date,
-        req.notes_summary, req.gaps, req.mastery,
+        req.notes_summary, req.gaps, req.mastery, req.from_notes,
     )
     data, usage = await llm.json(system, user, {"title": "Your study plan", "summary": "", "tasks": []},
                                  action="structured")
@@ -567,6 +606,55 @@ async def study_schedule(req: StudyScheduleRequest, authorization: str | None = 
     title = data.get("title", "Your study plan") if isinstance(data, dict) else "Your study plan"
     summary = data.get("summary", "") if isinstance(data, dict) else ""
     return StudyScheduleResponse(title=title, summary=summary, tasks=tasks, usage=usage)
+
+
+class ValidateScopeRequest(BaseModel):
+    text: str
+    scope: str = "topic"          # subject | chapter | topic
+    subject: str | None = None
+    chapter: str | None = None
+    topic: str | None = None
+
+
+@app.post("/ai/notes/validate-scope")
+async def notes_validate_scope(req: ValidateScopeRequest, authorization: str | None = Header(None)):
+    """Check that an uploaded document's content actually belongs to the chosen
+    SUBJECT / CHAPTER / TOPIC before it's stored as a note. Returns
+    {match, detected, confidence, reason}. Never blocks when mocked / unsure
+    (defaults to match=true) so a flaky classifier can't trap a real upload."""
+    _auth(authorization)
+    target = {"subject": req.subject, "chapter": req.chapter, "topic": req.topic}.get(req.scope) \
+        or req.topic or req.chapter or req.subject
+    if settings.is_mock or not (req.text or "").strip() or not target:
+        return {"match": True, "detected": target, "confidence": 1.0, "reason": "not checked",
+                "usage": Usage(model="none", mock=settings.is_mock).model_dump()}
+
+    scope_desc = {
+        "subject": f'the subject "{req.subject}"',
+        "chapter": f'the chapter "{req.chapter}" in "{req.subject}"',
+        "topic":   f'the topic "{req.topic}" (chapter "{req.chapter}", subject "{req.subject}")',
+    }.get(req.scope, f'"{target}"')
+
+    system = (
+        "You are a strict curriculum classifier. Decide whether a study document belongs to a given "
+        "subject/chapter/topic. Be lenient about format (handwritten notes, worksheets, slides) but "
+        "strict about the actual academic content. Return ONLY JSON: "
+        '{"match": true|false, "detected": "the subject/topic the document is actually about", '
+        '"confidence": 0.0-1.0, "reason": "one short sentence"}.'
+    )
+    user = f"Does this document belong to {scope_desc}?\n\nDocument excerpt:\n\"\"\"\n{req.text[:4000]}\n\"\"\""
+    data, usage = await llm.json(system, user,
+                                 {"match": True, "detected": target, "confidence": 0.0, "reason": ""},
+                                 action="grade")
+    if not isinstance(data, dict):
+        data = {}
+    return {
+        "match": bool(data.get("match", True)),
+        "detected": data.get("detected") or target,
+        "confidence": float(data.get("confidence", 0) or 0),
+        "reason": data.get("reason", ""),
+        "usage": usage.model_dump(),
+    }
 
 
 @app.post("/ai/notes/ingest", response_model=NotesIngestResponse)
@@ -581,12 +669,65 @@ async def notes_ingest(req: NotesIngestRequest, authorization: str | None = Head
     # OWN material (Qdrant `documents`), and link the note in the graph.
     chunks_indexed = 0
     if req.note_id is not None:
-        qids = await rag.index_documents(req.student_id, req.note_id, req.topic, _chunk_text(req.text))
+        qids = await rag.index_documents(
+            req.student_id, req.note_id, req.topic, _chunk_text(req.text),
+            subject_id=req.subject_id, chapter_id=req.chapter_id, topic_id=req.topic_id,
+            is_primary=req.is_primary,
+        )
         await graph.link_note(req.note_id, req.title or "Note", req.topic, req.student_id, qids)
         chunks_indexed = len(qids)
 
     return NotesIngestResponse(summary=summary, flashcards=flashcards,
                                chunks_indexed=chunks_indexed, usage=usage)
+
+
+# ── Textbook ingest: rasterise a big PDF, read each page with the VLM, ───
+#    embed each diagram as a retrievable FIGURE (GraphRAG "AI mind").
+class PdfIngestRequest(BaseModel):
+    note_id: int
+    rel_path: str                  # path under the shared UPLOAD_ROOT volume
+    user_id: int
+    subject_id: int | None = None
+    subject: str | None = None
+    topic: str | None = None
+    topic_id: int | None = None
+    is_primary: bool = False
+
+
+@app.post("/ai/pdf/ingest")
+async def pdf_ingest(req: PdfIngestRequest, authorization: str | None = Header(None)):
+    """Start (or resume) ingesting a textbook PDF page-by-page through the vision
+    model. Returns immediately; poll GET /ai/pdf/ingest/{note_id} for progress."""
+    _auth(authorization)
+    return await pdfjobs.start(
+        req.note_id, req.rel_path, req.user_id, subject_id=req.subject_id,
+        subject=req.subject, topic=req.topic, topic_id=req.topic_id,
+        is_primary=req.is_primary,
+    )
+
+
+@app.get("/ai/pdf/ingest/{note_id}")
+async def pdf_ingest_status(note_id: int, authorization: str | None = Header(None)):
+    _auth(authorization)
+    st = pdfjobs.status(note_id)
+    if st is None:
+        raise HTTPException(status_code=404, detail="No ingest found for that note.")
+    # Don't leak absolute server paths to the caller.
+    return {k: v for k, v in st.items() if k not in ("abs_path", "cancel")}
+
+
+@app.post("/ai/pdf/ingest/{note_id}/cancel")
+async def pdf_ingest_cancel(note_id: int, authorization: str | None = Header(None)):
+    _auth(authorization)
+    return {"cancelled": pdfjobs.cancel(note_id) is not None}
+
+
+@app.get("/ai/figures")
+async def ai_figures(user_id: int, subject_id: int | None = None, topic: str | None = None,
+                     k: int = 12, authorization: str | None = Header(None)):
+    """Textbook figures relevant to a topic/subject, for the in-chat strip."""
+    _auth(authorization)
+    return {"figures": await rag.search_figures(user_id, subject_id=subject_id, topic=topic, k=k)}
 
 
 # ── helpers ────────────────────────────────────────────────────────────

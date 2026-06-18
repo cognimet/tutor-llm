@@ -1,0 +1,58 @@
+{
+ "level_slug": "mbbs-year-1",
+ "subject": "Physiology",
+ "source": "Educlub Physiology (scanned, vision-extracted)",
+ "chapters": [
+  {
+   "number": 3,
+   "name": "Nerve & Muscle Physiology",
+   "file": "educlub_physiology.pdf",
+   "topics": [
+    {
+     "section": "",
+     "name": "Introduction to Nerve and Muscle Physiology",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Nerve Muscle Physiology",
+       "page": 2
+      }
+     ]
+    },
+    {
+     "section": "",
+     "name": "Resting Membrane Potential and Goldman Equation",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "# When cell is permeable for several ions :-\nDiffusion potential of cell depends on\n\n1) Polarity of electric charge of each ion (Z)\n2) Conc. of ion (inside : outside)\n3) Permeability of membrane to each ion (P)\n\nGoldman equation = EmF = - 61/2 x log (mV)\n\nCNa+ PNa+ + CK+ PK+ + CCl- PCl- CNa+ PNa+ + CK+ PK+ + CCl- PCl-\n\nResting Membrane Potential :-\nDef = Relatively stable membrane potential (inside of cell memb)\nof a cell in unstimulated state.\n\nNerve, muscles communicates via\namong themselves via\nAction potential :\n\nWhen remains at rest\nthen they have\nRMP.",
+       "page": 5
+      }
+     ]
+    },
+    {
+     "section": "",
+     "name": "Nerve Impulse Transmission",
+     "chunks": [
+      {
+       "type": "diagram",
+       "body": "Na+ K+ DPk+ = -94mV DPNa+ = +61mV Pk+ > PNa+ RMP = -86mV RMP ∝ (DPk+ Pk+) (DPNa+ PNa+) (↑) (↑) RMP = -90mV (of neurons) +61mV x PNa+ -94mV x Pk+ -4mV -86mV -B6mV Na+ 2k+ 3Na+ K+",
+       "page": 6
+      }
+     ]
+    },
+    {
+     "section": "",
+     "name": "Action Potential",
+     "chunks": [
+      {
+       "type": "diagram",
+       "body": "ACTION POTENTIAL\nCHANNELS :-\nRMP (polarised)\nVGC\nLeaky channels\nAlways open\nNa+ VGC\nK+ VGC\nRMP = Depolarisation\nVGC = open when MP changes\nInactive\nopen\nclosed\nRMP = -1\nDep. = -70 mV\nAP = -40 mV\nK+ VGC\nNa+ VGC\nK+ VGC :-\nclose :-\nonly 1 gate\nopen :-\nInactive\nopen\nclosed\nA.P. = -55 mV",
+       "page": 8
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

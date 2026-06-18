@@ -67,14 +67,28 @@ services:
     ports:
       - "8001:8001"
     environment:
-      # Multi-provider: set AI_PROVIDER (gemini|openai|anthropic|auto) and the
-      # matching key. "auto" picks the first provider with a key set.
+      # Multi-provider: set AI_PROVIDER (gemini|google|openai|anthropic|auto) and
+      # the matching key. "auto" picks the first provider with a key set.
       # OPENAI_BASE_URL also enables OpenAI-compatible gateways (OpenRouter).
+      # AI_PROVIDER=google → Gemini via the google-genai SDK (text + vision),
+      # using GEMINI_API_KEY/GOOGLE_API_KEY, or ADC, or Vertex AI.
       AI_PROVIDER: ${AI_PROVIDER:-auto}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Google Gen AI SDK (AI_PROVIDER=google). Simplest: set GEMINI_API_KEY above.
+      # For ADC/Vertex instead, set these + uncomment the gcloud volume below.
+      # Fall back to GEMINI_API_KEY: the google-genai SDK's Client() auto-detects
+      # GOOGLE_API_KEY from the env, so mirror the key here when only GEMINI_API_KEY
+      # is set (otherwise the SDK reports "Missing key inputs argument").
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-${GEMINI_API_KEY:-}}
+      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-false}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      # Gemini model used to read images when AI_PROVIDER=google.
+      GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-2.5-flash}
       AI_MOCK: ${AI_MOCK:-false}
       # Model routing: AI_MODEL = single-model switch (overrides the three
       # per-action routes below). Leave all empty for provider defaults.
@@ -82,6 +96,9 @@ services:
       AI_MODEL_CHAT: ${AI_MODEL_CHAT:-}
       AI_MODEL_STRUCTURED: ${AI_MODEL_STRUCTURED:-}
       AI_MODEL_GRADE: ${AI_MODEL_GRADE:-}
+      # Vision model for reading uploaded diagrams / handwriting (OpenRouter,
+      # OpenAI-compatible). Falls back to local tesseract OCR when no key.
+      AI_MODEL_VISION: ${AI_MODEL_VISION:-nvidia/nemotron-nano-12b-v2-vl:free}
       # Free OpenRouter models can be slow and 429-retry; give them headroom.
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       QDRANT_URL: http://qdrant:6333
@@ -99,9 +116,20 @@ services:
       EMBED_BACKEND: ${EMBED_BACKEND:-auto}
       # Cache the fastembed model between restarts (downloaded once on first use).
       FASTEMBED_CACHE_PATH: /models
+      # Shared upload volume (textbook ingest): MUST equal the path Laravel
+      # mounts its storage/app at, so this service reads uploaded PDFs in place
+      # (no 200 MB HTTP transfer) and writes rendered page images where Laravel
+      # can serve them.
+      UPLOAD_ROOT: /app/storage/app
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key}
     volumes:
       - fastembed_cache:/models
+      # Same named volume the backend uses, mounted at the same path (UPLOAD_ROOT).
+      - app_storage:/app/storage/app
+      # ── Gemini via ADC / Vertex AI (uses the GCP $300 credit, not an API key) ──
+      # Mounts the host gcloud creds so the google-genai SDK can use ADC; pair
+      # with GOOGLE_GENAI_USE_VERTEXAI=true + GOOGLE_CLOUD_PROJECT/LOCATION in .env.
+      - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
     # Wait for Neo4j to be HEALTHY (Bolt accepting connections) before starting,
     # so schema init + the first graph:sync don't race a half-booted Neo4j.
     depends_on:

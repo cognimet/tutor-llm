@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\StudyPlan;
 use App\Models\StudyPlanTask;
+use App\Services\CurriculumResolver;
 use App\Services\EventTracker;
 use App\Services\PlannerService;
 use App\Services\ProgressService;
@@ -21,19 +22,28 @@ class PlannerController extends Controller
         protected PlannerService $planner,
         protected ProgressService $progress,
         protected EventTracker $events,
+        protected CurriculumResolver $resolver,
     ) {}
 
-    /** GET /tutor/planner?topic_id=&topic_name= — active plans + countdown. */
+    /** GET /tutor/planner?scope=&topic_id=&topic_name=&subject_name= — active plans + countdown. */
     public function index(Request $request)
     {
-        $plans = $request->user()->studyPlans()
-            ->with('tasks')
-            ->where('status', 'active')
-            ->when($request->filled('topic_id'),
-                fn ($q) => $q->where('topic_id', $request->integer('topic_id')),
-                fn ($q) => $q->where('topic_name', (string) $request->query('topic_name')))
-            ->latest()
-            ->get();
+        $user = $request->user();
+        $q = $user->studyPlans()->with('tasks')->where('status', 'active');
+
+        if ($request->query('scope') === 'subject') {
+            $subjectId = $this->resolver->subjectId(
+                $user, $request->filled('topic_id') ? $request->integer('topic_id') : null,
+                $request->query('subject_name'),
+            );
+            $q->where('scope', 'subject')->when($subjectId, fn ($x) => $x->where('subject_id', $subjectId));
+        } else {
+            $q->where('scope', 'topic')->when($request->filled('topic_id'),
+                fn ($x) => $x->where('topic_id', $request->integer('topic_id')),
+                fn ($x) => $x->where('topic_name', (string) $request->query('topic_name')));
+        }
+
+        $plans = $q->latest()->get();
 
         return response()->json([
             'plans'     => $plans,
@@ -41,29 +51,41 @@ class PlannerController extends Controller
         ]);
     }
 
-    /** POST /tutor/planner/generate */
+    /** POST /tutor/planner/generate — topic plan, or a subject-wide plan from the student's notes. */
     public function generate(Request $request)
     {
         $data = $request->validate([
+            'scope'        => ['nullable', 'in:topic,subject'],
             'topic_id'     => ['nullable', 'exists:topics,id'],
-            'topic_name'   => ['required', 'string', 'max:160'],
+            'topic_name'   => ['nullable', 'string', 'max:160', 'required_unless:scope,subject'],
             'chapter_name' => ['nullable', 'string', 'max:160'],
-            'subject_name' => ['nullable', 'string', 'max:160'],
+            'subject_name' => ['nullable', 'string', 'max:160', 'required_if:scope,subject'],
+            'from_notes'   => ['nullable', 'boolean'],
             'horizon'      => ['required', 'in:day,week,month,exam'],
             'exam_date'    => ['nullable', 'date', 'after_or_equal:today',
                                'required_if:horizon,exam'],
         ]);
 
-        $plan = $this->planner->generate($request->user(), $data, $data['horizon'], $data['exam_date'] ?? null);
+        $user = $request->user();
+        $ctx = $data;
+        if (($data['scope'] ?? 'topic') === 'subject') {
+            $ctx['scope'] = 'subject';
+            $ctx['subject_id'] = $this->resolver->subjectId($user, $data['topic_id'] ?? null, $data['subject_name'] ?? null);
+            $ctx['from_notes'] = true;
+        }
+
+        $plan = $this->planner->generate($user, $ctx, $data['horizon'], $data['exam_date'] ?? null);
 
         abort_if($plan->tasks->isEmpty(), 422,
             'The planner couldn\'t build a schedule just now — it may be rate-limited. Try again in a moment.');
 
         $this->events->track(
-            $request->user(), EventTracker::PLAN_GENERATED,
-            "Generated a {$data['horizon']} study plan for {$plan->topic_name} ({$plan->tasks->count()} tasks)",
+            $user, EventTracker::PLAN_GENERATED,
+            "Generated a {$data['horizon']} " . ($plan->scope === 'subject' ? 'subject ' : '')
+            . "study plan for {$plan->topic_name} ({$plan->tasks->count()} tasks)",
             $plan->topic_name, $plan->topic_id, [],
-            ['horizon' => $data['horizon'], 'plan_id' => $plan->id, 'exam_date' => $data['exam_date'] ?? null],
+            ['horizon' => $data['horizon'], 'plan_id' => $plan->id, 'scope' => $plan->scope,
+             'from_notes' => $plan->from_notes, 'exam_date' => $data['exam_date'] ?? null],
         );
 
         return response()->json(['plan' => $plan], 201);

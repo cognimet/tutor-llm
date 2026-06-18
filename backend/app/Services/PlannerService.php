@@ -22,38 +22,49 @@ class PlannerService
     /**
      * @param array $ctx  ['topic_id','topic_name','chapter_name','subject_name']
      */
+    /**
+     * @param array $ctx  topic scope: ['topic_id','topic_name','chapter_name','subject_name']
+     *                    subject scope: ['scope'=>'subject','subject_id','subject_name','from_notes'=>true]
+     */
     public function generate(User $user, array $ctx, string $horizon, ?string $examDate = null): StudyPlan
     {
-        $topicName = $ctx['topic_name'];
+        $isSubject = ($ctx['scope'] ?? 'topic') === 'subject';
+        $label = $isSubject ? ($ctx['subject_name'] ?? 'your subject') : ($ctx['topic_name'] ?? '');
         $exam = $examDate ? Carbon::parse($examDate)->startOfDay() : null;
         $daysRemaining = $exam ? max(1, Carbon::today()->diffInDays($exam, false)) : null;
 
         $built = $this->ai->studySchedule([
-            'topic'          => $topicName,
+            'topic'          => $label,
             'horizon'        => $horizon,
             'days_remaining' => $daysRemaining,
             'exam_date'      => $exam?->toDateString(),
             'notes_summary'  => $this->notesSummary($user, $ctx),
-            'gaps'           => $this->openGaps($user, $topicName),
-            'mastery'        => $this->masteryFor($user, $topicName),
+            'gaps'           => $isSubject ? $this->openGapsForSubject($user, $ctx['subject_id'] ?? null)
+                                           : $this->openGaps($user, $label),
+            'mastery'        => $isSubject ? 0 : $this->masteryFor($user, $label),
+            'from_notes'     => (bool) ($ctx['from_notes'] ?? $isSubject),
         ]);
         $this->meterLast($user, 'plan');
 
-        // Keep the topic tidy: archive prior active plans of the same horizon.
-        $user->studyPlans()
-            ->where('topic_name', $topicName)
-            ->where('horizon', $horizon)
-            ->where('status', 'active')
-            ->update(['status' => 'archived']);
+        // Archive prior active plans of the same scope + horizon.
+        $stale = $user->studyPlans()->where('horizon', $horizon)->where('status', 'active');
+        $isSubject ? $stale->where('scope', 'subject')->where('subject_id', $ctx['subject_id'] ?? null)
+                   : $stale->where('scope', 'topic')->where('topic_name', $label);
+        $stale->update(['status' => 'archived']);
 
         $plan = $user->studyPlans()->create([
-            'topic_id'   => $ctx['topic_id'] ?? null,
-            'topic_name' => $topicName,
-            'horizon'    => $horizon,
-            'exam_date'  => $exam?->toDateString(),
-            'title'      => $built['title'] ?: $this->defaultTitle($horizon, $topicName),
-            'status'     => 'active',
-            'meta'       => ['summary' => $built['summary'] ?? ''],
+            'scope'        => $isSubject ? 'subject' : 'topic',
+            'subject_id'   => $ctx['subject_id'] ?? null,
+            'subject_name' => $ctx['subject_name'] ?? null,
+            'from_notes'   => (bool) ($ctx['from_notes'] ?? $isSubject),
+            'topic_id'     => $isSubject ? null : ($ctx['topic_id'] ?? null),
+            // topic_name doubles as the display/index name; for a subject plan it's the subject.
+            'topic_name'   => $label,
+            'horizon'      => $horizon,
+            'exam_date'    => $exam?->toDateString(),
+            'title'        => $built['title'] ?: $this->defaultTitle($horizon, $label),
+            'status'       => 'active',
+            'meta'         => ['summary' => $built['summary'] ?? '', 'scope' => $isSubject ? 'subject' : 'topic'],
         ]);
 
         $this->writeTasks($plan, $built['tasks'] ?? [], $exam, $daysRemaining);
@@ -65,17 +76,24 @@ class PlannerService
     public function replan(StudyPlan $plan): StudyPlan
     {
         $user = $plan->user;
+        $isSubject = $plan->scope === 'subject';
         $exam = $plan->exam_date ? Carbon::parse($plan->exam_date)->startOfDay() : null;
         $daysRemaining = $exam ? max(1, Carbon::today()->diffInDays($exam, false)) : null;
 
+        $ctx = $isSubject
+            ? ['scope' => 'subject', 'subject_id' => $plan->subject_id, 'subject_name' => $plan->subject_name]
+            : ['topic_name' => $plan->topic_name, 'topic_id' => $plan->topic_id];
+
         $built = $this->ai->studySchedule([
-            'topic'          => $plan->topic_name,
+            'topic'          => $isSubject ? ($plan->subject_name ?? $plan->topic_name) : $plan->topic_name,
             'horizon'        => $plan->horizon,
             'days_remaining' => $daysRemaining,
             'exam_date'      => $exam?->toDateString(),
-            'notes_summary'  => $this->notesSummary($user, ['topic_name' => $plan->topic_name, 'topic_id' => $plan->topic_id]),
-            'gaps'           => $this->openGaps($user, $plan->topic_name),
-            'mastery'        => $this->masteryFor($user, $plan->topic_name),
+            'notes_summary'  => $this->notesSummary($user, $ctx),
+            'gaps'           => $isSubject ? $this->openGapsForSubject($user, $plan->subject_id)
+                                           : $this->openGaps($user, $plan->topic_name),
+            'mastery'        => $isSubject ? 0 : $this->masteryFor($user, $plan->topic_name),
+            'from_notes'     => (bool) $plan->from_notes,
         ]);
         $this->meterLast($user, 'plan');
 
@@ -117,20 +135,43 @@ class PlannerService
 
     protected function notesSummary(User $user, array $ctx): string
     {
-        $notes = $user->notes()
-            ->where('status', 'ready')
-            ->when(! empty($ctx['topic_id']),
-                fn ($q) => $q->where('topic_id', $ctx['topic_id']),
-                fn ($q) => $q->where('topic_name', $ctx['topic_name'] ?? ''))
-            ->latest()->take(8)->get(['title', 'summary']);
+        $isSubject = ($ctx['scope'] ?? null) === 'subject';
+        $q = $user->notes()->where('status', 'ready');
+
+        if ($isSubject && (! empty($ctx['subject_id']) || ! empty($ctx['subject_name']))) {
+            // Match by subject id OR name, so notes are never missed if the id
+            // didn't resolve at upload time.
+            $q->where(function ($w) use ($ctx) {
+                if (! empty($ctx['subject_id']))   $w->orWhere('subject_id', $ctx['subject_id']);
+                if (! empty($ctx['subject_name'])) $w->orWhere('subject_name', $ctx['subject_name']);
+            });
+        } elseif (! empty($ctx['topic_id'])) {
+            $q->where(fn ($w) => $w->where('topic_id', $ctx['topic_id'])
+                ->orWhere('subject_id', $ctx['subject_id'] ?? 0));
+        } else {
+            $q->where('topic_name', $ctx['topic_name'] ?? '');
+        }
+
+        $notes = $q->latest()->take(12)->get(['title', 'summary', 'extracted_text', 'is_primary']);
 
         $parts = [];
-        foreach ($notes as $n) {
-            if (trim((string) $n->summary) !== '') {
-                $parts[] = "• {$n->title}: {$n->summary}";
+        foreach ($notes->sortByDesc('is_primary') as $n) {              // ★ primary notes first
+            $star = $n->is_primary ? '★ ' : '';
+            $body = trim((string) $n->summary);
+            // For a notes-driven (subject) plan, include the note's ACTUAL content
+            // so the plan mirrors what's really in the PDF — not just a gist.
+            if ($isSubject) {
+                $excerpt = trim((string) $n->extracted_text);
+                if ($excerpt !== '') {
+                    $body = ($body !== '' ? $body . "\n" : '') . mb_substr($excerpt, 0, 900);
+                }
+            }
+            if ($body !== '') {
+                $parts[] = "{$star}# {$n->title}\n{$body}";
             }
         }
-        return mb_substr(implode("\n", $parts), 0, 1800);
+
+        return mb_substr(implode("\n\n", $parts), 0, $isSubject ? 7000 : 2400);
     }
 
     protected function openGaps(User $user, string $topicName): array
@@ -141,6 +182,29 @@ class PlannerService
             ->get()
             ->map(fn ($g) => ['concept' => $g->concept, 'severity' => $g->severity])
             ->toArray();
+    }
+
+    /** Unresolved gaps across every topic in a subject (for subject-wide plans). */
+    protected function openGapsForSubject(User $user, ?int $subjectId): array
+    {
+        $q = $user->knowledgeGaps()->where('resolved', false);
+        $topicNames = $this->subjectTopicNames($subjectId);
+        if (! empty($topicNames)) {
+            $q->whereIn('topic_name', $topicNames);
+        }
+        return $q->take(30)->get()
+            ->map(fn ($g) => ['concept' => $g->concept, 'severity' => $g->severity])
+            ->toArray();
+    }
+
+    /** Topic names under a subject (via its chapters). */
+    protected function subjectTopicNames(?int $subjectId): array
+    {
+        if (! $subjectId) {
+            return [];
+        }
+        return \App\Models\Topic::whereHas('chapter', fn ($q) => $q->where('subject_id', $subjectId))
+            ->pluck('name')->all();
     }
 
     protected function masteryFor(User $user, string $topicName): int
