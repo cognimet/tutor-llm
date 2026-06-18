@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessChatTurn;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use App\Services\AiClient;
@@ -18,6 +19,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TutorController extends Controller
 {
+    // Recent turns kept verbatim in the prompt are token-budgeted; older turns
+    // are condensed into chat_sessions.summary (rolled up by ProcessChatTurn).
+    private const HISTORY_TOKEN_BUDGET = 3000;
+
     public function __construct(
         protected TutorService $tutor,
         protected ProgressService $progress,
@@ -163,15 +168,18 @@ class TutorController extends Controller
         ]);
 
         $subjectId = $this->resolver->subjectId($user, $session->topic_id, $session->subject_name);
+        ['summary' => $summary, 'history' => $history] = $this->conversationContextFor($session);
+
         $reply = $this->tutor->explain(
             $user,
             $session->topic_name ?? $session->title,
             $session->chapter_name ?? '',
             $session->subject_name ?? '',
-            $this->historyFor($session),
+            $history,
             $data['message'],
             $data['mode'] ?? 'teach',
             $notesContext,
+            $summary,
             $subjectId,
         );
 
@@ -263,14 +271,14 @@ class TutorController extends Controller
      */
     protected function streamReply(ChatSession $session, $user, string $prompt, string $mode = 'teach', string $notesContext = ''): StreamedResponse
     {
-        $history = $this->historyFor($session);
+        ['summary' => $summary, 'history' => $history] = $this->conversationContextFor($session);
 
         $topic   = $session->topic_name ?? $session->title;
         $chapter = $session->chapter_name ?? '';
         $subject = $session->subject_name ?? '';
         $subjectId = $this->resolver->subjectId($user, $session->topic_id, $subject);
 
-        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $topic, $chapter, $subject, $subjectId, $mode, $notesContext) {
+        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $summary, $topic, $chapter, $subject, $subjectId, $mode, $notesContext) {
             $emit = function (string $event, array $payload) {
                 echo "event: {$event}\n";
                 echo 'data: ' . json_encode($payload) . "\n\n";
@@ -283,14 +291,14 @@ class TutorController extends Controller
             $full = $this->tutor->explainStream(
                 $user, $topic, $chapter, $subject, $history, $prompt,
                 fn (string $delta) => $emit('delta', ['text' => $delta]),
-                $mode, $notesContext, $subjectId,
+                $mode, $notesContext, $summary, $subjectId,
             );
 
             // If streaming produced nothing (e.g. transient upstream error),
             // fall back to the retrying non-streaming path so the student still
             // gets an answer.
             if ($full === '') {
-                $full = $this->tutor->explain($user, $topic, $chapter, $subject, $history, $prompt, $mode, $notesContext, $subjectId);
+                $full = $this->tutor->explain($user, $topic, $chapter, $subject, $history, $prompt, $mode, $notesContext, $summary, $subjectId);
                 if ($full !== '') {
                     $emit('delta', ['text' => $full]);
                 }
@@ -328,38 +336,35 @@ class TutorController extends Controller
 
     /**
      * Shared post-turn processing for BOTH the streaming and non-streaming
-     * paths: extract mind signals (cheap grade-routed call), mirror the
-     * student's state into the GraphRAG "AI mind", and log the chat turn as a
-     * tracked event. Best-effort — never breaks the chat turn.
+     * paths: extract mind signals, mirror state to the GraphRAG mind, log the
+     * event, roll up the conversation summary, and decay stale memory.
+     *
+     * This used to run INLINE after the answer streamed — a second (grade-routed)
+     * LLM call plus a graph write that held the request open. It is now queued so
+     * the request returns as soon as the answer is delivered.
      */
     protected function postTurn($user, string $topic, ?int $topicId, string $prompt,
                                 string $reply, ?int $sessionId, string $mode = 'teach'): void
     {
-        try {
-            $signals = $this->tutor->extractSignals($user, $topic, $prompt, $reply, $sessionId);
-            $this->mindService->syncToGraph($user, $topic);
-
-            $concepts = array_values(array_filter((array) ($signals['concept_tags'] ?? []), 'is_string'));
-            $this->events->track(
-                $user, EventTracker::CHAT_TURN,
-                "Q: {$prompt}\nA: " . mb_substr($reply, 0, 600),
-                $topic, $topicId, $concepts,
-                ['mode' => $mode, 'session_id' => $sessionId],
-            );
-        } catch (\Throwable $e) {
-            Log::warning('post-turn processing failed', ['error' => $e->getMessage()]);
-        }
+        ProcessChatTurn::dispatch($user->id, $topic, $topicId, $prompt, $reply, $sessionId, $mode);
     }
 
     /**
-     * Conversation history as [['role'=>..,'content'=>..], ...].
+     * Token-budgeted conversation context for the prompt:
+     *   - `summary`: the rolling summary of older turns (ProcessChatTurn maintains it)
+     *   - `history`: the most recent turns past the summary, trimmed to a token
+     *     budget (oldest dropped first; they get folded into the summary later).
      *
-     * The trailing user message is the prompt we pass separately to the tutor,
-     * so we drop it here to avoid sending the same question to the model twice.
+     * Only loads the unsummarised tail (id > summary_upto_id), so prompt cost no
+     * longer grows with total conversation length. The trailing user message is
+     * the prompt we pass separately, so it's dropped here to avoid duplication.
      */
-    protected function historyFor(ChatSession $session): array
+    protected function conversationContextFor(ChatSession $session): array
     {
+        $cut = (int) ($session->summary_upto_id ?? 0);
+
         $messages = $session->messages()
+            ->where('id', '>', $cut)
             ->orderBy('id')
             ->get(['role', 'content']);
 
@@ -367,10 +372,18 @@ class TutorController extends Controller
             $messages = $messages->slice(0, -1);
         }
 
-        return $messages
-            ->map(fn ($m) => ['role' => $m->role, 'content' => $m->content])
-            ->values()
-            ->toArray();
+        // Keep the most recent turns within the token budget (estimate ~4 chars/token).
+        $window = [];
+        $tokens = 0;
+        foreach ($messages->reverse() as $m) {
+            $tokens += (int) ceil(mb_strlen((string) $m->content) / 4);
+            if ($tokens > self::HISTORY_TOKEN_BUDGET && ! empty($window)) {
+                break;
+            }
+            array_unshift($window, ['role' => $m->role, 'content' => $m->content]);
+        }
+
+        return ['summary' => (string) ($session->summary ?? ''), 'history' => $window];
     }
 
     protected function authorizeSession(Request $request, ChatSession $session): void
