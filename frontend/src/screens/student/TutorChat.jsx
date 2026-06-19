@@ -4,10 +4,12 @@ import {
   Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Plus, MessageSquare,
   ChevronRight, ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
-  Mic, MicOff, Camera, Maximize2, PenLine,
+  Mic, MicOff, Camera, Maximize2, PenLine, LogOut,
   Sparkles as SparklesIcon, CalendarClock, Paperclip, ListChecks,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
+import CreditMeter from "../../ui/CreditMeter.jsx";
+import { ThemeToggle } from "../../ui/components.jsx";
 import { tutorApi, plannerApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
 import Markdown from "../../ui/Markdown.jsx";
@@ -431,7 +433,7 @@ function SessionList({ sessions, sessionId, onPick, t, searchRef }) {
 
 /* ===================================================================== main */
 
-export default function TutorChat({ session: initial, onBack, onProgressChange }) {
+export default function TutorChat({ session: initial, onBack, onLogout, onProgressChange }) {
   const [ctx, setCtx] = useState(initial);
   const t = tint(ctx.tint);
 
@@ -998,7 +1000,7 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
     }`;
 
   return (
-    <div className="flex h-[calc(100vh-57px)] flex-col">
+    <div className="flex h-screen flex-col">
       <div className="flex min-h-0 flex-1 overflow-hidden">
 
         {/* Chat canvas — the hero. Full-bleed, content centered to a reading column. */}
@@ -1073,6 +1075,15 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
                 </div>
               )}
             </div>
+
+            {/* Global controls — folded in so the chat needs only one header */}
+            <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-slate-200 dark:bg-white/10 lg:block" />
+            <CreditMeter className="hidden shrink-0 lg:flex" />
+            <ThemeToggle className="shrink-0" />
+            <button onClick={onLogout} title="Log out"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 transition-colors hover:text-rose-500 dark:text-slate-300 dark:ring-white/10 dark:hover:text-rose-400">
+              <LogOut className="h-5 w-5" />
+            </button>
           </div>
 
           <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
@@ -1193,17 +1204,16 @@ export default function TutorChat({ session: initial, onBack, onProgressChange }
           {/* Composer block — same reading column as the messages */}
           <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
             <div className="mx-auto w-full max-w-3xl xl:max-w-4xl 2xl:max-w-5xl">
-            {/* The one guiding nudge — Learn → Check → Fix → Remember */}
-            {!showStarters && (
-              <div className="mb-2.5">
-                <NextStep state={nextState} handlers={nextHandlers} />
-              </div>
-            )}
-            {showFollowups && (
-              <div className="mb-2.5 flex flex-wrap gap-2">
-                {FOLLOWUPS.map((s) => (
+            {/* One guiding nudge + contextual follow-ups, on a single scrollable
+                strip so the composer stays close to the conversation. */}
+            {(!showStarters || showFollowups) && (
+              <div className="no-scrollbar mb-2.5 flex items-center gap-2 overflow-x-auto pb-0.5">
+                {!showStarters && (
+                  <NextStep state={nextState} handlers={nextHandlers} className="shrink-0" />
+                )}
+                {showFollowups && FOLLOWUPS.map((s) => (
                   <button key={s.label} onClick={() => send(s.label)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm">
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-colors hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm">
                     <span>{s.icon}</span> {s.label}
                   </button>
                 ))}

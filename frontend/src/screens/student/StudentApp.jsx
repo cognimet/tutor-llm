@@ -50,7 +50,8 @@ export default function StudentApp() {
   return (
     <div className={view === "chat" ? "h-screen" : "min-h-screen"}>
       <Backdrop />
-      <AppHeader user={user} onLogout={logout} right={<CreditMeter />} />
+      {/* Chat has its own single, combined header — skip the global bar there. */}
+      {view !== "chat" && <AppHeader user={user} onLogout={logout} right={<CreditMeter />} />}
       {loading ? (
         <Spinner label="Loading your classroom…" />
       ) : view === "notebooks" ? (
@@ -73,7 +74,7 @@ export default function StudentApp() {
           onSetLevel={setLevel}
         />
       ) : (
-        <TutorChat user={user} session={session} onBack={backHome} onProgressChange={loadProgress} />
+        <TutorChat user={user} session={session} onBack={backHome} onLogout={logout} onProgressChange={loadProgress} />
       )}
     </div>
   );

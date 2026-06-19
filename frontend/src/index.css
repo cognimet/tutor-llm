@@ -21,6 +21,10 @@ h1, h2, h3, .font-display {
 }
 .dark ::-webkit-scrollbar-thumb { background: #334155; background-clip: content-box; }
 
+/* Hide scrollbars on horizontal chip strips (still scrollable by wheel/trackpad/drag). */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* ---------------------------------------------------------------------------
    Tutor chat: rich Markdown rendering (no @tailwindcss/typography dependency)
 --------------------------------------------------------------------------- */
