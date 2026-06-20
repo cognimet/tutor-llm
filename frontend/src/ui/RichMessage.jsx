@@ -14,27 +14,51 @@ import Visualization from "./Visualization.jsx";
  * or throws mid-stream.
  */
 
-// Tolerant matchers: 3+ backticks (` ``` ` or ```` ```` ````), an optional space
-// before the language tag (` ``` viz `), case-insensitive lang, and CRLF line
-// endings — all of which Markdown treats as a code fence but a stricter regex
-// would miss, leaving the raw JSON on screen. The closing fence must use the
-// same run of backticks (`\1`).
-const FENCE = /(`{3,})[ \t]*(?:viz|chart|plot|graph)\b[^\n]*\r?\n([\s\S]*?)\1/gi;
-const OPEN = /(`{3,})[ \t]*(?:viz|chart|plot|graph)\b[^\n]*\r?\n/i;
+// Language tags that ALWAYS mean a visualization.
+const VIZ_LANGS = new Set(["viz", "chart", "plot", "graph"]);
+// Recognised spec `type` values (must mirror Visualization.jsx).
+const VIZ_TYPES = new Set(["function", "plot", "line", "bar", "scatter", "pie",
+  "geometry", "diagram", "mermaid", "flowchart"]);
+
+// Match ANY fenced code block: group1 = backtick run, group2 = info/lang,
+// group3 = content. Tolerates 3+ backticks and CRLF.
+const ANY_FENCE = /(`{3,})[ \t]*([^\n`]*)\r?\n([\s\S]*?)\1/g;
+// An unterminated, explicitly-tagged viz fence (used for the streaming spinner).
+const OPEN_VIZ = /(`{3,})[ \t]*(?:viz|chart|plot|graph)\b[^\n]*\r?\n/i;
+
+// Is this fenced body a visualization spec? Returns true when the content is a
+// JSON object with a recognised `type`. This catches specs the model mislabels
+// as ```json (or leaves untagged) instead of ```viz.
+function looksLikeVizSpec(content) {
+  const t = content.trim();
+  if (t[0] !== "{" && t[0] !== "[") return false;
+  try {
+    const o = JSON.parse(t);
+    return !!o && typeof o === "object" && typeof o.type === "string"
+      && VIZ_TYPES.has(o.type.toLowerCase());
+  } catch {
+    return false;
+  }
+}
 
 function splitSegments(text) {
   const src = String(text || "");
   const segs = [];
   let last = 0;
   let m;
-  FENCE.lastIndex = 0;
-  while ((m = FENCE.exec(src))) {
+  ANY_FENCE.lastIndex = 0;
+  while ((m = ANY_FENCE.exec(src))) {
+    const lang = (m[2] || "").trim().toLowerCase();
+    const content = m[3];
+    const isViz = VIZ_LANGS.has(lang)
+      || ((lang === "" || lang === "json" || lang === "json5") && looksLikeVizSpec(content));
+    if (!isViz) continue; // leave ordinary code fences inside the Markdown flow
     if (m.index > last) segs.push({ kind: "md", text: src.slice(last, m.index) });
-    segs.push({ kind: "viz", code: m[2].trim() });
+    segs.push({ kind: "viz", code: content.trim() });
     last = m.index + m[0].length;
   }
   const tail = src.slice(last);
-  const openAt = tail.search(OPEN);
+  const openAt = tail.search(OPEN_VIZ);
   if (openAt >= 0) {
     // An unterminated viz fence — still streaming in. Show prose before it,
     // then a placeholder until the closing ``` arrives.

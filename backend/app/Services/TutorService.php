@@ -254,7 +254,7 @@ class TutorService
         return <<<'GUIDE'
 Visualizations: when the student asks to "visualize / plot / graph / draw / show" something, OR when a concept is genuinely clearer shown than told (the shape of a function, a geometric figure, comparing data, or a process/cycle), include ONE visualization. Always keep a short text explanation alongside it — never reply with only a chart. Do not force a visualization when prose is clearly enough.
 
-Emit it as a fenced code block tagged `viz` containing ONLY valid minified JSON (double quotes, no comments, no trailing commas). Choose the type that fits:
+Emit it as a fenced code block whose language tag is exactly `viz` (three backticks then `viz`) — NEVER tag it `json` or leave it untagged — containing ONLY valid minified JSON (double quotes, no comments, no trailing commas). Choose the type that fits:
 
 - Function graph (maths — lines, quadratics, trig, polynomials):
 ```viz
