@@ -14,8 +14,13 @@ import Visualization from "./Visualization.jsx";
  * or throws mid-stream.
  */
 
-const FENCE = /```(?:viz|chart|plot|graph)[^\n]*\n([\s\S]*?)```/gi;
-const OPEN = /```(?:viz|chart|plot|graph)[^\n]*\n/i;
+// Tolerant matchers: 3+ backticks (` ``` ` or ```` ```` ````), an optional space
+// before the language tag (` ``` viz `), case-insensitive lang, and CRLF line
+// endings — all of which Markdown treats as a code fence but a stricter regex
+// would miss, leaving the raw JSON on screen. The closing fence must use the
+// same run of backticks (`\1`).
+const FENCE = /(`{3,})[ \t]*(?:viz|chart|plot|graph)\b[^\n]*\r?\n([\s\S]*?)\1/gi;
+const OPEN = /(`{3,})[ \t]*(?:viz|chart|plot|graph)\b[^\n]*\r?\n/i;
 
 function splitSegments(text) {
   const src = String(text || "");
@@ -25,7 +30,7 @@ function splitSegments(text) {
   FENCE.lastIndex = 0;
   while ((m = FENCE.exec(src))) {
     if (m.index > last) segs.push({ kind: "md", text: src.slice(last, m.index) });
-    segs.push({ kind: "viz", code: m[1].trim() });
+    segs.push({ kind: "viz", code: m[2].trim() });
     last = m.index + m[0].length;
   }
   const tail = src.slice(last);
