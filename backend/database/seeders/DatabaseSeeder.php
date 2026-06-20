@@ -20,6 +20,9 @@ class DatabaseSeeder extends Seeder
         $this->call(NcertSocialGeographyContentSeeder::class); // SST · Geography
         $this->call(NcertSocialEconomicsContentSeeder::class); // SST · Economics
         $this->call(NcertSocialHistoryContentSeeder::class);   // SST · History
+        $this->call(NcertClass6MathsContentSeeder::class);        // NCERT Class 6 Maths (Ganita Prakash PDFs)
+        $this->call(NcertClass6MathsCuratedContentSeeder::class);   // NCERT Class 6 Maths (curated RAG doc)
+        $this->call(NcertClass6ScienceCuratedContentSeeder::class); // NCERT Class 6 Science (curated RAG doc)
 
         // Resolve a couple of CBSE levels to scope the demo students.
         $cbseClass10 = Level::whereHas('track', fn ($q) => $q->where('slug', 'cbse'))

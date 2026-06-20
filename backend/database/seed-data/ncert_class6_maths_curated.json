@@ -1,0 +1,219 @@
+{
+ "board": "CBSE",
+ "class_number": 6,
+ "subject": "Mathematics",
+ "source": "NCERT Class 6 Mathematics — Ganita Prakash (curated RAG seed)",
+ "chapters": [
+  {
+   "number": 1,
+   "name": "Patterns in Mathematics",
+   "file": "grade_6_math_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "About the Book & National Curriculum Framework",
+     "name": "Textbook Overview & Curriculum Framework",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Patterns in Mathematics: Textbook Overview & Curriculum Framework.\nSection: About the Book & National Curriculum Framework.\nKey terms: Ganita Prakash, NCFSE 2023, Computational Thinking, Panchakoshas.\n\n#### Core Concepts & Pedagogy\n- **Textbook Name**: *Ganita Prakash* (Grade 6 Mathematics)\n- **Publisher**: National Council of Educational Research and Training (NCERT), India (First Edition: August 2024).\n- **Curriculum Framework**: Aligned with the **National Education Policy (NEP) 2020** and the **National Curriculum Framework for School Education (NCFSE) 2023**.\n- **Pedagogical Foundations**: Nurtures abilities across the five planes of human existence (**Panchakoshas**) through the Middle Stage (Grades 6–8), acting as a bridge between the Preparatory and Secondary stages.\n- **Key Focus Areas**: \n  - Shifting from rote memorization to exploration, inquiry, and pattern-seeking.\n  - Active and experiential learning through peer discussions, puzzles, and interactive exercises (marked with the exploration icon ❂).\n  - Integration of **Computational Thinking** (algorithm formulation, pattern analysis) and appreciation of **Indian Knowledge Systems (IKS)**.\n  - Mathematical concepts are linked to history, art, and science to show the unity and connectedness of knowledge.\n\n#### Curriculum Syllabus Outline (Chapters 1–10)\n1. **Chapter 1: Patterns in Mathematics** (Pattern recognition in numbers and shapes)\n2. **Chapter 2: Lines and Angles** (Basic geometry, points, lines, rays, angles, protractor usage)\n3. **Chapter 3: Number Play** (Supercells, digit sums, palindromic numbers, Kaprekar constant, Collatz conjecture, game strategies)\n4. **Chapter 4: Data Handling and Presentation** (Tally marks, pictographs, bar graphs, infographics)\n5. **Chapter 5: Prime Time** (Prime numbers, prime factorization)\n6. **Chapter 6: Perimeter and Area** (2D shape measurements, perimeter, area)\n7. **Chapter 7: Fractions** (Intuition, fractional units, comparison, addition, subtraction)\n8. **Chapter 8: Playing with Constructions** (Hands-on drawing of shapes using compass and ruler)\n9. **Chapter 9: Symmetry** (Artistic and geometric study of reflection and rotational symmetry)\n10. **Chapter 10: The Other Side of Zero** (Introduction to negative numbers and integers, historical rules of Brahmagupta)",
+       "page": 1
+      }
+     ]
+    },
+    {
+     "section": "1.1 What is Mathematics? & 1.2 Patterns in Numbers",
+     "name": "What is Mathematics & Number Theory",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Patterns in Mathematics: What is Mathematics & Number Theory.\nSection: 1.1 What is Mathematics? & 1.2 Patterns in Numbers.\nKey terms: number theory, number sequences, pattern recognition.\n\n#### Core Definitions & Theories\n- **What is Mathematics?**: Mathematics is the search for patterns and the explanations as to why those patterns exist. Patterns occur in nature (sun, moon, stars), domestic environments, technology, music, and games.\n- **Number Theory**: The branch of Mathematics that studies patterns in whole numbers:\n  $$\\mathbb{W} = \\{0, 1, 2, 3, 4, \\dots\\}$$\n- **Number Sequences**: Orderly lists of numbers formed according to specific rules.\n\n#### Key Number Sequences\n1. **All 1's**: $1, 1, 1, 1, 1, \\dots$ (constant sequence)\n2. **Counting Numbers**: $1, 2, 3, 4, 5, \\dots$ (arithmetic progression adding $1$ at each step)\n3. **Odd Numbers**: $1, 3, 5, 7, 9, 11, \\dots$ (numbers not divisible by 2; formula: $2n - 1$ for $n \\ge 1$)\n4. **Even Numbers**: $2, 4, 6, 8, 10, 12, \\dots$ (numbers divisible by 2; formula: $2n$ for $n \\ge 1$)\n5. **Triangular Numbers**: $1, 3, 6, 10, 15, 21, 28, \\dots$ (sum of consecutive counting numbers; formula: $T_n = \\frac{n(n+1)}{2}$)\n6. **Squares**: $1, 4, 9, 16, 25, 36, 49, \\dots$ (product of an integer with itself; formula: $S_n = n^2$)\n7. **Cubes**: $1, 8, 27, 64, 125, 216, \\dots$ (product of an integer multiplied by itself twice; formula: $C_n = n^3$)\n8. **Virahānka Numbers (Fibonacci Sequence)**: $1, 2, 3, 5, 8, 13, 21, \\dots$ (each term is the sum of the preceding two terms: $V_n = V_{n-1} + V_{n-2}$ with $V_1=1, V_2=2$)\n9. **Powers of 2**: $1, 2, 4, 8, 16, 32, 64, \\dots$ (repeatedly multiplying by 2; formula: $2^{n-1}$ for $n \\ge 1$)\n10. **Powers of 3**: $1, 3, 9, 27, 81, 243, 729, \\dots$ (repeatedly multiplying by 3; formula: $3^{n-1}$ for $n \\ge 1$)\n\n#### Curricular Q&A\n- **Q**: Can you think of examples where mathematics helps us in our everyday lives?\n  - **A**: Common daily examples include paying for groceries, calculating vehicle speed, designing floor tiles or building patterns, determining the area of a home plot, and reading clocks or calendars.\n- **Q**: Explain the rule for the Virahānka numbers: $1, 2, 3, 5, 8, 13, 21, \\dots$\n  - **A**: The sequence starts with 1 and 2. Each subsequent number is obtained by adding the two previous numbers. For example: $1 + 2 = 3$, $2 + 3 = 5$, $3 + 5 = 8$, $5 + 8 = 13$, and so on.",
+       "page": 2
+      }
+     ]
+    },
+    {
+     "section": "1.3 Visualising Number Sequences & 1.4 Relations among Sequences",
+     "name": "Visualising & Connecting Number Sequences",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Patterns in Mathematics: Visualising & Connecting Number Sequences.\nSection: 1.3 Visualising Number Sequences & 1.4 Relations among Sequences.\nKey terms: triangular numbers, square numbers, hexagonal numbers, visual proofs.\n\n#### Core Mathematical Relationships\n- **Triangular Numbers ($T_n$)**: Can be represented as a triangle of dots.\n  - Step 1: $1$ dot\n  - Step 2: $3$ dots ($1 + 2$)\n  - Step 3: $6$ dots ($1 + 2 + 3$)\n  - Step 4: $10$ dots ($1 + 2 + 3 + 4$)\n- **Square Numbers ($S_n$)**: Can be represented as a square grid of dots ($n \\times n$).\n- **Hexagonal Numbers ($H_n$)**: Can be represented as nested regular hexagons. \n  - Sequence: $1, 7, 19, 37, 61, \\dots$ (concentric rings adding $6, 12, 18, 24, \\dots$ dots).\n- **Sum of Odd Numbers**: Summing the first $n$ odd numbers yields the $n$-th square number:\n  $$1 + 3 + 5 + 7 + \\dots + (2n - 1) = n^2$$\n  *Visual proof*: Adding L-shaped borders of dots (gnomons) to a starting dot builds larger squares.\n- **Adding Up and Down**: Summing consecutive numbers up to a peak $n$ and then back down to $1$ yields $n^2$:\n  $$1 + 2 + 3 + \\dots + (n-1) + n + (n-1) + \\dots + 3 + 2 + 1 = n^2$$\n- **Consecutive Triangular Numbers**: Adding two consecutive triangular numbers yields a square number:\n  $$T_{n-1} + T_n = n^2$$\n- **Hexagonal Numbers & Cubes Relation**: Multiplying a triangular number by 6 and adding 1 gives a hexagonal number:\n  $$6 \\cdot T_n + 1 = H_{n+1}$$\n  Adding up hexagonal numbers represents the layers of a 3D cube.\n\n#### Curricular Q&A\n- **Q**: Why is the number $36$ both a triangular number and a square number?\n  - **A**: $36$ is a square number because it can be arranged as a $6 \\times 6$ square grid ($6^2 = 36$). It is a triangular number because it is the sum of the first 8 counting numbers ($1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 = 36$).\n- **Q**: What is the sum of the first 100 odd numbers?\n  - **A**: Using the odd number sum rule, the sum of the first $n$ odd numbers is $n^2$. For $n = 100$, the sum is $100^2 = 10,000$.\n- **Q**: Find the value of $1 + 2 + 3 + \\dots + 99 + 100 + 99 + \\dots + 3 + 2 + 1$.\n  - **A**: Using the \"adding up and down\" rule, the sum is equal to the square of the peak number. Here, the peak is $100$, so the sum is $100^2 = 10,000$.",
+       "page": 3
+      }
+     ]
+    },
+    {
+     "section": "1.5 Patterns in Shapes & 1.6 Relation to Number Sequences",
+     "name": "Shapes, Geometry, and Fractals",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Patterns in Mathematics: Shapes, Geometry, and Fractals.\nSection: 1.5 Patterns in Shapes & 1.6 Relation to Number Sequences.\nKey terms: regular polygons, complete graphs, stacked squares, Koch snowflake.\n\n#### Core Definitions & Rules\n- **Geometry**: The branch of Mathematics that studies patterns in shapes (1D, 2D, or 3D).\n- **Regular Polygons**: Closed 2D shapes with equal-length sides and equal angles.\n  - Sequence of sides/corners: Triangle (3), Quadrilateral/Square (4), Pentagon (5), Hexagon (6), Heptagon (7), Octagon (8), Nonagon (9), Decagon (10).\n  - Rule: For any regular polygon, the number of sides equals the number of corners (vertices).\n- **Complete Graphs ($K_n$)**: A set of $n$ points (vertices) where every pair of points is connected by a unique line (edge).\n  - Sequence of lines: $K_2$ (1 line), $K_3$ (3 lines), $K_4$ (6 lines), $K_5$ (10 lines), $K_6$ (15 lines).\n  - Rule: The number of lines corresponds to the Triangular Number sequence:\n    $$\\text{Number of lines in } K_n = \\frac{n(n-1)}{2} = T_{n-1}$$\n- **Stacked Squares**: A sequence where squares are stacked in grid patterns. The number of little squares in stack $n$ is $n^2$ (Square sequence).\n- **Stacked Triangles**: A sequence of triangles stacked in rows. The number of little triangles in stack $n$ is $n^2$.\n- **Koch Snowflake**: A fractal shape generated iteratively by replacing each line segment with a \"speed bump\" (dividing a segment into three equal parts and drawing an equilateral triangle on the middle third).\n  - Number of line segments: Starts at 3 (equilateral triangle). Each iteration multiplies the segments by 4.\n  - Formula for iteration $n$:\n    $$L_n = 3 \\cdot 4^n \\quad (\\text{Sequence: } 3, 12, 48, 192, 768, \\dots)$$\n\n#### Curricular Q&A\n- **Q**: Count the number of lines in a complete graph with 6 vertices ($K_6$). Which number sequence does it fit?\n  - **A**: For $K_6$, the number of lines is 15. The sequence of lines for complete graphs ($K_2$ to $K_6$) is $1, 3, 6, 10, 15$, which corresponds to the triangular numbers starting at $T_1 = 1$.\n- **Q**: How many line segments are there in the 3rd iteration of a Koch Snowflake?\n  - **A**: The iteration sequence is: Iteration 0 has 3 segments; Iteration 1 has $3 \\times 4 = 12$; Iteration 2 has $12 \\times 4 = 48$; Iteration 3 has $48 \\times 4 = 192$ segments.",
+       "page": 4
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 2,
+   "name": "Lines and Angles",
+   "file": "grade_6_math_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "2.1 Point to 2.4 Ray",
+     "name": "Basic Geometry - Points, Lines, Rays, & Segments",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Lines and Angles: Basic Geometry - Points, Lines, Rays, & Segments.\nSection: 2.1 Point to 2.4 Ray.\nKey terms: point, line segment, line, ray.\n\n#### Core Geometric Elements\n1. **Point**:\n   - *Definition*: Determines a precise location. It has no length, breadth, or height.\n   - *Representation*: Denoted by a single capital letter (e.g., Point $A$, Point $P$, Point $Z$).\n   - *Axiom*: An infinite number of lines can pass through a single point.\n2. **Line Segment**:\n   - *Definition*: The shortest path connecting two points. It has a fixed length and two endpoints.\n   - *Representation*: The segment joining points $A$ and $B$ is written as $\\overline{AB}$ or $\\overline{BA}$.\n3. **Line**:\n   - *Definition*: A line segment extended infinitely in both directions. It has no endpoints and infinite length.\n   - *Representation*: Written as $\\overleftrightarrow{AB}$ or denoted by lowercase letters (e.g., line $l$, line $m$).\n   - *Axiom*: Any two distinct points determine a single, unique line that passes through them.\n4. **Ray**:\n   - *Definition*: A portion of a line that starts at one point (called the starting point or initial point) and extends endlessly in one direction.\n   - *Representation*: A ray starting at $A$ and passing through $P$ is denoted as $\\overrightarrow{AP}$.\n   - *Important Note*: $\\overrightarrow{AP}$ is not the same as $\\overrightarrow{PA}$ because their starting points and directions are different.\n\n#### Curricular Q&A\n- **Q**: Rihan marked a point on a paper. How many lines can he draw through it? Sheetal marked two points. How many lines can she draw passing through both?\n  - **A**: Rihan can draw an infinite (uncountable) number of lines passing through a single point. Sheetal can draw only one unique line passing through both points.\n- **Q**: Can we write ray $\\overrightarrow{OA}$ as $\\overrightarrow{AO}$? Explain.\n  - **A**: No. $\\overrightarrow{OA}$ represents a ray starting at point $O$ and extending endlessly in the direction of $A$. $\\overrightarrow{AO}$ represents a ray starting at point $A$ and extending endlessly in the direction of $O$. Since their starting points and directions differ, they are not equal.",
+       "page": 5
+      }
+     ]
+    },
+    {
+     "section": "2.5 Angle to 2.7 Rotating Arms",
+     "name": "Angles & Turn Size",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Lines and Angles: Angles & Turn Size.\nSection: 2.5 Angle to 2.7 Rotating Arms.\nKey terms: angle, vertex, arm, rotation, superimposition.\n\n#### Core Definitions & Rules\n- **Angle**: Formed by two rays having a common starting point.\n  - **Vertex**: The common starting point of the two rays.\n  - **Arms**: The two rays that form the angle.\n- **Notation**: Denoted by the symbol $\\angle$. \n  - To name an angle formed by rays $\\overrightarrow{BD}$ and $\\overrightarrow{BE}$, we write $\\angle DBE$ or $\\angle EBD$.\n  - The vertex (here, $B$) must always be the middle letter.\n- **Angle Size**: The amount of rotation or turn needed about the vertex to move the first arm (initial position) onto the second arm (final position).\n  - Angle size is independent of the drawn length of its arms.\n- **Comparison Methods**:\n  1. **Superimposition**: Placing one angle over another so their vertices overlap and one arm aligns. The angle whose other arm falls outward is larger.\n  2. **Circular Tracing**: Using a transparent circle centered at the vertex to mark where the arms intersect the circle's boundary, measuring the arc length for comparison.\n\n#### Curricular Q&A\n- **Q**: In an angle formed by rays $\\overrightarrow{BD}$ and $\\overrightarrow{BE}$, what is the vertex and what are the arms?\n  - **A**: The vertex is point $B$ (the common initial point of both rays). The arms of the angle are the rays $\\overrightarrow{BD}$ and $\\overrightarrow{BE}$.\n- **Q**: Explain why increasing the length of the arms of an angle does not increase the size of the angle.\n  - **A**: The size of an angle is a measure of the rotation or turn between its two arms. Extending the length of the lines representing the arms does not change the amount of turn between them; therefore, the angle size remains exactly the same.",
+       "page": 6
+      }
+     ]
+    },
+    {
+     "section": "2.8 Special Angles & 2.10 Drawing Angles",
+     "name": "Special Angles, Measuring & Drawing",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Lines and Angles: Special Angles, Measuring & Drawing.\nSection: 2.8 Special Angles & 2.10 Drawing Angles.\nKey terms: straight angle, right angle, perpendicular, degree, protractor.\n\n#### Core Mathematical Definitions\n- **Straight Angle**: An angle formed by a half turn ($180^\\circ$). Its arms lie in a straight line extending in opposite directions.\n- **Right Angle**: An angle that is exactly half of a straight angle ($90^\\circ$). It represents a quarter of a full turn and resembles the shape of an \"L\".\n- **Perpendicular Lines**: Two lines that meet or intersect at a right angle ($90^\\circ$).\n- **Degree ($^\\circ$)**: The unit of angle measurement. A full turn is divided into $360$ equal parts, where each part is $1$ degree ($1^\\circ$).\n  - Full turn = $360^\\circ$\n  - Straight angle = $180^\\circ$\n  - Right angle = $90^\\circ$\n- **History of $360^\\circ$**: Ancient Indian (Rigveda mentions a wheel of 360 spokes), Persian, and Egyptian calendars used 360-day years. Mathematically, 360 is highly convenient because it is divisible by every integer from 1 to 10 except 7.\n\n#### Step-by-Step: Drawing an Angle (e.g., $30^\\circ$)\n1. Draw a base ray $\\overrightarrow{IN}$ using a ruler.\n2. Place the center point of the protractor on the vertex $I$ and align the base line of the protractor to match the ray $\\overrightarrow{IN}$ (at $0^\\circ$).\n3. Find the $30^\\circ$ mark on the appropriate scale of the protractor and mark a point $T$.\n4. Remove the protractor and use a ruler to draw a ray starting from $I$ and passing through $T$. The resulting angle is $\\angle TIN = 30^\\circ$.\n\n#### Curricular Q&A\n- **Q**: How many right angles does a straight angle contain?\n  - **A**: A straight angle measures $180^\\circ$, and a right angle measures $90^\\circ$. Therefore, a straight angle contains exactly two right angles ($180^\\circ / 90^\\circ = 2$).\n- **Q**: Why is $360$ a very useful number for dividing a circle into degrees?\n  - **A**: $360$ is the smallest number that can be divided evenly by all integers from 1 to 10, except 7. This makes it extremely easy to divide a circle into $2, 3, 4, 5, 6, 8, 9,$ or $10$ equal parts and still get whole number degree measurements for each section.",
+       "page": 7
+      }
+     ]
+    },
+    {
+     "section": "2.11 Classification of Angles",
+     "name": "Classification of Angles",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Lines and Angles: Classification of Angles.\nSection: 2.11 Classification of Angles.\nKey terms: acute angle, obtuse angle, reflex angle, angle ranges.\n\n#### Core Geometric Classification\nAngles are classified into categories based on their degree measurements:\n\n| Angle Type | Range of Measure ($\\theta$) | Visual Characteristics |\n| :--- | :--- | :--- |\n| **Acute Angle** | $0^\\circ < \\theta < 90^\\circ$ | Sharp opening; smaller than an \"L\" shape. |\n| **Right Angle** | $\\theta = 90^\\circ$ | Perfect corner; exact \"L\" shape. |\n| **Obtuse Angle** | $90^\\circ < \\theta < 180^\\circ$ | Blunt opening; wider than \"L\", narrower than a straight line. |\n| **Straight Angle** | $\\theta = 180^\\circ$ | Perfect straight line. |\n| **Reflex Angle** | $180^\\circ < \\theta < 360^\\circ$ | Backside angle; greater than a straight line. |\n\n*Visual representations of ranges:*\n- Acute means \"sharp\" (narrow opening).\n- Obtuse means \"blunt\" (wide opening).\n\n#### Curricular Q&A\n- **Q**: Classify the following angles: $35^\\circ, 90^\\circ, 110^\\circ, 180^\\circ, 258^\\circ$.\n  - **A**:\n    - $35^\\circ$: **Acute Angle** (between $0^\\circ$ and $90^\\circ$)\n    - $90^\\circ$: **Right Angle** (exactly $90^\\circ$)\n    - $110^\\circ$: **Obtuse Angle** (between $90^\\circ$ and $180^\\circ$)\n    - $180^\\circ$: **Straight Angle** (exactly $180^\\circ$)\n    - $258^\\circ$: **Reflex Angle** (between $180^\\circ$ and $360^\\circ$)\n- **Q**: Puzzle: \"I am an acute angle. If you double me, I am still acute. If you triple or quadruple me, I remain acute. But if you multiply my measure by 5, I become obtuse.\" Find the integer possibilities for my measure.\n  - **A**: Let the angle be $x$.\n    - Since $x$ is acute, $x < 90^\\circ$.\n    - Since $4x$ is acute, $4x < 90^\\circ \\implies x < 22.5^\\circ$.\n    - Since $5x$ is obtuse, $90^\\circ < 5x < 180^\\circ \\implies x > 18^\\circ$.\n    - Combining these inequalities gives $18^\\circ < x < 22.5^\\circ$. The integer angle options are **$19^\\circ, 20^\\circ, 21^\\circ,$ and $22^\\circ$**.",
+       "page": 8
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 3,
+   "name": "Number Play",
+   "file": "grade_6_math_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "3.2 Supercells",
+     "name": "Supercells Grid Puzzles",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Number Play: Supercells Grid Puzzles.\nSection: 3.2 Supercells.\nKey terms: supercells, adjacent cells, optimization, patterns.\n\n#### Core Definitions & Mathematical Rules\n- **Supercell**: A cell in a number grid is a *supercell* if the number written in it is strictly larger than all its adjacent cells.\n- **Adjacency**:\n  - In a **1D row**, adjacent cells are the immediate left and right neighbors. (End cells have only 1 neighbor).\n  - In a **2D grid**, adjacent cells are those immediately to the left, right, top, and bottom (no diagonal neighbors).\n- **Theorem (Maximum Supercells in a 1D Row)**:\n  - For a row of $n$ cells filled without repeating numbers:\n    - If $n$ is **even**, the maximum number of supercells is:\n      $$\\text{Max Supercells} = \\frac{n}{2}$$\n    - If $n$ is **odd**, the maximum number of supercells is:\n      $$\\text{Max Supercells} = \\frac{n+1}{2}$$\n  - *Strategy*: To maximize supercells, place numbers alternately high and low (e.g., High, Low, High, Low...).\n- **Boundary Properties**:\n  - The cell containing the **largest overall number** in the grid will *always* be a supercell because no adjacent cell can contain a larger number.\n  - The cell containing the **smallest overall number** in the grid can *never* be a supercell because all its adjacent cells will contain larger numbers.\n\n#### Curricular Q&A\n- **Q**: Can you fill a supercell table without repeating numbers such that there are no supercells? Why or why not?\n  - **A**: No. The cell containing the greatest number in the table will always be larger than all its neighboring cells. Thus, there must always be at least one supercell.\n- **Q**: What is the maximum number of supercells possible in a row of 9 cells?\n  - **A**: Since $n = 9$ is odd, we use the formula $(n+1)/2$. The maximum number of supercells is $(9+1)/2 = 5$ supercells. (This is achieved by placing high numbers in cells 1, 3, 5, 7, and 9).",
+       "page": 9
+      }
+     ]
+    },
+    {
+     "section": "3.4 Digit Sums & 3.5 Palindromes",
+     "name": "Digits, Palindromes, and Reversing",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Number Play: Digits, Palindromes, and Reversing.\nSection: 3.4 Digit Sums & 3.5 Palindromes.\nKey terms: digit count, digit sum, palindromic numbers, reverse-and-add.\n\n#### Core Rules & Calculations\n- **Digit Counts**:\n  - 1-digit numbers: 9 (from 1 to 9)\n  - 2-digit numbers: 90 (from 10 to 99)\n  - 3-digit numbers: 900 (from 100 to 999)\n  - 4-digit numbers: 9000 (from 1000 to 9999)\n  - 5-digit numbers: 90,000 (from 10,000 to 99,999)\n- **Digit Sum**: The sum of all individual digits in a number. E.g., the digit sum of $176$ is $1 + 7 + 6 = 14$.\n- **Palindromic Numbers**: Numbers that read the same forwards and backwards. E.g., $121, 313, 222, 1221$.\n- **Reverse-and-Add Algorithm**:\n  1. Start with any 2-digit number (e.g., $34$).\n  2. Reverse its digits ($43$) and add it to the original number: $34 + 43 = 77$.\n  3. If the sum is a palindrome, stop. Otherwise, repeat the process with the sum.\n  - *Example (2 steps)*: $48 \\rightarrow 48 + 84 = 132 \\rightarrow 132 + 231 = 363$ (palindrome).\n  - *Note*: It is suspected that starting with the number **$196$** will never yield a palindrome, representing an unsolved mathematical problem (Lychrel numbers).\n\n#### Curricular Q&A\n- **Q**: What is the smallest number and the largest 5-digit number whose digits sum up to 14?\n  - **A**: The smallest number is **59** ($5+9=14$). The largest 5-digit number is **95,000** ($9+5+0+0+0=14$).\n- **Q**: Find all possible 3-digit palindromes using only the digits 1, 2, and 3.\n  - **A**: The possible 3-digit palindromes are: **111, 121, 131, 212, 222, 232, 313, 323, 333**.\n- **Q**: I am a 5-digit palindrome and an odd number. My tens digit ($t$) is double my units digit ($u$). My hundreds digit ($h$) is double my tens digit ($t$). What number am I?\n  - **A**: Let the palindrome be $u - t - h - t - u$.\n    - Since it is odd, the units digit $u$ must be odd ($1, 3, 5, 7,$ or $9$).\n    - Since $t = 2u$, if $u \\ge 3$, then $t \\ge 6 \\implies h = 2t \\ge 12$ (impossible for a single digit).\n    - Thus, $u$ must be $1$.\n    - If $u = 1$, then $t = 2(1) = 2$.\n    - If $t = 2$, then $h = 2(2) = 4$.\n    - Placing these into the symmetric pattern gives **$12421$** (Twelve thousand four hundred twenty-one).",
+       "page": 10
+      }
+     ]
+    },
+    {
+     "section": "3.6 The Magic Number of Kaprekar",
+     "name": "Kaprekar's Constant & Routine",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Number Play: Kaprekar's Constant & Routine.\nSection: 3.6 The Magic Number of Kaprekar.\nKey terms: D.R. Kaprekar, Kaprekar constant, Kaprekar routine, 6174, 495.\n\n#### Core Biographical & Algorithmic Concepts\n- **D.R. Kaprekar (1905–1986)**: An Indian schoolteacher and mathematician from Maharashtra who discovered several fascinating number patterns, including Kaprekar constants and Kaprekar numbers.\n- **Kaprekar's Routine for 4-Digit Numbers**:\n  1. Choose any 4-digit number having at least two different digits (e.g., $6382$).\n  2. Arrange the digits in descending order to get the largest possible number (call it $A$, e.g., $8632$).\n  3. Arrange the digits in ascending order to get the smallest possible number (call it $B$, e.g., $2368$).\n  4. Subtract the smaller number from the larger: $C = A - B$ (e.g., $8632 - 2368 = 6264$).\n  5. Repeat steps 2-4 using the digits of the result $C$.\n  - **Theorem**: Applying this routine will *always* reach the constant **6174** (the Kaprekar Constant) in at most 7 steps. Once 6174 is reached, the routine loops on it indefinitely ($7641 - 1467 = 6174$).\n- **Kaprekar's Routine for 3-Digit Numbers**:\n  - Follows the exact same rules but with 3-digit numbers.\n  - **Theorem**: Applying the routine to a 3-digit number always leads to the constant **495** in at most 6 steps ($954 - 459 = 495$).\n\n#### Curricular Q&A\n- **Q**: Run Kaprekar's routine starting with the number $5683$ and show how many rounds it takes to reach the constant.\n  - **A**:\n    - Round 1: Descending = $8653$, Ascending = $3568$. Difference: $8653 - 3568 = 5085$\n    - Round 2: Descending = $8550$, Ascending = $0558$. Difference: $8550 - 0558 = 7992$ (or $8550 - 558 = 7992$)\n    - Round 3: Descending = $9972$, Ascending = $2799$. Difference: $9972 - 2799 = 7173$\n    - Round 4: Descending = $7731$, Ascending = $1377$. Difference: $7731 - 1377 = 6354$\n    - Round 5: Descending = $6543$, Ascending = $3456$. Difference: $6543 - 3456 = 3087$\n    - Round 6: Descending = $8730$, Ascending = $0378$. Difference: $8730 - 0378 = 8352$\n    - Round 7: Descending = $8532$, Ascending = $2358$. Difference: $8532 - 2358 = 6174$\n    - It takes **7 rounds** to reach the Kaprekar constant $6174$.",
+       "page": 11
+      }
+     ]
+    },
+    {
+     "section": "3.10 Collatz Conjecture & 3.12 Games and Winning Strategies",
+     "name": "Collatz Conjecture & Game of 21",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Number Play: Collatz Conjecture & Game of 21.\nSection: 3.10 Collatz Conjecture & 3.12 Games and Winning Strategies.\nKey terms: Collatz Conjecture, Game of 21, winning strategy, key numbers.\n\n#### Core Theoretical Concepts\n- **Collatz Conjecture (3n + 1 Problem)**:\n  - Proposed by German mathematician Lothar Collatz in 1937.\n  - *Algorithm*: Start with any positive integer $n$.\n    - If $n$ is **even**, divide it by 2:\n      $$n \\rightarrow \\frac{n}{2}$$\n    - If $n$ is **odd**, multiply by 3 and add 1:\n      $$n \\rightarrow 3n + 1$$\n    - Repeat the process.\n  - *Conjecture*: The sequence will always eventually reach $1$, regardless of the starting number. Despite extensive computational verification, it remains an unsolved problem.\n- **Game of 21 (Subtraction/Addition Game)**:\n  - *Rules*: Two players start at 0 and take turns adding $1, 2,$ or $3$ to the running total. The first player to reach exactly $21$ wins.\n  - *Game Theory Strategy*: To guarantee a win, a player must secure the key **winning positions** (target numbers).\n  - *Target Numbers*: $21, 17, 13, 9, 5, 1$.\n  - *Strategy*: The first player should say **1**. Subsequently, if the second player adds $x$, the first player should add $4 - x$. This forces the total to hit $5, 9, 13, 17,$ and finally $21$.\n\n#### Curricular Q&A\n- **Q**: Show the Collatz sequence starting with the number $12$.\n  - **A**: The sequence is: **$12$** (even $\\rightarrow 6$) $\\rightarrow$ **$6$** (even $\\rightarrow 3$) $\\rightarrow$ **$3$** (odd $\\rightarrow 3\\times3+1 = 10$) $\\rightarrow$ **$10$** (even $\\rightarrow 5$) $\\rightarrow$ **$5$** (odd $\\rightarrow 16$) $\\rightarrow$ **$16$** (even $\\rightarrow 8$) $\\rightarrow$ **$8$** (even $\\rightarrow 4$) $\\rightarrow$ **$4$** (even $\\rightarrow 2$) $\\rightarrow$ **$2$** (even $\\rightarrow 1$) $\\rightarrow$ **$1$**.\n- **Q**: In a variation of the Game of 21, players add numbers between 1 and 3, but the winning number is 22. What is the winning strategy?\n  - **A**: The key winning positions are found by subtracting multiples of 4 (since $1 + 3 = 4$) from the target $22$.\n    - Target numbers: $22, 18, 14, 10, 6, 2$.\n    - Winning Strategy: The **first player** should choose **2** at the start. On every subsequent turn, if the opponent adds $x$, the first player must add $4 - x$, ensuring they land on $6, 10, 14, 18,$ and $22$ to win.",
+       "page": 12
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 4,
+   "name": "Data Handling and Presentation",
+   "file": "grade_6_math_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "4.1 Collecting and Organising Data",
+     "name": "Data Collection & Organisation",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Data Handling and Presentation: Data Collection & Organisation.\nSection: 4.1 Collecting and Organising Data.\nKey terms: data, tally marks, frequency, frequency table.\n\n#### Core Statistical Concepts\n- **Data**: Any collection of facts, numbers, measures, observations, or descriptions of things that convey information.\n- **Raw Data**: Data collected in its original, unstructured form (e.g., a simple list of student names and their favorite games).\n- **Tally Marks**: A quick method of recording counts. \n  - Each occurrence is marked with a vertical line `|`.\n  - To make counting easy, every fifth occurrence is drawn as a diagonal slash crossing the previous four marks:\n    - $1$: $|$\n    - $2$: $||$\n    - $3$: $|||$\n    - $4$: $||||$\n    - $5$: $\\cancel{||||}$ (often written as $||||$ with a strike)\n- **Frequency**: The count of the occurrences of a particular value, category, or observation.\n- **Frequency Table**: A table that lists categories along with their corresponding tally marks and numerical frequencies.\n\n#### Curricular Q&A\n- **Q**: Shri Nilesh collects favorite sweets data from students. The tally marks for *Gujiya* are $\\cancel{||||}\\ \\cancel{||||}\\ |||$. What is the frequency?\n  - **A**: Two groups of 5 plus 3 individual marks equals $5 + 5 + 3 = 13$ students.\n- **Q**: What is the benefit of organizing raw data into a frequency table?\n  - **A**: Raw lists are difficult to interpret at a glance. Organising data into a frequency table allows quick identification of the most popular (highest frequency) and least popular (lowest frequency) categories, making analysis and decision-making much faster.",
+       "page": 13
+      }
+     ]
+    },
+    {
+     "section": "4.2 Pictographs",
+     "name": "Pictographs & Scale Choice",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Data Handling and Presentation: Pictographs & Scale Choice.\nSection: 4.2 Pictographs.\nKey terms: pictograph, key, scale, data visualization.\n\n#### Core Visual Concepts\n- **Pictograph**: A visual representation of data using pictures, icons, or symbols of objects.\n- **Key / Scale**: A statement that defines how many units are represented by a single icon or symbol. E.g., $\\text{One symbol } \\smiley = 10 \\text{ students}$.\n- **Drawing Challenges**:\n  - If a symbol represents multiple units (e.g., $10$ units), representing frequencies that are not multiples of $10$ (like $3$ or $7$) is difficult.\n  - This requires drawing \"fractional\" or partial symbols (e.g., half a face for $5$ students), which is imprecise and hard to read.\n- **Advantages**: Pictographs are highly engaging, intuitive, and allow readers to grasp relative sizes immediately without needing to read numbers.\n\n#### Curricular Q&A\n- **Q**: A school library pictograph uses the symbol $\\text{book icon} = 10 \\text{ books}$. If Monday has 4 complete book symbols, how many books were borrowed? If Wednesday has $2.5$ symbols, how many books does that represent?\n  - **A**: \n    - For Monday: $4 \\text{ symbols} \\times 10 \\text{ books/symbol} = 40 \\text{ books}$.\n    - For Wednesday: $2$ full symbols ($20$) plus $1$ half symbol ($5$) equals $20 + 5 = 25 \\text{ books}$.\n- **Q**: Magan sells kites. He represents $100$ kites with $1$ kite symbol. If he sold $250$ kites to Chaman, how should he represent this in a pictograph?\n  - **A**: Since $250 = 100 + 100 + 50$, Magan should draw **2 complete kite symbols** and **1 half-kite symbol**.",
+       "page": 14
+      }
+     ]
+    },
+    {
+     "section": "4.3 Bar Graphs to 4.5 Artistic Considerations",
+     "name": "Bar Graphs & Design Accuracy",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Data Handling and Presentation: Bar Graphs & Design Accuracy.\nSection: 4.3 Bar Graphs to 4.5 Artistic Considerations.\nKey terms: bar graph, scale, axis, infographics, misleading graphs.\n\n#### Core Graphing Principles\n- **Bar Graph**: A chart that represents data using rectangular bars.\n  - **Uniform Width**: All bars must have the exact same width so that visual comparison is based solely on height/length.\n  - **Equal Spacing**: The gaps between consecutive bars must be uniform.\n  - **Scale**: The vertical (or horizontal) axis must have a clearly marked scale starting from zero, where equal gaps represent equal frequency intervals (e.g., $1 \\text{ unit} = 10 \\text{ runs}$).\n- **Types of Bar Graphs**:\n  - **Vertical Bar Graph (Column Graph)**: Ideal for representing heights, altitudes, or quantities that grow upwards.\n  - **Horizontal Bar Graph**: Ideal for representing lengths parallel to the ground (e.g., river lengths, travel distances).\n- **Infographics**: Data visualizations enhanced with artistic imagery. E.g., drawing mountains as triangles instead of rectangles.\n- **Misleading Visualizations (Important Warning)**:\n  - > [!WARNING]\n    > In regular bar graphs, only the height of the bar changes. In \"fancy\" triangular mountain infographics, if a triangle is twice as tall, it is often drawn twice as wide too. This increases the triangle's area quadratically ($2 \\times 2 = 4$ times larger), misleading the viewer into thinking the value is much larger than it actually is.\n\n#### Curricular Q&A\n- **Q**: If you want to draw a bar graph showing the heights of the tallest pupils in each class, should you use vertical or horizontal bars? What if you are representing river lengths?\n  - **A**: For pupil heights, a **vertical bar graph** is preferred because height is a vertical measure, making the comparison intuitive. For river lengths, a **horizontal bar graph** is preferred because river flow and length are horizontal geographic features.\n- **Q**: Why should the scale of a bar graph always start from zero?\n  - **A**: If the scale does not start from zero (a \"truncated graph\"), the relative heights of the bars will not reflect their actual ratios. For example, a bar representing $100$ might look four times taller than a bar representing $90$, which distorts the data and misleads the reader.",
+       "page": 15
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 5,
+   "name": "Prime Time",
+   "file": "grade_6_math_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "Outline of Chapters 5-10 & Historical Context",
+     "name": "Curriculum Outline for Chapters 5–10",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Mathematics — Prime Time: Curriculum Outline for Chapters 5–10.\nSection: Outline of Chapters 5-10 & Historical Context.\nKey terms: prime factors, fractions, constructions, symmetry, negative numbers.\n\n#### Summary of Advanced Grade 6 Topics\n- **Chapter 5: Prime Time**:\n  - Focuses on prime numbers, composite numbers, and factorization.\n  - Primes are introduced as the fundamental \"building blocks\" of the whole number universe.\n- **Chapter 6: Perimeter and Area**:\n  - Revisits 2D geometry, perimeter (boundary length), and area (surface space).\n  - Emphasizes puzzles to develop spatial reasoning and conceptual understanding.\n- **Chapter 7: Fractions**:\n  - Builds a gradual intuition starting from fractional units (like $1/10$) to general fractions.\n  - Explores fraction comparison, addition, and subtraction.\n- **Chapter 8: Playing with Constructions**:\n  - Practical, hands-on drawing of geometric shapes using a physical compass and a ruler.\n- **Chapter 9: Symmetry**:\n  - Artistic and mathematical exploration of symmetry in nature, art, and geometry.\n- **Chapter 10: The Other Side of Zero**:\n  - Introduces negative numbers and the system of integers ($\\mathbb{Z}$).\n  - Explains the historical laws of addition and subtraction of positive and negative numbers as written by the Indian mathematician **Brahmagupta** in **628 C.E.**\n\n#### Historical Connections\n- **Brahmagupta (628 C.E.)**: Documented the rules for arithmetic involving zero and negative numbers (historically referred to as \"debts\" and \"fortunes\").\n- **Rigveda Connection**: Mentions a wheel with 360 spokes, aligning with the division of a circle into 360 degrees.\n- **Kaprekar & Virahānka**: Highlight the rich history of Indian contribution to number theory and sequences.",
+       "page": 16
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

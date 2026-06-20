@@ -1,0 +1,334 @@
+{
+ "board": "CBSE",
+ "class_number": 6,
+ "subject": "Science",
+ "source": "NCERT Class 6 Science — Curiosity (curated RAG seed)",
+ "chapters": [
+  {
+   "number": 1,
+   "name": "The Wonderful World of Science",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "About Curiosity & What is Science?",
+     "name": "Textbook Overview & the Nature of Science",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — The Wonderful World of Science: Textbook Overview & the Nature of Science.\nSection: About Curiosity & What is Science?.\nKey terms: Curiosity, science, scientific method, observation, hypothesis, experiment, curiosity.\n\n#### Core Concepts & Theories\n- **Textbook**: *Curiosity — Textbook of Science for Grade 6*, published by NCERT, India, aligned with the National Education Policy (NEP) 2020 and the National Curriculum Framework for School Education (NCFSE) 2023.\n- **What is Science?** Science is a systematic way of understanding the natural world through curiosity, observation, questioning, and reasoning. It is built by asking questions about why and how things happen and seeking evidence-based explanations.\n- **The Scientific Method** is a repeatable approach used by scientists: (1) make an **observation**; (2) ask a **question**; (3) form a **hypothesis** (a possible explanation that can be tested); (4) perform an **experiment** to test it; (5) record and analyse **data**; (6) draw a **conclusion**; (7) share results so others can verify them.\n- Science spans many fields — physics, chemistry, biology, astronomy, geology — but they share the same spirit of inquiry and connect with mathematics, art, history, and technology.\n- Scientific knowledge grows and is revised when new evidence appears, so being wrong and trying again is part of how science progresses.\n\n#### Illustrative Examples & Visual Descriptions\n- The chapter opens with vivid prompts of natural wonder — an underwater ocean view, the night sky, rainbows, and growing plants — to show that science questions arise from everyday curiosity about the world around us.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: What is a hypothesis in the scientific method?\n  - **A**: A hypothesis is a possible, testable explanation for an observation. It is checked by doing experiments and comparing the results with what the hypothesis predicts.\n- **Q**: Why do scientists share and repeat their experiments?\n  - **A**: Sharing and repeating experiments lets other scientists verify the results independently. If many people get the same result, the conclusion is more trustworthy; this is how reliable scientific knowledge is built.",
+       "page": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 2,
+   "name": "Diversity in the Living World",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "2.1 Diversity Around Us & 2.3 Plants and Animals in Different Habitats",
+     "name": "Diversity in the Living World — Habitats & Adaptations",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Diversity in the Living World: Diversity in the Living World — Habitats & Adaptations.\nSection: 2.1 Diversity Around Us & 2.3 Plants and Animals in Different Habitats.\nKey terms: biodiversity, habitat, adaptation, terrestrial habitat, aquatic habitat, desert, mountain.\n\n#### Core Concepts & Theories\n- **Biodiversity** is the huge variety of living organisms — plants, animals, and other life — found around us. The Earth supports an enormous range of species differing in size, shape, colour, and where they live.\n- **Habitat**: the surroundings where an organism lives, which provide it food, water, air, and shelter. Major habitat types include **terrestrial** (land) habitats such as forests, grasslands, deserts, and mountains, and **aquatic** (water) habitats such as ponds, rivers, lakes, and oceans.\n- **Adaptation**: special features or behaviours that help an organism survive in its particular habitat.\n  - **Desert plants** (e.g., cactus): thick fleshy stems to store water, leaves reduced to spines to reduce water loss, deep roots.\n  - **Desert animals** (e.g., camel): long legs, ability to go long without water, broad feet for walking on sand.\n  - **Aquatic animals** (e.g., fish): streamlined body and gills to breathe in water.\n  - **Mountain plants** (e.g., pine, deodar): cone-shaped with sloping branches so snow slides off.\n\n#### Illustrative Examples & Visual Descriptions\n- A comparison table in the chapter pairs habitats with adaptations: a cactus in a hot desert (spines, fleshy stem); a fish in water (fins, gills, streamlined body); a pine tree on a snowy mountain (conical shape). Each visual links a body feature to the survival need it meets.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Why does a cactus have spines instead of broad leaves?\n  - **A**: Broad leaves lose a lot of water through evaporation. In a hot, dry desert this would be harmful, so the cactus has leaves reduced to spines to minimise water loss, while its thick green stem stores water and carries out photosynthesis.\n- **Q**: What is a habitat? Give one terrestrial and one aquatic example.\n  - **A**: A habitat is the place where an organism lives and gets its food, water, air, and shelter. A terrestrial (land) example is a forest; an aquatic (water) example is a pond.",
+       "page": 2
+      }
+     ]
+    },
+    {
+     "section": "2.2 How to Group Plants and Animals?",
+     "name": "Grouping Plants and Animals",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Diversity in the Living World: Grouping Plants and Animals.\nSection: 2.2 How to Group Plants and Animals?.\nKey terms: classification, herb, shrub, tree, climber, creeper, characteristics.\n\n#### Core Concepts & Theories\n- **Why classify?** Grouping organisms by shared characteristics makes the huge diversity of life easier to study, compare, and understand.\n- **Grouping plants by their stems and height**:\n  - **Herbs**: small plants with soft, green, tender stems (e.g., wheat, mint, tomato).\n  - **Shrubs**: medium plants with hard, woody stems branching near the base (e.g., rose, lemon).\n  - **Trees**: tall plants with thick, hard, woody trunks and branches high up (e.g., mango, neem, banyan).\n  - **Climbers**: weak-stemmed plants that need support to climb up (e.g., money plant, grapevine).\n  - **Creepers**: weak-stemmed plants that spread along the ground (e.g., pumpkin, watermelon).\n- **Grouping animals** can be based on features such as where they live (land, water, air), what they eat (herbivore, carnivore, omnivore), or how they move (walk, fly, swim, crawl).\n\n#### Illustrative Examples & Visual Descriptions\n- The chapter shows a sorting activity: a set of plants is placed into columns for herbs, shrubs, and trees based on stem thickness and height; for example, mint goes under \"herb\", rose under \"shrub\", and neem under \"tree\".\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: How is a shrub different from a tree?\n  - **A**: A shrub is a medium-sized plant with a hard, woody stem that branches out close to the ground, while a tree is tall with a single thick, woody trunk from which branches arise high above the ground.\n- **Q**: Classify these by feeding habit: cow, lion, crow.\n  - **A**: A cow is a **herbivore** (eats only plants), a lion is a **carnivore** (eats only other animals), and a crow is an **omnivore** (eats both plants and animals).",
+       "page": 3
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 3,
+   "name": "Mindful Eating: A Path to a Healthy Body",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "3.2 Components of Food & 3.3 How to Test Different Components",
+     "name": "Components of Food & Food Tests",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Mindful Eating: A Path to a Healthy Body: Components of Food & Food Tests.\nSection: 3.2 Components of Food & 3.3 How to Test Different Components.\nKey terms: carbohydrates, proteins, fats, vitamins, minerals, roughage, iodine test, starch.\n\n#### Core Concepts & Theories\n- **Nutrients** are the components of food the body needs: **carbohydrates, proteins, fats, vitamins, minerals**, along with **dietary fibre (roughage)** and **water**.\n  - **Carbohydrates**: main source of energy (e.g., rice, wheat, potato, sugar).\n  - **Fats**: give more energy than carbohydrates and store energy (e.g., oil, butter, ghee, nuts).\n  - **Proteins**: \"body-building\" nutrients for growth and repair (e.g., pulses, eggs, milk, fish, meat).\n  - **Vitamins and minerals**: needed in small amounts to keep the body healthy and protect against disease (e.g., fruits, vegetables).\n  - **Roughage (dietary fibre)**: indigestible part of food that helps the body get rid of waste; prevents constipation (e.g., whole grains, vegetables).\n  - **Water**: helps the body absorb nutrients and remove wastes.\n- **Food tests** identify nutrients present in a food sample:\n  - **Starch (carbohydrate) test**: add a few drops of dilute **iodine** solution; a **blue-black** colour shows starch is present.\n  - **Protein test**: add copper sulphate and caustic soda solutions; a **violet** colour shows protein.\n  - **Fat test**: rub the food on paper; an oily, **translucent (greasy) patch** that does not dry shows fat.\n\n#### Illustrative Examples & Visual Descriptions\n- The chapter shows test results as a simple table: a potato slice turns **blue-black** with iodine (starch present); a groundnut leaves a **greasy translucent spot** on paper (fat present). Colours and patches are the visual evidence of each nutrient.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: How would you test whether a given food sample contains starch?\n  - **A**: Put a few drops of dilute iodine solution on the food sample. If the colour turns blue-black, the sample contains starch (a carbohydrate). If there is no blue-black colour, starch is absent.\n- **Q**: Which nutrients are called \"body-building\" foods and why?\n  - **A**: **Proteins** are called body-building foods because they are used for the growth of the body and the repair of worn-out and damaged cells and tissues. Good sources include pulses, milk, eggs, fish, and meat.",
+       "page": 4
+      }
+     ]
+    },
+    {
+     "section": "3.4 Balanced Diet, 3.5 Millets & 3.6 Food Miles",
+     "name": "Balanced Diet, Deficiency Diseases, Millets & Food Miles",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Mindful Eating: A Path to a Healthy Body: Balanced Diet, Deficiency Diseases, Millets & Food Miles.\nSection: 3.4 Balanced Diet, 3.5 Millets & 3.6 Food Miles.\nKey terms: balanced diet, deficiency disease, scurvy, anaemia, goitre, millets, Shree Anna, food miles.\n\n#### Core Concepts & Theories\n- **Balanced diet**: a diet that contains all the nutrients — carbohydrates, proteins, fats, vitamins, minerals, roughage, and water — in the right proportions needed for good health.\n- **Deficiency diseases** occur when a nutrient is missing from the diet over a long time:\n  - Lack of **Vitamin C** → **scurvy** (bleeding, spongy gums).\n  - Lack of **Vitamin A** → poor night vision.\n  - Lack of **Vitamin D** → rickets (weak, bent bones).\n  - Lack of **iron** → **anaemia** (weakness, tiredness).\n  - Lack of **iodine** → **goitre** (swelling of the neck).\n- **Millets (Shree Anna)**: nutrition-rich cereals such as **jowar (sorghum), bajra (pearl millet), and ragi (finger millet)**. They are rich in fibre, minerals, and proteins, need less water to grow, and are climate-resilient. The year **2023** was observed as the **International Year of Millets**.\n- **Food miles**: the distance food travels from where it is produced (the farm) to where it is eaten (our plate). Eating local, seasonal food reduces food miles, saving fuel and keeping food fresher.\n\n#### Illustrative Examples & Visual Descriptions\n- A \"farm to plate\" diagram traces a food item's journey through transport, market, and kitchen, illustrating that food grown far away accumulates more food miles than locally grown produce.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Reshma's diet has plenty of rice but very little fruit, vegetables, or pulses. Is her diet balanced? What problem might arise?\n  - **A**: No. Her diet is high in carbohydrates but lacks proteins, vitamins, and minerals, so it is not balanced. Over time she could develop deficiency diseases — for example, too little Vitamin C can cause scurvy, and too little iron can cause anaemia.\n- **Q**: Why are millets encouraged as part of a healthy diet?\n  - **A**: Millets (Shree Anna) such as jowar, bajra, and ragi are rich in dietary fibre, minerals, and proteins, are easy to digest, and are climate-resilient crops that need less water — making them both nutritious and environmentally friendly.",
+       "page": 5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 4,
+   "name": "Exploring Magnets",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "4.1 Magnetic and Non-magnetic Materials & 4.2 Poles of Magnet",
+     "name": "Magnetic Materials & Poles of a Magnet",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Exploring Magnets: Magnetic Materials & Poles of a Magnet.\nSection: 4.1 Magnetic and Non-magnetic Materials & 4.2 Poles of Magnet.\nKey terms: magnet, magnetic material, non-magnetic material, magnetic pole, north pole, south pole.\n\n#### Core Concepts & Theories\n- A **magnet** is an object that attracts certain materials, mainly iron, nickel, and cobalt.\n- **Magnetic materials** are attracted to a magnet (e.g., iron, nickel, cobalt, steel). **Non-magnetic materials** are not attracted (e.g., wood, plastic, rubber, paper, aluminium, copper).\n- **Poles of a magnet**: the two regions near the ends of a magnet where its attracting power is **strongest**. Every magnet has **two poles** — a **North (N) pole** and a **South (S) pole**.\n- If a magnet is freely suspended, it always comes to rest pointing **north–south**: the end pointing north is the **north-seeking (N) pole**, and the end pointing south is the **south-seeking (S) pole**.\n- **A magnet always has both poles**: if you break a bar magnet into pieces, each piece becomes a complete magnet with its own N and S pole — you can never get a single isolated pole.\n\n#### Illustrative Examples & Visual Descriptions\n- An activity dips a bar magnet into iron filings: the filings cling most thickly in clusters at the two ends (the poles) and barely stick in the middle, showing the poles are the strongest regions.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Fill in the blank: The materials that are attracted towards a magnet are called ______.\n  - **A**: magnetic materials.\n- **Q**: If a bar magnet is cut into two pieces, how many poles does each piece have?\n  - **A**: Each piece becomes a complete magnet with **two poles** — one north pole and one south pole. A magnet can never have only a single pole.",
+       "page": 6
+      }
+     ]
+    },
+    {
+     "section": "4.3 Finding Directions & 4.4 Attraction and Repulsion between Magnets",
+     "name": "Attraction, Repulsion, Compass & Finding Directions",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Exploring Magnets: Attraction, Repulsion, Compass & Finding Directions.\nSection: 4.3 Finding Directions & 4.4 Attraction and Repulsion between Magnets.\nKey terms: magnetic compass, attraction, repulsion, like poles, unlike poles, freely suspended magnet.\n\n#### Core Concepts & Theories\n- **Rule of poles**: **Like poles repel** each other (N–N or S–S push apart), and **unlike poles attract** each other (N–S pull together).\n- **Repulsion is the sure test of a magnet**: attraction can happen between a magnet and a magnetic material, but **only two magnets** show repulsion. So if two objects repel, both must be magnets.\n- **Finding directions**: because a freely suspended magnet always aligns north–south, magnets are used to find directions.\n- **Magnetic compass**: a small device with a freely pivoted magnetised **needle** inside a case marked with directions (N, E, S, W). The needle's dark/coloured end points **north**, letting travellers and sailors find their way. The compass was a major historical navigation tool.\n\n#### Illustrative Examples & Visual Descriptions\n- A diagram shows two bar magnets brought together: when an N pole faces another N pole the magnets push apart (repulsion); when an N pole faces an S pole they snap together (attraction). A separate figure shows a compass with its needle settling along the north–south line.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Fill in the blanks: Unlike poles of two magnets ______ each other, whereas like poles ______ each other.\n  - **A**: attract; repel.\n- **Q**: You have two iron bars that look identical; one is a magnet and one is not. Without any other material, how can you tell which is the magnet?\n  - **A**: Bring the ends together in different combinations. They will sometimes **attract** in every combination if one is just iron, but if you ever observe **repulsion**, both bars are magnets. Since only a magnet repels another magnet, the bar that shows repulsion is the magnet; the test relies on the fact that magnetic (non-magnet) iron can only be attracted, never repelled.",
+       "page": 7
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 5,
+   "name": "Measurement of Length and Motion",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "5.1 How do we Measure? & 5.2 Standard Units",
+     "name": "Measurement & Standard SI Units of Length",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Measurement of Length and Motion: Measurement & Standard SI Units of Length.\nSection: 5.1 How do we Measure? & 5.2 Standard Units.\nKey terms: measurement, unit, standard unit, SI unit, metre, centimetre, kilometre.\n\n#### Core Concepts & Theories\n- **Measurement** means comparing an unknown quantity with a known fixed quantity of the same kind, called a **unit**. A measurement has two parts: a **number** and a **unit** (e.g., 25 cm).\n- **Why standard units?** Body parts like a handspan, cubit, or foot differ from person to person, so they give different results. To make measurements the same everywhere, the world agreed on **standard units** — the **International System of Units (SI)**.\n- The **SI unit of length is the metre (m)**. Related units:\n  - $1\\ \\text{kilometre (km)} = 1000\\ \\text{m}$\n  - $1\\ \\text{metre (m)} = 100\\ \\text{cm}$\n  - $1\\ \\text{centimetre (cm)} = 10\\ \\text{mm}$\n- Choose a sensible unit for the size of the object: **kilometres** for road distances, **metres** for a room, **centimetres** for a notebook, **millimetres** for the thickness of a coin.\n\n#### Formulas & Equations\n- Unit conversions for length: $$1\\ \\text{km} = 1000\\ \\text{m}, \\qquad 1\\ \\text{m} = 100\\ \\text{cm}, \\qquad 1\\ \\text{cm} = 10\\ \\text{mm}$$\n- Therefore $1\\ \\text{m} = 1000\\ \\text{mm}$ and $1\\ \\text{km} = 100000\\ \\text{cm}$.\n\n#### Illustrative Examples & Visual Descriptions\n- The chapter shows different children measuring the same desk with their handspans and getting different counts, demonstrating why non-standard units are unreliable and why the standard metre is needed.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Convert 3.5 metres into centimetres and into millimetres.\n  - **A**: Since $1\\ \\text{m} = 100\\ \\text{cm}$, $3.5\\ \\text{m} = 3.5 \\times 100 = 350\\ \\text{cm}$. Since $1\\ \\text{cm} = 10\\ \\text{mm}$, $350\\ \\text{cm} = 3500\\ \\text{mm}$.\n- **Q**: Why can't we use a handspan as a standard unit of length?\n  - **A**: A handspan is different for different people, so the same object measured by different people gives different values. A standard unit such as the metre is fixed and the same everywhere, so everyone gets the same measurement.",
+       "page": 8
+      }
+     ]
+    },
+    {
+     "section": "5.3 Correct Way of Measuring Length & 5.4 Measuring a Curved Line",
+     "name": "Correct Measurement of Length & Curved Lines",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Measurement of Length and Motion: Correct Measurement of Length & Curved Lines.\nSection: 5.3 Correct Way of Measuring Length & 5.4 Measuring a Curved Line.\nKey terms: scale, broken ends, eye position, parallax, thread method, curved line.\n\n#### Core Concepts & Theories\n- **Correct way to measure length with a scale**:\n  1. Place the scale **along** the object and in **contact** with it.\n  2. If the zero (0) end of the scale is broken or worn, start from another full mark (e.g., 1 cm) and **subtract** the starting reading from the end reading.\n  3. Keep the **eye directly above (in line with)** the point being read to avoid an error from looking at an angle (parallax error).\n- **Measuring a curved line** (it cannot be measured directly with a straight scale):\n  1. Lay a **thread** carefully along the curved line, marking the start and end.\n  2. Stretch the thread straight along a scale and read its length.\n  - A flexible **measuring tape** can also be used for curved or rounded objects.\n\n#### Illustrative Examples & Visual Descriptions\n- A figure shows three eye positions reading the same scale mark: positions tilted left or right give a wrong reading, while the eye placed straight above the mark gives the correct value — illustrating parallax error.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: The 0 mark of a ruler is broken. A pencil starts at the 2 cm mark and ends at the 17 cm mark. What is its length?\n  - **A**: Subtract the starting reading from the end reading: $17\\ \\text{cm} - 2\\ \\text{cm} = 15\\ \\text{cm}$.\n- **Q**: How would you measure the length of a curved line drawn on paper?\n  - **A**: Place a thread along the curved line so it follows every bend, mark the start and end points on the thread, then straighten the thread against a scale and read off the length. A flexible measuring tape can be used the same way.",
+       "page": 9
+      }
+     ]
+    },
+    {
+     "section": "5.5 Describing Position, 5.6 Moving Things & 5.7 Types of Motion",
+     "name": "Position, Motion & Types of Motion",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Measurement of Length and Motion: Position, Motion & Types of Motion.\nSection: 5.5 Describing Position, 5.6 Moving Things & 5.7 Types of Motion.\nKey terms: position, reference point, motion, rest, rectilinear motion, circular motion, periodic motion.\n\n#### Core Concepts & Theories\n- **Position** is described relative to a **reference point** (a fixed point you measure from); without a reference point, position has no meaning.\n- **Motion**: an object is in **motion** if its position changes with time relative to a reference point; it is at **rest** if its position does not change.\n- **Types of motion**:\n  - **Rectilinear (linear) motion**: movement along a straight line (e.g., a car on a straight road, a marching soldier).\n  - **Circular motion**: movement along a circular path (e.g., the tip of a fan blade, a stone tied to a string and whirled).\n  - **Periodic (oscillatory) motion**: movement that repeats after a fixed interval of time (e.g., a swinging pendulum, a child on a swing, the to-and-fro motion of a sewing-machine needle).\n- An object can show **more than one type** of motion at once — for example, a moving bicycle moves forward (rectilinear) while its wheels turn (circular).\n\n#### Illustrative Examples & Visual Descriptions\n- The chapter pairs each motion type with a picture: a sprinter on a straight track (rectilinear), the hands of a clock (circular), and a pendulum swinging left–right (periodic), helping students sort everyday motions.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: What type of motion does a swing show, and what type does a ceiling fan's blade show?\n  - **A**: A swing shows **periodic (oscillatory) motion** because it moves to and fro, repeating after a fixed time. A ceiling fan's blade shows **circular motion** because each point on it moves along a circular path.\n- **Q**: Why do we need a reference point to describe the position of an object?\n  - **A**: Position only has meaning relative to something fixed. The reference point is that fixed point from which we measure; the same object can be \"near\" one reference point and \"far\" from another, so the reference point must be stated.",
+       "page": 10
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 6,
+   "name": "Materials Around Us",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "6.2 Grouping Materials, 6.3 Properties of Materials & 6.4 What is Matter?",
+     "name": "Materials Around Us — Grouping, Properties & Matter",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Materials Around Us: Materials Around Us — Grouping, Properties & Matter.\nSection: 6.2 Grouping Materials, 6.3 Properties of Materials & 6.4 What is Matter?.\nKey terms: material, transparent, translucent, opaque, lustrous, soluble, insoluble, matter, solid, liquid, gas.\n\n#### Core Concepts & Theories\n- **Materials** are the substances from which objects are made; one object can be made of several materials, and one material can make many objects.\n- **Grouping materials** is done by their **properties**:\n  - **Appearance / lustre**: **lustrous** (shiny, like metals) vs **non-lustrous** (dull).\n  - **Hardness**: **hard** (e.g., iron, stone) vs **soft** (e.g., cotton, sponge).\n  - **Transparency to light**: **transparent** (clear, see through fully — glass, water), **translucent** (partly see through — butter paper, frosted glass), **opaque** (cannot see through — wood, metal).\n  - **Solubility in water**: **soluble** (dissolves — salt, sugar) vs **insoluble** (does not dissolve — sand, chalk powder).\n  - **Floating/sinking** and whether the material is attracted to a magnet.\n- **Matter**: anything that has **mass** and occupies **space (volume)**. All materials are made of matter, which exists mainly in three **states — solid, liquid, and gas**.\n\n#### Illustrative Examples & Visual Descriptions\n- A grouping activity table sorts objects by transparency: a clear glass tumbler under \"transparent\", butter paper under \"translucent\", and a wooden block under \"opaque\", with the test being whether an object behind the material is fully, partly, or not at all visible.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Classify as transparent, translucent, or opaque: window glass, butter paper, a wooden door.\n  - **A**: Window glass is **transparent** (you can see clearly through it), butter paper is **translucent** (light passes but you cannot see clearly), and a wooden door is **opaque** (no light passes and you cannot see through).\n- **Q**: What is matter? Name its three common states.\n  - **A**: Matter is anything that has mass and occupies space. Its three common states are **solid, liquid, and gas**.",
+       "page": 11
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 7,
+   "name": "Temperature and its Measurement",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "7.1 Hot or Cold?, 7.2 Temperature & 7.3 Measuring Temperature",
+     "name": "Temperature and its Measurement",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Temperature and its Measurement: Temperature and its Measurement.\nSection: 7.1 Hot or Cold?, 7.2 Temperature & 7.3 Measuring Temperature.\nKey terms: temperature, thermometer, degree Celsius, clinical thermometer, normal body temperature.\n\n#### Core Concepts & Theories\n- **Temperature** is a measure of the **degree of hotness or coldness** of a body. Our sense of touch is unreliable for judging temperature, so we measure it with a **thermometer**.\n- **Thermometer**: a device that measures temperature. A common **laboratory/clinical thermometer** has a thin glass tube with a silvery liquid that rises as temperature increases, read against a scale.\n- The common unit of temperature is the **degree Celsius (°C)**.\n  - Water freezes (ice melts) at $0\\,^\\circ\\text{C}$ and boils at $100\\,^\\circ\\text{C}$ at normal conditions.\n  - The **normal temperature of a healthy human body is about $37\\,^\\circ\\text{C}$** (98.6 °F). A clinical thermometer typically reads from about 35 °C to 42 °C.\n- **Digital thermometers** are now preferred because older thermometers used **mercury**, which is toxic if the glass breaks.\n\n#### Formulas & Equations\n- Key reference temperatures on the Celsius scale: $$\\text{Ice melts at } 0\\,^\\circ\\text{C}, \\qquad \\text{Water boils at } 100\\,^\\circ\\text{C}, \\qquad \\text{Normal body temperature} \\approx 37\\,^\\circ\\text{C}$$\n\n#### Illustrative Examples & Visual Descriptions\n- The \"two-bowl\" activity: a hand kept in warm water and another in cold water, then both dipped in the same lukewarm water — the two hands sense different warmth, showing touch cannot reliably judge temperature and a thermometer is needed.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Why can't we rely on our sense of touch to measure temperature accurately?\n  - **A**: Our skin senses relative warmth, not the true temperature. The same lukewarm water can feel cold to a hand that was in warm water and warm to a hand that was in cold water, so touch gives different judgements; a thermometer gives an accurate, fixed reading.\n- **Q**: What is the normal temperature of a healthy human body in degrees Celsius?\n  - **A**: About $37\\,^\\circ\\text{C}$ (equal to 98.6 °F).",
+       "page": 12
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 8,
+   "name": "A Journey through States of Water",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "8.3 States of Water & 8.4 How can we Change the States of Water?",
+     "name": "States of Water & Changes of State",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — A Journey through States of Water: States of Water & Changes of State.\nSection: 8.3 States of Water & 8.4 How can we Change the States of Water?.\nKey terms: solid, liquid, gas, ice, water vapour, melting, freezing, boiling, condensation.\n\n#### Core Concepts & Theories\n- Water exists in **three states**: **solid (ice), liquid (water), and gas (water vapour/steam)**. It is the same substance in different forms.\n- **Changes of state** are caused by adding or removing heat:\n  - **Melting**: solid → liquid (ice → water) on **heating** (around $0\\,^\\circ\\text{C}$).\n  - **Freezing**: liquid → solid (water → ice) on **cooling** (around $0\\,^\\circ\\text{C}$).\n  - **Boiling / vaporisation**: liquid → gas (water → vapour) on strong **heating** (water boils at $100\\,^\\circ\\text{C}$).\n  - **Condensation**: gas → liquid (water vapour → water) on **cooling**.\n- These changes are **reversible** — water can move between the three states again and again as heat is added or removed.\n\n#### Formulas & Equations\n- Reference points used in the chapter: $$\\text{Melting/Freezing of water} \\approx 0\\,^\\circ\\text{C}, \\qquad \\text{Boiling of water} = 100\\,^\\circ\\text{C}$$\n\n#### Illustrative Examples & Visual Descriptions\n- A cycle diagram shows ice (solid) on the left, water (liquid) in the middle, and vapour (gas) on the right, with arrows labelled \"melting/boiling\" pointing right (heat added) and \"condensing/freezing\" pointing left (heat removed).\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Name the change of state when (a) ice turns into water and (b) water vapour turns into water.\n  - **A**: (a) Ice turning into water is **melting** (solid to liquid, caused by heating). (b) Water vapour turning into water is **condensation** (gas to liquid, caused by cooling).\n- **Q**: Are the changes between ice, water, and vapour reversible? Explain.\n  - **A**: Yes. They are reversible because water can change from one state to another and back simply by adding or removing heat — for example, water freezes to ice on cooling and the ice melts back to water on heating.",
+       "page": 13
+      }
+     ]
+    },
+    {
+     "section": "8.5 Faster Evaporation, 8.6 Cooling Effect & 8.7 How Clouds give Rain",
+     "name": "Evaporation, Condensation & the Water Cycle",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — A Journey through States of Water: Evaporation, Condensation & the Water Cycle.\nSection: 8.5 Faster Evaporation, 8.6 Cooling Effect & 8.7 How Clouds give Rain.\nKey terms: evaporation, condensation, water cycle, humidity, clouds, rain, cooling effect.\n\n#### Core Concepts & Theories\n- **Evaporation**: the slow change of a liquid into vapour from its **surface at any temperature** (it does not need boiling). Drying of wet clothes is evaporation.\n- **Factors that speed up evaporation**: higher **temperature**, larger **surface area**, faster **wind/air movement**, and lower **humidity** (less water vapour already in the air).\n- **Cooling effect of evaporation**: when a liquid evaporates it takes heat from its surroundings, cooling them. This is why sweating cools our body and why water stays cool in an earthen pot (matka).\n- **Condensation**: water vapour in air turns back to tiny water droplets on **cooling** (e.g., dew on grass, water drops on a cold glass).\n- **The water cycle**: the Sun heats water in oceans, rivers, and lakes → **evaporation** forms water vapour → the vapour rises, cools, and **condenses** into tiny droplets forming **clouds** → droplets join and fall as **rain, snow, or hail (precipitation)** → water flows back to rivers, lakes, and oceans, and the cycle repeats.\n\n#### Illustrative Examples & Visual Descriptions\n- A water-cycle diagram shows the Sun over an ocean, upward arrows of evaporation, a cloud where condensation occurs, rain falling onto mountains and land, and rivers carrying water back to the sea — a continuous loop.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Wet clothes dry faster on a hot, windy day than on a cold, still day. Why?\n  - **A**: Drying is evaporation. Higher temperature and faster moving air both speed up evaporation, so on a hot, windy day the water turns to vapour and leaves the clothes much faster than on a cold, still day.\n- **Q**: How do clouds form and give us rain?\n  - **A**: The Sun evaporates water into vapour that rises and cools high in the sky. The vapour condenses into countless tiny water droplets that gather as clouds. When these droplets combine into larger, heavier drops, they fall to the ground as rain.",
+       "page": 14
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 9,
+   "name": "Methods of Separation in Everyday Life",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "9.1 Handpicking, Threshing, Winnowing & Sieving",
+     "name": "Separating Solid–Solid Mixtures",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Methods of Separation in Everyday Life: Separating Solid–Solid Mixtures.\nSection: 9.1 Handpicking, Threshing, Winnowing & Sieving.\nKey terms: handpicking, threshing, winnowing, sieving, mixture, separation.\n\n#### Core Concepts & Theories\n- We separate the useful component of a mixture from the unwanted ones to get pure substances. The method is chosen based on the **difference in properties** (size, weight, etc.) of the components.\n- **Handpicking**: removing slightly larger impurities (small stones, husk, insects) from grains by hand — used when impurities are few and large enough to pick.\n- **Threshing**: separating grain seeds from their stalks/chaff by beating the harvested crop; done by farmers or machines.\n- **Winnowing**: separating **heavier grains from lighter husk** by letting the mixture fall in a stream of **wind/air**; the lighter husk is carried away while the heavier grain falls straight down. It uses the **weight difference** between the components.\n- **Sieving**: separating components of **different sizes** by passing the mixture through a **sieve**; finer particles pass through the holes while larger ones stay on top (e.g., separating flour from bran, sand from pebbles).\n\n#### Illustrative Examples & Visual Descriptions\n- A winnowing figure shows a farmer pouring grain from a height in a breeze: the light chaff drifts sideways into a separate pile while the heavy grain falls vertically into a heap below.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Which method separates heavier grains from lighter husk, and what property does it use?\n  - **A**: **Winnowing** separates heavier grains from lighter husk. It uses the difference in **weight** of the two components — moving air carries the lighter husk away while the heavier grain falls straight down.\n- **Q**: You have a mixture of flour and small pieces of bran of different sizes. Which separation method is most suitable?\n  - **A**: **Sieving**, because the components are of different sizes. The fine flour passes through the holes of the sieve while the larger bran pieces remain on top.",
+       "page": 15
+      }
+     ]
+    },
+    {
+     "section": "9.2 Sedimentation, Decantation, Filtration & Evaporation",
+     "name": "Separating Solid–Liquid Mixtures & Solutions",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Methods of Separation in Everyday Life: Separating Solid–Liquid Mixtures & Solutions.\nSection: 9.2 Sedimentation, Decantation, Filtration & Evaporation.\nKey terms: sedimentation, decantation, filtration, evaporation, soluble, insoluble, saturated solution.\n\n#### Core Concepts & Theories\n- **Sedimentation**: letting a mixture of an **insoluble heavier solid in a liquid** stand undisturbed so the heavier solid settles at the bottom; the settled solid is called **sediment** (e.g., mud settling in water).\n- **Decantation**: gently **pouring off the clear upper liquid** after sedimentation, leaving the sediment behind.\n- **Filtration**: passing a mixture through a **filter** (filter paper, cloth) so the liquid passes through while the **insoluble solid is retained** on the filter (e.g., separating tea leaves, filtering muddy water).\n- **Evaporation**: separating a **soluble solid dissolved in a liquid** by heating the liquid until it evaporates, leaving the solid behind (e.g., obtaining salt from seawater in salt pans).\n- A **solution** forms when a soluble solid (solute) dissolves in a liquid (solvent). A **saturated solution** is one in which no more solute can dissolve at that temperature; heating the liquid usually lets it dissolve more.\n\n#### Illustrative Examples & Visual Descriptions\n- A sequence diagram shows muddy water in a glass: first left to stand (sediment settles), then the clear water is poured off (decantation), then passed through filter paper to remove the remaining fine particles (filtration), yielding clear water.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: How would you separate salt from seawater, and salt water from sand?\n  - **A**: To get salt from seawater, use **evaporation** — heat (or sun-dry) the water until it evaporates, leaving the salt behind. To separate sand from salt water, use **filtration** — the insoluble sand stays on the filter while the salt solution passes through.\n- **Q**: What is a saturated solution?\n  - **A**: A saturated solution is one in which no more of the solute can dissolve at a given temperature. If more solute is added it stays undissolved, unless the solution is heated, which usually allows more to dissolve.",
+       "page": 16
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 10,
+   "name": "Living Creatures: Exploring their Characteristics",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "10.1 Living vs Non-living & 10.2 Conditions for Germination",
+     "name": "Characteristics of Living Things & Germination",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Living Creatures: Exploring their Characteristics: Characteristics of Living Things & Germination.\nSection: 10.1 Living vs Non-living & 10.2 Conditions for Germination.\nKey terms: growth, respiration, reproduction, excretion, stimulus, germination, seed.\n\n#### Core Concepts & Theories\n- **Characteristics of living things** (which non-living things do not all show):\n  - **Growth**: living things grow and increase in size.\n  - **Need for food and nutrition**: to get energy and materials.\n  - **Respiration**: taking in oxygen and releasing carbon dioxide to get energy from food.\n  - **Response to stimuli**: reacting to changes (touch, light, sound) in their surroundings.\n  - **Excretion**: removing waste produced in the body.\n  - **Reproduction**: producing young ones of their own kind.\n  - **Movement** and a definite **life span** (they are born, live, and die).\n- **Germination**: the process by which a **seed grows into a new young plant (seedling)**.\n- **Conditions essential for germination**: **water (moisture), air (oxygen), and a suitable (warm) temperature**. Sunlight is needed for later growth but not strictly for the first sprouting.\n\n#### Illustrative Examples & Visual Descriptions\n- A seed-germination activity uses several jars: a seed with water and air sprouts; a seed kept fully under water (no air) or with no water does not sprout — showing that both moisture and air are required.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: List any four characteristics common to all living things.\n  - **A**: Any four of: they **grow**, **need food/nutrition**, **respire**, **respond to stimuli**, **excrete** wastes, **reproduce**, and **move**, with a definite life span.\n- **Q**: Which conditions are essential for a seed to germinate?\n  - **A**: A seed needs **water (moisture)**, **air (oxygen)**, and a **suitable warm temperature** to germinate. Without water or air, the seed will not sprout.",
+       "page": 17
+      }
+     ]
+    },
+    {
+     "section": "10.3 Growth and Movement in Plants, 10.4 Life Cycle of a Plant & 10.5 Life Cycle of Animals",
+     "name": "Growth, Movement & Life Cycles",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Living Creatures: Exploring their Characteristics: Growth, Movement & Life Cycles.\nSection: 10.3 Growth and Movement in Plants, 10.4 Life Cycle of a Plant & 10.5 Life Cycle of Animals.\nKey terms: stimulus, response, life cycle, seed, seedling, metamorphosis, larva, pupa.\n\n#### Core Concepts & Theories\n- **Plants respond and move** even though they stay rooted: shoots grow **towards light**, and roots grow **downwards towards water and gravity**. The \"touch-me-not\" (Mimosa) plant folds its leaves when touched — a quick response to a stimulus.\n- **Life cycle of a plant**: **seed → germination → seedling → adult plant (with flowers) → seeds again**. The flowering plant produces seeds, which can grow into new plants, continuing the cycle.\n- **Life cycle of animals**: animals are born, grow into adults, reproduce, and die.\n  - Some young ones resemble adults (e.g., a kitten looks like a cat).\n  - Others change form dramatically through **metamorphosis**: a **butterfly** goes **egg → larva (caterpillar) → pupa → adult butterfly**; a **frog** goes **egg → tadpole → adult frog**.\n\n#### Illustrative Examples & Visual Descriptions\n- A circular life-cycle diagram of a butterfly shows four stages around a loop — egg on a leaf, a crawling caterpillar (larva), a hanging pupa (chrysalis), and the winged adult — with arrows returning from adult to egg.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Put the butterfly's life-cycle stages in order: pupa, egg, adult, larva.\n  - **A**: The correct order is **egg → larva (caterpillar) → pupa → adult butterfly**, after which the adult lays eggs and the cycle repeats. This change of form is called metamorphosis.\n- **Q**: Give one example showing that plants respond to stimuli.\n  - **A**: The leaves of the \"touch-me-not\" (Mimosa pudica) plant fold up immediately when touched, and plant shoots bend and grow towards light — both show plants respond to stimuli.",
+       "page": 18
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 11,
+   "name": "Nature's Treasures",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "11.1 Air, 11.2 Water & 11.3 Energy from the Sun",
+     "name": "Nature's Treasures — Air, Water & Energy from the Sun",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Nature's Treasures: Nature's Treasures — Air, Water & Energy from the Sun.\nSection: 11.1 Air, 11.2 Water & 11.3 Energy from the Sun.\nKey terms: natural resources, air, atmosphere, water, solar energy, conservation.\n\n#### Core Concepts & Theories\n- **Natural resources** are materials and forms of energy obtained from nature that living things use — air, water, sunlight, soil, minerals, forests, and fuels.\n- **Air**: a mixture of gases (mainly **nitrogen** and **oxygen**, with small amounts of carbon dioxide, water vapour, and others) forming the **atmosphere**. Living things need oxygen to breathe; plants use carbon dioxide. Air is essential and should be kept clean.\n- **Water**: covers most of Earth's surface, but only a small part is **fresh water** usable for drinking and farming. Water must be **conserved** (saved) because clean fresh water is limited — methods include rainwater harvesting and avoiding wastage.\n- **Energy from the Sun**: the Sun is the **primary source of energy** for almost all life. Plants use sunlight to make food (photosynthesis); sunlight drives the water cycle and winds; it can be captured as **solar energy** to heat water and generate electricity.\n\n#### Illustrative Examples & Visual Descriptions\n- A pie-style description of air composition is shown: the largest share is nitrogen, the next is oxygen, and a thin sliver is carbon dioxide and other gases — emphasising oxygen is only about a fifth of the air.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Name the two main gases present in air and state which one living things use to breathe.\n  - **A**: The two main gases are **nitrogen** (the largest part) and **oxygen**. Living things use **oxygen** to breathe (respiration).\n- **Q**: Why must we conserve water even though Earth has so much of it?\n  - **A**: Most of Earth's water is salty seawater; only a small fraction is fresh water fit for drinking and farming. Because this usable fresh water is limited and demand keeps rising, we must conserve it by saving and not polluting it.",
+       "page": 19
+      }
+     ]
+    },
+    {
+     "section": "11.4 Forests, 11.5 Soil & Minerals, 11.6 Fossil Fuels & 11.7 Renewable vs Non-renewable",
+     "name": "Forests, Soil, Minerals, Fuels & Types of Resources",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Nature's Treasures: Forests, Soil, Minerals, Fuels & Types of Resources.\nSection: 11.4 Forests, 11.5 Soil & Minerals, 11.6 Fossil Fuels & 11.7 Renewable vs Non-renewable.\nKey terms: forest, soil, minerals, fossil fuels, coal, petroleum, renewable resource, non-renewable resource.\n\n#### Core Concepts & Theories\n- **Forests** provide oxygen, wood, medicines, and homes for wildlife, and they hold soil together and bring rain. Cutting forests (deforestation) harms the environment.\n- **Soil**: the top layer of land in which plants grow; it forms very slowly from the breaking down of rocks and contains minerals, water, air, and humus (decayed matter).\n- **Minerals**: useful substances obtained by mining from rocks (e.g., iron, copper, gold, coal, salt). They take millions of years to form.\n- **Fossil fuels**: **coal, petroleum, and natural gas**, formed over millions of years from the buried remains of dead plants and animals. They are burnt for energy but cause pollution and will run out.\n- **Renewable vs non-renewable resources**:\n  - **Renewable resources** can be replaced/replenished in a short time or are not used up (e.g., sunlight, wind, water, forests if managed well).\n  - **Non-renewable resources** exist in limited amounts and take extremely long to form, so they can run out (e.g., coal, petroleum, natural gas, minerals). These must be used carefully and conserved.\n\n#### Illustrative Examples & Visual Descriptions\n- A two-column chart sorts resources: \"Renewable\" lists sunlight, wind, and water; \"Non-renewable\" lists coal, petroleum, natural gas, and minerals — the key difference being how quickly nature can replace them.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Classify as renewable or non-renewable: sunlight, coal, wind, petroleum.\n  - **A**: **Renewable**: sunlight and wind (they are not used up and are continuously available). **Non-renewable**: coal and petroleum (fossil fuels present in limited amounts that take millions of years to form).\n- **Q**: What are fossil fuels and why should we use them carefully?\n  - **A**: Fossil fuels — coal, petroleum, and natural gas — are formed over millions of years from the buried remains of dead organisms. They are non-renewable, so once used up they cannot be quickly replaced, and burning them pollutes the air; therefore we must use them sparingly and switch to renewable sources.",
+       "page": 20
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "number": 12,
+   "name": "Beyond Earth",
+   "file": "grade_6_science_curriculum_rag_seed.md",
+   "topics": [
+    {
+     "section": "12.1 Stars and Constellations & 12.2 Night Sky Watching",
+     "name": "Beyond Earth — Stars, Constellations & Night Sky",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Beyond Earth: Beyond Earth — Stars, Constellations & Night Sky.\nSection: 12.1 Stars and Constellations & 12.2 Night Sky Watching.\nKey terms: star, constellation, Ursa Major, Saptarshi, Orion, Pole Star, Dhruva Tara.\n\n#### Core Concepts & Theories\n- **Stars** are huge, hot, glowing balls of gas that give out their own light. They appear tiny because they are extremely far away. The **Sun is our nearest star**.\n- Stars seem to **twinkle**, and the whole night sky appears to move from east to west during the night because the **Earth rotates** on its axis.\n- **Constellation**: a group of stars that appears to form a recognisable pattern or shape in the sky. Examples:\n  - **Ursa Major (the Great Bear / Saptarshi / Big Dipper)** — a group of seven bright stars.\n  - **Orion (the Hunter)** — a prominent winter constellation.\n  - **Cassiopeia** — a W or M-shaped constellation.\n- **The Pole Star (Dhruva Tara)** appears almost **fixed** above the Earth's North Pole while other stars seem to move around it; it is used to find the **north direction**. It can be located using the pointer stars of Ursa Major.\n\n#### Illustrative Examples & Visual Descriptions\n- A star-map figure shows the seven stars of Ursa Major as a ladle/saucepan shape; a line drawn through its two end (pointer) stars extends to the Pole Star, demonstrating how to locate north at night.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: What is a constellation? Give two examples.\n  - **A**: A constellation is a group of stars that appears to form a recognisable pattern in the sky. Examples include **Ursa Major (Saptarshi / the Great Bear)** and **Orion (the Hunter)**.\n- **Q**: Why does the Pole Star appear stationary while other stars seem to move across the night sky?\n  - **A**: The Pole Star lies almost directly above the Earth's axis of rotation (over the North Pole). As the Earth rotates, other stars appear to circle around this point, but the Pole Star stays nearly fixed, which is why it is used to find the north direction.",
+       "page": 21
+      }
+     ]
+    },
+    {
+     "section": "12.3 Our Solar System, 12.4 The Milky Way & 12.5 The Universe",
+     "name": "The Solar System, Galaxy & Universe",
+     "chunks": [
+      {
+       "type": "explainer",
+       "body": "Class 6 Science — Beyond Earth: The Solar System, Galaxy & Universe.\nSection: 12.3 Our Solar System, 12.4 The Milky Way & 12.5 The Universe.\nKey terms: solar system, planet, orbit, Milky Way, galaxy, universe, satellite.\n\n#### Core Concepts & Theories\n- **The Solar System**: the **Sun** together with the objects bound to it by gravity — **eight planets**, their **moons (satellites)**, and smaller bodies like asteroids and comets. Planets do not have their own light; they shine by reflecting the Sun's light, and each moves around the Sun in a path called an **orbit**.\n- The **eight planets in order of distance from the Sun**: **Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune.** Mercury is nearest; Neptune is farthest. **Jupiter** is the largest planet; **Earth** is the only planet known to support life.\n- A **satellite** is an object that orbits a planet; the **Moon** is Earth's natural satellite.\n- **Galaxy**: an enormous collection of billions of stars, gas, and dust held together by gravity. Our Solar System lies in the **Milky Way galaxy** (called *Akash Ganga*).\n- **Universe**: everything that exists — all galaxies, stars, planets, and space — and it is unimaginably vast.\n\n#### Illustrative Examples & Visual Descriptions\n- A solar-system diagram shows the Sun at the centre with eight planets on increasingly large elliptical orbits, the small rocky inner planets (Mercury, Venus, Earth, Mars) close in and the large gas planets (Jupiter, Saturn with rings, Uranus, Neptune) farther out.\n\n#### Curricular Q&A (From Exercises & Solutions)\n- **Q**: Name the eight planets of the Solar System in order from the Sun.\n  - **A**: In order of increasing distance from the Sun: **Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune.**\n- **Q**: What is the difference between a star and a planet?\n  - **A**: A **star** (like the Sun) is a hot ball of gas that produces and gives out its **own light**. A **planet** does **not** produce its own light; it is seen because it **reflects** sunlight, and it moves around the Sun in an orbit.",
+       "page": 22
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

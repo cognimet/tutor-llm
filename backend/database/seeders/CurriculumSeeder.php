@@ -97,6 +97,34 @@ class CurriculumSeeder extends Seeder
                     [
                         'track' => ['CBSE', 'cbse', '📘', 'indigo', 'Central Board of Secondary Education'],
                         'levels' => [
+                            ['Class 6', null, 6, [
+                                $sub('Mathematics', '📐', 'indigo', 'Ganita Prakash — patterns, numbers, geometry & more', [
+                                    ['Patterns in Mathematics', []],
+                                    ['Lines and Angles', []],
+                                    ['Number Play', []],
+                                    ['Data Handling and Presentation', []],
+                                    ['Prime Time', []],
+                                    ['Perimeter and Area', []],
+                                    ['Fractions', []],
+                                    ['Playing with Constructions', []],
+                                    ['Symmetry', []],
+                                    ['The Other Side of Zero', []],
+                                ]),
+                                $sub('Science', '🔬', 'emerald', 'Curiosity — living world, materials, motion, magnets & the sky', [
+                                    ['The Wonderful World of Science', []],
+                                    ['Diversity in the Living World', []],
+                                    ['Mindful Eating: A Path to a Healthy Body', []],
+                                    ['Exploring Magnets', []],
+                                    ['Measurement of Length and Motion', []],
+                                    ['Materials Around Us', []],
+                                    ['Temperature and its Measurement', []],
+                                    ['A Journey through States of Water', []],
+                                    ['Methods of Separation in Everyday Life', []],
+                                    ['Living Creatures: Exploring their Characteristics', []],
+                                    ["Nature's Treasures", []],
+                                    ['Beyond Earth', []],
+                                ]),
+                            ]],
                             ['Class 8', null, 8, [
                                 $lite('Mathematics', '📐', 'indigo', 'Rational numbers, mensuration & algebra', [
                                     ['Rational Numbers', ['Properties', 'Operations', 'On the Number Line']],
