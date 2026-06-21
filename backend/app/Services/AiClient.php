@@ -45,23 +45,29 @@ class AiClient
      * @param ?string $topic  when set, the AI service injects RAG curriculum
      *                        context for that topic before generating.
      */
-    public function text(string $system, string $user, ?string $topic = null, ?string $action = null, ?int $studentId = null, ?int $subjectId = null): string
+    /**
+     * @param ?array $usage  out-param: receives THIS call's token usage. Prefer
+     *                       it over the shared {@see $lastUsage} property, which
+     *                       is unsafe under concurrent (async) request handling.
+     */
+    public function text(string $system, string $user, ?string $topic = null, ?string $action = null, ?int $studentId = null, ?int $subjectId = null, ?array &$usage = null): string
     {
         $data = $this->post('/ai/text', array_filter([
             'system' => $system, 'user' => $user, 'topic' => $topic, 'action' => $action,
             'student_id' => $studentId, 'subject_id' => $subjectId,
         ], fn ($v) => $v !== null));
-        $this->captureUsage($data);
+        $this->captureUsage($data, $usage);
         return (string) ($data['text'] ?? '');
     }
 
-    public function json(string $system, string $user, array $fallback = [], ?string $topic = null, ?string $action = null, ?int $studentId = null, ?int $subjectId = null): array
+    /** @param ?array $usage  out-param: this call's token usage (see text()). */
+    public function json(string $system, string $user, array $fallback = [], ?string $topic = null, ?string $action = null, ?int $studentId = null, ?int $subjectId = null, ?array &$usage = null): array
     {
         $data = $this->post('/ai/json', array_filter([
             'system' => $system, 'user' => $user, 'fallback' => $fallback, 'topic' => $topic, 'action' => $action,
             'student_id' => $studentId, 'subject_id' => $subjectId,
         ], fn ($v) => $v !== null));
-        $this->captureUsage($data);
+        $this->captureUsage($data, $usage);
         $out = $data['data'] ?? $fallback;
         return is_array($out) ? $out : $fallback;
     }
@@ -81,7 +87,8 @@ class AiClient
      * Stream tutor text. Reads the AI service's SSE stream and invokes $onDelta
      * per chunk. Returns the full accumulated text ('' if nothing streamed).
      */
-    public function stream(string $system, string $user, callable $onDelta, ?string $topic = null, ?int $studentId = null, ?int $subjectId = null): string
+    /** @param ?array $usage  out-param: this call's token usage (see text()). */
+    public function stream(string $system, string $user, callable $onDelta, ?string $topic = null, ?int $studentId = null, ?int $subjectId = null, ?array &$usage = null): string
     {
         $full = '';
         try {
@@ -118,6 +125,7 @@ class AiClient
                     }
                     if (! empty($payload['done']) && isset($payload['usage'])) {
                         $this->lastUsage = $payload['usage'] ?? [];
+                        $usage = $this->lastUsage;
                     }
                 }
             }
@@ -346,10 +354,16 @@ class AiClient
         return $this->key ? ['Authorization' => "Bearer {$this->key}"] : [];
     }
 
-    protected function captureUsage(array $data): void
+    /**
+     * Record a call's token usage. Sets the shared {@see $lastUsage} (kept for
+     * existing callers) and, when given, the per-call $usage out-param — which
+     * is race-free because it lives on the caller's stack frame.
+     */
+    protected function captureUsage(array $data, ?array &$usage = null): void
     {
         if (isset($data['usage']) && is_array($data['usage'])) {
             $this->lastUsage = $data['usage'];
+            $usage = $data['usage'];
         }
     }
 }

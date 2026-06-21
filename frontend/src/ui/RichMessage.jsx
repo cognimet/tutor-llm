@@ -41,10 +41,36 @@ function looksLikeVizSpec(content) {
   }
 }
 
+// A lone marker line the model sometimes leaves above a bare spec (e.g. `viz`).
+const LONE_MARKER = /^[ \t]*`?(?:viz|chart|plot|graph)`?[ \t]*$/i;
+
+// Within a stretch of Markdown, also rescue visualization specs the model emitted
+// WITHOUT a proper code fence — e.g. an inline `viz` marker followed by a bare
+// minified JSON object on its own line. Returns interleaved md/viz segments.
+function rescueBareViz(md) {
+  if (!md || md.indexOf("{") === -1) return md ? [{ kind: "md", text: md }] : [];
+  const lines = md.split(/\r?\n/);
+  const out = [];
+  let buf = [];
+  const flushMd = () => { if (buf.length) { out.push({ kind: "md", text: buf.join("\n") }); buf = []; } };
+  for (const line of lines) {
+    const t = line.trim();
+    if (t.length > 1 && (t[0] === "{" || t[0] === "[") && looksLikeVizSpec(t)) {
+      while (buf.length && LONE_MARKER.test(buf[buf.length - 1])) buf.pop(); // drop a `viz` marker above it
+      flushMd();
+      out.push({ kind: "viz", code: t });
+    } else {
+      buf.push(line);
+    }
+  }
+  flushMd();
+  return out;
+}
+
 function splitSegments(text) {
   const src = String(text || "");
-  const segs = [];
-  let last = 0;
+  // 1) Find fenced viz blocks (explicit viz langs, or json/untagged with viz content).
+  const fenced = [];
   let m;
   ANY_FENCE.lastIndex = 0;
   while ((m = ANY_FENCE.exec(src))) {
@@ -52,20 +78,25 @@ function splitSegments(text) {
     const content = m[3];
     const isViz = VIZ_LANGS.has(lang)
       || ((lang === "" || lang === "json" || lang === "json5") && looksLikeVizSpec(content));
-    if (!isViz) continue; // leave ordinary code fences inside the Markdown flow
-    if (m.index > last) segs.push({ kind: "md", text: src.slice(last, m.index) });
-    segs.push({ kind: "viz", code: content.trim() });
-    last = m.index + m[0].length;
+    if (isViz) fenced.push({ start: m.index, end: m.index + m[0].length, code: content.trim() });
   }
-  const tail = src.slice(last);
+  // 2) Walk the source, emitting fenced viz blocks and — in the gaps — rescuing
+  //    any bare/inline viz specs the model didn't fence.
+  const segs = [];
+  let cursor = 0;
+  for (const f of fenced) {
+    if (f.start > cursor) segs.push(...rescueBareViz(src.slice(cursor, f.start)));
+    segs.push({ kind: "viz", code: f.code });
+    cursor = f.end;
+  }
+  const tail = src.slice(cursor);
   const openAt = tail.search(OPEN_VIZ);
   if (openAt >= 0) {
-    // An unterminated viz fence — still streaming in. Show prose before it,
-    // then a placeholder until the closing ``` arrives.
-    if (openAt > 0) segs.push({ kind: "md", text: tail.slice(0, openAt) });
+    // An unterminated viz fence still streaming in: prose before it, then a spinner.
+    if (openAt > 0) segs.push(...rescueBareViz(tail.slice(0, openAt)));
     segs.push({ kind: "viz-pending" });
   } else if (tail) {
-    segs.push({ kind: "md", text: tail });
+    segs.push(...rescueBareViz(tail));
   }
   return segs;
 }
