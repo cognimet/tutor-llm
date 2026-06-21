@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { Backdrop, AppHeader, Card, Spinner } from "../../ui/components.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { adminApi } from "../../api/endpoints.js";
@@ -9,9 +10,20 @@ import UserDrawer from "./UserDrawer.jsx";
 import CreditsPanel from "./CreditsPanel.jsx";
 import GapAnalytics from "./GapAnalytics.jsx";
 
+// Tab label -> URL path. The active tab is now driven by the URL so a reload
+// stays on the same admin section.
+const ADMIN_TABS = [
+  ["overview", "/"],
+  ["users", "/users"],
+  ["curriculum", "/curriculum"],
+  ["credits", "/credits"],
+  ["gaps", "/gaps"],
+];
+
 export default function AdminPanel() {
   const { user, logout } = useAuth();
-  const [tab, setTab] = useState("overview");
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -22,18 +34,23 @@ export default function AdminPanel() {
       <Backdrop />
       <AppHeader user={user} onLogout={logout} right={
         <div className="hidden gap-1 rounded-2xl bg-white/70 dark:bg-slate-800/60 p-1 ring-1 ring-slate-200 dark:ring-white/10 sm:flex">
-          {["overview", "users", "curriculum", "credits", "gaps"].map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={`rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize ${tab === t ? "bg-indigo-500 text-white" : "text-slate-500 dark:text-slate-400"}`}>{t}</button>
-          ))}
+          {ADMIN_TABS.map(([label, path]) => {
+            const active = path === "/" ? pathname === "/" : pathname.startsWith(path);
+            return (
+              <button key={path} onClick={() => navigate(path)} className={`rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize ${active ? "bg-indigo-500 text-white" : "text-slate-500 dark:text-slate-400"}`}>{label}</button>
+            );
+          })}
         </div>
       } />
       <div className="mx-auto max-w-6xl px-5 py-8">
-        {tab === "overview"
-          ? (loading ? <Spinner label="Loading admin console…" /> : <Overview data={data} />)
-          : tab === "users" ? <UsersTab />
-          : tab === "credits" ? <CreditsPanel />
-          : tab === "gaps" ? <GapAnalytics />
-          : <CurriculumManager />}
+        <Routes>
+          <Route index element={loading ? <Spinner label="Loading admin console…" /> : <Overview data={data} />} />
+          <Route path="users" element={<UsersTab />} />
+          <Route path="credits" element={<CreditsPanel />} />
+          <Route path="gaps" element={<GapAnalytics />} />
+          <Route path="curriculum" element={<CurriculumManager />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </div>
     </div>
   );
