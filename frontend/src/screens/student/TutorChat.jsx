@@ -1338,7 +1338,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
                             <p className="whitespace-pre-wrap">{m.content}</p>
                           </div>
                         ) : (
-                          <RichMessage text={m.content} streaming={m.pending} className="md-lg" onQuizSuccess={handleQuizSuccess} />
+                          <RichMessage text={m.content} streaming={m.pending} className="md-lg" persistScope={sessionId} onQuizSuccess={handleQuizSuccess} />
                         )}
                         {m.stopped && (
                           <p className="mt-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Stopped</p>

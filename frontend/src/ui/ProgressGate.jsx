@@ -2,32 +2,51 @@ import React, { useState, useMemo } from "react";
 import { CheckCircle2, XCircle, ChevronRight } from "lucide-react";
 import { confettiBurst } from "./confetti.js";
 
+// Value-grounded grading: the answer STRING wins over the numeric index, so a
+// wrong/off-by-one `correct` from the model can't mark a wrong option right.
+function resolveCorrectIndex(options, correctAnswer, correctText) {
+  const want = String(correctText || "").trim().toLowerCase();
+  if (want) {
+    const i = options.findIndex((o) => String(o).trim().toLowerCase() === want);
+    if (i >= 0) return i;
+  }
+  return correctAnswer;
+}
+
+// Per-chat "this gate was already cleared" memory, so a checkpoint stays cleared
+// when the student leaves the chat and comes back (instead of resetting).
+function readCleared(key) {
+  if (!key) return false;
+  try { return localStorage.getItem(key) === "1"; } catch { return false; }
+}
+function writeCleared(key) {
+  if (!key) return;
+  try { localStorage.setItem(key, "1"); } catch { /* storage unavailable */ }
+}
+
 /**
  * On-the-go interactive checkpoint (Visual Learning spec §3). The tutor emits a
- * [QUIZ: id correct=N]…[OPTIONS]…[EXPLANATION]…[/QUIZ] block, parsed by
+ * [QUIZ: id correct=N ans="…"]…[OPTIONS]…[EXPLANATION]…[/QUIZ] block, parsed by
  * RichMessage and rendered here. The student must pick the correct option to
  * "clear" the gate — a wrong pick shakes with a Socratic hint (and keeps the
  * gate open), a correct pick fires confetti and unlocks the next part of the
- * lesson via onCorrectUnlock.
+ * lesson via onCorrectUnlock. When `persistKey` is given, a cleared gate is
+ * remembered so revisiting the chat keeps it cleared.
  */
-export default function ProgressGate({ question, options = [], correctAnswer = 0, correctText = "", explanation = "", onCorrectUnlock }) {
-  const [selectedIdx, setSelectedIdx] = useState(null);
-  const [cleared, setCleared] = useState(false);   // true once answered correctly
-  const [attempts, setAttempts] = useState(0);      // re-keys the hint box to replay the shake
-  const [unlocked, setUnlocked] = useState(false);  // guard: fire onCorrectUnlock once
+export default function ProgressGate({ question, options = [], correctAnswer = 0, correctText = "", explanation = "", onCorrectUnlock, persistKey }) {
+  const correctIdx = useMemo(
+    () => resolveCorrectIndex(options, correctAnswer, correctText),
+    [options, correctAnswer, correctText],
+  );
 
-  // Value-grounded grading: the answer STRING is the source of truth. Models
-  // sometimes emit a wrong/off-by-one `correct` index, which would mark a wrong
-  // option right. When ans="…" is present and matches an option, THAT option is
-  // authoritative; the numeric index is only a fallback when no string is given.
-  const correctIdx = useMemo(() => {
-    const want = correctText.trim().toLowerCase();
-    if (want) {
-      const i = options.findIndex((o) => String(o).trim().toLowerCase() === want);
-      if (i >= 0) return i;
-    }
-    return correctAnswer;
-  }, [correctText, options, correctAnswer]);
+  // Hydrate from the remembered state so a previously-cleared gate renders as
+  // cleared (correct option chosen) without replaying confetti or re-unlocking.
+  const initCleared = () => readCleared(persistKey);
+  const [cleared, setCleared] = useState(initCleared);
+  const [restored] = useState(initCleared);            // cleared from memory, not a live answer
+  const [selectedIdx, setSelectedIdx] = useState(() => (initCleared() ? correctIdx : null));
+  const [attempts, setAttempts] = useState(0);         // re-keys the hint box to replay the shake
+  const [unlocked, setUnlocked] = useState(initCleared); // guard: fire onCorrectUnlock once (never on restore)
 
   const handleSelect = (idx) => {
     if (cleared) return;                 // locked after a correct answer
@@ -35,6 +54,7 @@ export default function ProgressGate({ question, options = [], correctAnswer = 0
 
     if (idx === correctIdx) {
       setCleared(true);
+      writeCleared(persistKey);          // remember it so coming back keeps it cleared
       confettiBurst({ particleCount: 90, spread: 70, originY: 0.7 });
       if (!unlocked) {
         setUnlocked(true);
@@ -116,7 +136,7 @@ export default function ProgressGate({ question, options = [], correctAnswer = 0
           </p>
           {explanation && <p className="font-medium leading-relaxed">{explanation}</p>}
           {wasWrong && <p className="mt-1 font-bold opacity-80">Tap another answer to try again.</p>}
-          {cleared && (
+          {cleared && !restored && (
             <div className="mt-3 flex justify-end border-t border-emerald-200/50 pt-2">
               <span className="flex items-center gap-1 text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400">
                 Unlocking next card… <ChevronRight className="h-3 w-3 animate-bounce" />

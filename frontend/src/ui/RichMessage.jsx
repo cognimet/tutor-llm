@@ -183,6 +183,15 @@ export function sanitizeLessonStream(content) {
 // Loosely read a numeric attribute (streak=3 / xp=20) from a tag's attr string.
 const numAttr = (s, name) => { const m = new RegExp(name + "\\s*=\\s*(\\d+)").exec(s || ""); return m ? parseInt(m[1], 10) : undefined; };
 
+// Stable, compact hash of a gate's question+options (FNV-1a → base36) so its
+// "cleared" state can be remembered per chat (see ProgressGate.persistKey).
+function gateHash(question, options) {
+  const s = String(question) + "|" + (options || []).join("|");
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+}
+
 // Pull any [VISUAL_ANCHOR] tags out of a body string (so they never render as
 // raw text), collecting them into anchorsOut so they still drive the left pane.
 function stripAnchors(body, anchorsOut) {
@@ -338,7 +347,7 @@ function renderCardNode(card, key) {
   );
 }
 
-export default function RichMessage({ text, streaming = false, className = "", onAnchor, onQuizSuccess }) {
+export default function RichMessage({ text, streaming = false, className = "", onAnchor, onQuizSuccess, persistScope }) {
   // On a finished render, auto-close any unclosed block tags so a truncated
   // stream never leaves a stuck "Building your card…" placeholder.
   const safeText = useMemo(
@@ -377,6 +386,7 @@ export default function RichMessage({ text, streaming = false, className = "", o
         return (
           <ProgressGate key={i} question={b.question} options={b.options} correctAnswer={b.correct}
             correctText={b.correctText}
+            persistKey={persistScope ? `tuto:gate:${persistScope}:${gateHash(b.question, b.options)}` : undefined}
             explanation={b.explanation} onCorrectUnlock={() => onQuizSuccess?.({ id: b.id, question: b.question })} />
         );
       case "bento":
