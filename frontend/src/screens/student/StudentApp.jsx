@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { Backdrop, AppHeader, Spinner } from "../../ui/components.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { authApi, curriculumApi, progressApi } from "../../api/endpoints.js";
+import { usePersistedState } from "../../hooks/usePersistedState.js";
 import CreditMeter from "../../ui/CreditMeter.jsx";
 import StudentHome from "./StudentHome.jsx";
 import TutorChat from "./TutorChat.jsx";
@@ -9,11 +11,14 @@ import NotebookHub from "./NotebookHub.jsx";
 
 export default function StudentApp() {
   const { user, logout, patchUser } = useAuth();
-  const [view, setView] = useState("home"); // home | chat | notebooks
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // The page is now the URL (/, /chat, /notebooks). The active chat's topic
+  // context is still kept per-user so a reload of /chat resumes that topic.
+  const [session, setSession] = usePersistedState(`tuto:student:session:${user.id}`, null);
   const [subjects, setSubjects] = useState([]);
   const [curriculum, setCurriculum] = useState({ level: null, path: null });
   const [progress, setProgress] = useState(null);
-  const [session, setSession] = useState(null); // active chat { id, subject, chapter, topic }
   const [loading, setLoading] = useState(true);
 
   const loadProgress = async () => {
@@ -44,37 +49,48 @@ export default function StudentApp() {
     await loadCurriculum();
   };
 
-  const openTopic = (payload) => { setSession(payload); setView("chat"); };
-  const backHome = () => { setView("home"); setSession(null); loadProgress(); };
+  const openTopic = (payload) => { setSession(payload); navigate("/chat"); };
+  const backHome = () => { setSession(null); navigate("/"); loadProgress(); };
+
+  const isChat = pathname === "/chat";
 
   return (
-    <div className={view === "chat" ? "h-screen" : "min-h-screen"}>
+    <div className={isChat ? "h-screen" : "min-h-screen"}>
       <Backdrop />
       {/* Chat has its own single, combined header — skip the global bar there. */}
-      {view !== "chat" && <AppHeader user={user} onLogout={logout} right={<CreditMeter />} />}
+      {!isChat && <AppHeader user={user} onLogout={logout} right={<CreditMeter />} />}
       {loading ? (
         <Spinner label="Loading your classroom…" />
-      ) : view === "notebooks" ? (
-        <NotebookHub
-          subjects={subjects}
-          onBack={backHome}
-          onStudy={(s) => openTopic({
-            topic_name: s.name, subject_name: s.name, tint: s.tint, emoji: s.emoji, from_notes: true,
-          })}
-        />
-      ) : view === "home" ? (
-        <StudentHome
-          user={user}
-          path={curriculum.path}
-          subjects={subjects}
-          progress={progress}
-          onOpenTopic={openTopic}
-          onOpenNotebooks={() => setView("notebooks")}
-          onRefresh={loadProgress}
-          onSetLevel={setLevel}
-        />
       ) : (
-        <TutorChat user={user} session={session} onBack={backHome} onLogout={logout} onProgressChange={loadProgress} />
+        <Routes>
+          <Route index element={
+            <StudentHome
+              user={user}
+              path={curriculum.path}
+              subjects={subjects}
+              progress={progress}
+              onOpenTopic={openTopic}
+              onOpenNotebooks={() => navigate("/notebooks")}
+              onRefresh={loadProgress}
+              onSetLevel={setLevel}
+            />
+          } />
+          <Route path="notebooks" element={
+            <NotebookHub
+              subjects={subjects}
+              onBack={backHome}
+              onStudy={(s) => openTopic({
+                topic_name: s.name, subject_name: s.name, tint: s.tint, emoji: s.emoji, from_notes: true,
+              })}
+            />
+          } />
+          <Route path="chat" element={
+            session
+              ? <TutorChat user={user} session={session} onBack={backHome} onLogout={logout} onProgressChange={loadProgress} />
+              : <Navigate to="/" replace />
+          } />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       )}
     </div>
   );

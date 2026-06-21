@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Backdrop, AppHeader, Card, Spinner, Button } from "../../ui/components.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
 import { parentApi, usageApi } from "../../api/endpoints.js";
 import {
   Brain, Target, Flame, ListChecks, ArrowLeft, UserPlus, ChevronRight,
@@ -10,9 +11,9 @@ import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } f
 
 export default function ParentDashboard() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [report, setReport] = useState(null);
   const [linking, setLinking] = useState(false);
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
@@ -20,16 +21,6 @@ export default function ParentDashboard() {
   const load = async () => { setChildren(await parentApi.children()); };
 
   useEffect(() => { (async () => { try { await load(); } finally { setLoading(false); } })(); }, []);
-
-  const openReport = async (child) => {
-    // Report + advanced gap dashboard + AI-credit usage, in parallel.
-    const [rep, gaps, usage] = await Promise.all([
-      parentApi.report(child.id),
-      parentApi.gaps(child.id).catch(() => null),
-      usageApi.child(child.id).catch(() => null),
-    ]);
-    setReport({ ...rep, gapsDash: gaps, usage });
-  };
 
   const link = async (e) => {
     e.preventDefault(); setMsg("");
@@ -42,10 +33,9 @@ export default function ParentDashboard() {
       <Backdrop />
       <AppHeader user={user} onLogout={logout} />
       <div className="mx-auto max-w-6xl px-5 py-8">
-        {loading ? <Spinner label="Loading your children…" /> : report ? (
-          <ChildReport report={report} onBack={() => setReport(null)} />
-        ) : (
-          <>
+        <Routes>
+          <Route index element={loading ? <Spinner label="Loading your children…" /> : (
+            <>
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-extrabold tracking-tight">Family dashboard</h1>
@@ -70,7 +60,7 @@ export default function ParentDashboard() {
 
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
               {children.map((c) => (
-                <button key={c.id} onClick={() => openReport(c)} className="text-left">
+                <button key={c.id} onClick={() => navigate(`/child/${c.id}`)} className="text-left">
                   <Card className="p-6 transition-all hover:-translate-y-1 hover:shadow-xl">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -94,11 +84,38 @@ export default function ParentDashboard() {
                 </Card>
               )}
             </div>
-          </>
-        )}
+            </>
+          )} />
+          <Route path="child/:id" element={<ChildReportRoute />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </div>
     </div>
   );
+}
+
+// Loads one child's report from the URL (/child/:id) so it survives a reload.
+function ChildReportRoute() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { (async () => {
+    try {
+      const [rep, gaps, usage] = await Promise.all([
+        parentApi.report(id),
+        parentApi.gaps(id).catch(() => null),
+        usageApi.child(id).catch(() => null),
+      ]);
+      setReport({ ...rep, gapsDash: gaps, usage });
+    } catch { navigate("/", { replace: true }); }
+    finally { setLoading(false); }
+  })(); }, [id]);
+
+  if (loading) return <Spinner label="Loading report…" />;
+  if (!report) return <Navigate to="/" replace />;
+  return <ChildReport report={report} onBack={() => navigate("/")} />;
 }
 
 function ChildReport({ report, onBack }) {
