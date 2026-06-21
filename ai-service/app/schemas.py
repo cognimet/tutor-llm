@@ -200,3 +200,25 @@ class StudyScheduleResponse(BaseModel):
     summary: str = ""
     tasks: list[ScheduleTask] = Field(default_factory=list)
     usage: Usage
+
+
+# ── Smart Note Inspection (strict, schema-enforced) ────────────────────
+class NoteInspectRequest(BaseModel):
+    system: str
+    user: str
+
+
+class NoteInspectSchema(BaseModel):
+    """Strict output schema so the LLM always returns these exact keys (the
+    scoping fix: Gemini under generic JSON mode would otherwise invent keys like
+    `curriculum`/`SCOPE`, breaking the Laravel mapping)."""
+    detected_subject: str | None = Field(default=None, description="Matched Subject name from curriculum, or null if completely unrelated")
+    detected_chapter: str | None = Field(default=None, description="Matched Chapter name from curriculum, or null if completely unrelated")
+    detected_topic: str | None = Field(default=None, description="Specific Topic name from curriculum topics list, or null")
+    confidence_score: float = Field(default=0.0, description="Overall confidence mapping score from 0.0 to 1.0")
+    core_keywords: list[str] = Field(default_factory=list, description="Top 5 core scientific/scholastic keywords from the text")
+    formula_count: int = Field(default=0, description="Count of mathematical or chemical formulas spotted in text")
+    diagrams_found: bool = Field(default=False, description="Whether diagrams, figures (e.g. Fig 4.1), or illustrations are present")
+    has_corrections: bool = Field(default=False, description="Whether the note contains conceptual mistakes, errors, or factual typos")
+    corrections: list[dict] = Field(default_factory=list, description="Encouraging corrections. Each item has 'mistake' and 'correction'")
+    flashcard_candidates: list[dict] = Field(default_factory=list, description="3 proposed flashcards. Each item has 'question' and 'answer'")

@@ -35,6 +35,7 @@ from .schemas import (
     NotesIngestRequest, NotesIngestResponse, Usage,
     ExtractRequest, ExtractResponse,
     StudyScheduleRequest, StudyScheduleResponse, ScheduleTask,
+    NoteInspectRequest, NoteInspectSchema,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -126,6 +127,16 @@ async def ai_json(req: JsonRequest, authorization: str | None = Header(None)):
     _auth(authorization)
     system = await _ground(req.system, req.topic, req.rag_query or req.user, req.student_id, req.subject_id)
     out, usage = await llm.json(system, req.user, req.fallback, action=req.action)
+    return {"data": out, "usage": usage.model_dump()}
+
+
+@app.post("/ai/notes/inspect")
+async def ai_notes_inspect(req: NoteInspectRequest, authorization: str | None = Header(None)):
+    """Smart note inspection with a STRICTLY schema-enforced response, so the
+    auto-scoper always gets the exact detected_subject/chapter/topic keys back
+    (see claude_implementation_guide_notes_scoping_fix.md)."""
+    _auth(authorization)
+    out, usage = await llm.json(req.system, req.user, {}, action="structured", schema=NoteInspectSchema)
     return {"data": out, "usage": usage.model_dump()}
 
 
@@ -286,11 +297,21 @@ async def ai_extract(req: ExtractRequest, authorization: str | None = Header(Non
 
     try:
         if kind == "pdf":
-            from pypdf import PdfReader
-            reader = PdfReader(io.BytesIO(raw))
-            pages = [(p.extract_text() or "") for p in reader.pages]
-            text = "\n\n".join(pages).strip()
-            meta["pages"] = len(reader.pages)
+            # PyMuPDF (fitz) preserves layout and lets us count embedded image
+            # objects per page, so visual chapters (diagrams/figures) are detected
+            # programmatically instead of being invisible to the inspector.
+            import fitz  # PyMuPDF
+
+            doc = fitz.open(stream=raw, filetype="pdf")
+            pages_text: list[str] = []
+            images_count = 0
+            for page in doc:
+                pages_text.append(page.get_text() or "")
+                images_count += len(page.get_images())
+            text = "\n\n".join(pages_text).strip()
+            meta["pages"] = doc.page_count
+            meta["images_count"] = images_count
+            doc.close()
             if len(text) < 20:
                 meta["note"] = "Little text found — this PDF may be scanned images."
         elif kind == "doc":

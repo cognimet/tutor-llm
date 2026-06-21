@@ -6,10 +6,11 @@ import CreditMeter from "../../ui/CreditMeter.jsx";
 import StudentHome from "./StudentHome.jsx";
 import TutorChat from "./TutorChat.jsx";
 import NotebookHub from "./NotebookHub.jsx";
+import GamificationDashboard from "./GamificationDashboard.jsx";
 
 export default function StudentApp() {
   const { user, logout, patchUser } = useAuth();
-  const [view, setView] = useState("home"); // home | chat | notebooks
+  const [view, setView] = useState("home"); // home | chat | notebooks | rewards
   const [subjects, setSubjects] = useState([]);
   const [curriculum, setCurriculum] = useState({ level: null, path: null });
   const [progress, setProgress] = useState(null);
@@ -59,8 +60,20 @@ export default function StudentApp() {
           subjects={subjects}
           onBack={backHome}
           onStudy={(s) => openTopic({
-            topic_name: s.name, subject_name: s.name, tint: s.tint, emoji: s.emoji, from_notes: true,
+            topic_name: s.topic_name || s.name,
+            subject_name: s.subject_name || s.name,
+            chapter_name: s.chapter_name || null,
+            tint: s.tint,
+            emoji: s.emoji,
+            from_notes: true,
+            selected_note_ids: s.selected_note_ids || [],
           })}
+        />
+      ) : view === "rewards" ? (
+        <GamificationDashboard
+          user={user}
+          onBack={backHome}
+          onOpenNotes={() => setView("notebooks")}
         />
       ) : view === "home" ? (
         <StudentHome
@@ -70,6 +83,7 @@ export default function StudentApp() {
           progress={progress}
           onOpenTopic={openTopic}
           onOpenNotebooks={() => setView("notebooks")}
+          onOpenRewards={() => setView("rewards")}
           onRefresh={loadProgress}
           onSetLevel={setLevel}
         />

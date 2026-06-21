@@ -55,12 +55,17 @@ class LLM:
         return await self._provider_for(action).text(system, user)
 
     async def json(self, system: str, user: str, fallback: dict,
-                   action: str = "structured") -> tuple[dict, Usage]:
+                   action: str = "structured", schema=None) -> tuple[dict, Usage]:
         if self.mock:
             out = mock.json(system, user, fallback)
             return out, _estimate_usage(system, user, _json.dumps(out),
                                         settings.model_for(action))
-        return await self._provider_for(action).json(system, user, fallback)
+        provider = self._provider_for(action)
+        try:
+            return await provider.json(system, user, fallback, schema=schema)
+        except TypeError:
+            # Older provider signature without `schema` — degrade gracefully.
+            return await provider.json(system, user, fallback)
 
     async def stream(self, system: str, user: str, action: str = "chat"):
         """Async generator yielding (delta, final_usage_or_None)."""

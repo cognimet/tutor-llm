@@ -139,6 +139,8 @@ function PlanTab({ ctx, grad, onBigAssessment }) {
       await plannerApi.generate({
         topic_id: ctx.topic_id, topic_name: ctx.topic_name,
         chapter_name: ctx.chapter_name, subject_name: ctx.subject_name,
+        // Study-from-notes: isolate the plan to exactly the open notes.
+        ...(ctx.selected_note_ids?.length ? { note_ids: ctx.selected_note_ids, from_notes: true } : {}),
         horizon, exam_date: horizon === "exam" ? examDate : undefined,
       });
       await load();

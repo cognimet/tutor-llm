@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\NoteInsight;
 use App\Models\TopicNote;
 use App\Services\CurriculumResolver;
 use App\Services\EventTracker;
+use App\Services\GamificationService;
 use App\Services\NotesService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -26,7 +28,166 @@ class NotesController extends Controller
         protected NotesService $notes,
         protected EventTracker $events,
         protected CurriculumResolver $resolver,
+        protected GamificationService $gamify,
     ) {}
+
+    /**
+     * POST /tutor/notes/auto-scope — Zero-friction "Smart Drop" (spec §4.1, §5.2).
+     * Upload a file with NO scope selection: the AI reads it, auto-detects the
+     * subject/chapter/topic, audits it for mistakes, stores it, and returns an
+     * Auto-Confirm card payload (+ XP/badge rewards). Low-confidence results are
+     * flagged so the UI can offer a manual pick.
+     */
+    public function autoScope(Request $request)
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'max:51200',
+                'mimes:pdf,doc,docx,txt,md,csv,xls,xlsx,png,jpg,jpeg,webp,gif,bmp,tiff'],
+        ]);
+        $user = $request->user();
+        $file = $request->file('file');
+        $size = $file->getSize();
+
+        // 1) Extract text.
+        $extract = $this->notes->extract($file);
+        if (! empty($extract['error'])) {
+            return response()->json(['message' => $extract['error']], 422);
+        }
+        $text = trim($extract['text'] ?? '');
+        if ($text === '') {
+            return response()->json([
+                'message' => "We couldn't read any text from this — try a clearer, well-lit photo. 📸",
+            ], 422);
+        }
+
+        // 2) AI inspect: auto-scope + audit + flashcard candidates. The PDF's
+        //    embedded-image count (from PyMuPDF) is fed in so the inspector can
+        //    reliably detect diagram-heavy chapters.
+        $imagesCount = (int) ($extract['meta']['images_count'] ?? 0);
+        $insight = $this->notes->inspect($user, $text, $imagesCount);
+        $confidence = (float) ($insight['confidence_score'] ?? 0);
+        // A PDF with embedded images is a diagram even if the LLM missed it.
+        $diagramsFound = (bool) ($insight['diagrams_found'] ?? false) || $imagesCount > 0;
+
+        // 3) Map the detected names back to curriculum ids.
+        $r = $this->resolver->resolve(
+            $user,
+            $this->cleanName($insight['detected_subject'] ?? null),
+            $this->cleanName($insight['detected_chapter'] ?? null),
+            $this->cleanName($insight['detected_topic'] ?? null),
+            null,
+        );
+        $scope = $r['topic_id'] ? 'topic' : ($r['chapter_id'] ? 'chapter' : 'subject');
+
+        // 4) Per-subject cap (50 MB).
+        $ids = ['subject_id' => $r['subject_id'], 'topic_name' => $r['topic_name']];
+        $used = (int) $this->subjectUsageQuery($request, $ids)->sum('size_bytes');
+        if ($used + $size > self::CAP_BYTES) {
+            return response()->json([
+                'message' => 'This subject\'s 50 MB notes limit is full. Delete a note to free up space.',
+                'used_bytes' => $used, 'cap_bytes' => self::CAP_BYTES,
+            ], 422);
+        }
+
+        // 5) Store + process the note (summary, embeddings, flashcards).
+        $bucket = $r['subject_id'] ? "sub-{$r['subject_id']}" : ($r['topic_id'] ? "topic-{$r['topic_id']}" : 'misc');
+        $path = $file->store("notes/{$user->id}/{$bucket}", 'local');
+
+        $note = $user->notes()->create([
+            'scope'             => $scope,
+            'subject_id'        => $r['subject_id'],
+            'subject_name'      => $r['subject_name'],
+            'chapter_id'        => $scope === 'subject' ? null : $r['chapter_id'],
+            'chapter_name'      => $scope === 'subject' ? null : $r['chapter_name'],
+            'topic_id'          => $scope === 'topic' ? $r['topic_id'] : null,
+            'topic_name'        => $scope === 'topic' ? $r['topic_name'] : null,
+            'is_primary'        => false,
+            'title'             => $file->getClientOriginalName(),
+            'original_filename' => $file->getClientOriginalName(),
+            'mime'              => $file->getClientMimeType(),
+            'kind'              => $extract['kind'] ?? 'text',
+            'size_bytes'        => $size,
+            'disk'              => 'local',
+            'path'              => $path,
+            'extracted_text'    => $text,
+            'meta'              => ['extract' => $extract['meta'] ?? [], 'auto_scoped' => true],
+            'status'            => 'processing',
+        ]);
+        $this->notes->process($note);
+        $note = $note->fresh();
+
+        // 6) Persist the inspector output.
+        $corrections = array_values(array_filter((array) ($insight['corrections'] ?? []), 'is_array'));
+        NoteInsight::create([
+            'note_id'          => $note->id,
+            'extracted_text'   => mb_substr($text, 0, 20000),
+            'key_terms'        => array_values(array_filter((array) ($insight['core_keywords'] ?? []), 'is_string')),
+            'corrections'      => $corrections,
+            'confidence_score' => max(0, min(1, $confidence)),
+            'diagrams_found'   => $diagramsFound,
+            'formula_count'    => (int) ($insight['formula_count'] ?? 0),
+        ]);
+
+        // 7) Gamify: award upload XP (+ first-note bonus / badges inside the engine).
+        $reward = $this->gamify->award($user, 'upload_note', ['topic' => $note->topic_name]);
+
+        if ($note->status === 'ready') {
+            $this->events->track(
+                $user, EventTracker::NOTE_UPLOAD,
+                "Smart-dropped note '{$note->title}'" . ($r['subject_name'] ? " ({$r['subject_name']})" : ''),
+                $note->topic_name, $note->topic_id, [],
+                ['note_id' => $note->id, 'auto_scoped' => true, 'confidence' => $confidence],
+            );
+        }
+
+        return response()->json([
+            'status'     => 'success',
+            'note_id'    => $note->id,
+            'confidence' => round($confidence, 2),
+            'low_confidence' => $confidence < 0.5,
+            'detected'   => [
+                'subject_id'   => $r['subject_id'],
+                'subject_name' => $r['subject_name'],
+                'chapter_id'   => $r['chapter_id'],
+                'chapter_name' => $r['chapter_name'],
+                'topic_id'     => $r['topic_id'],
+                'topic_name'   => $r['topic_name'],
+            ],
+            'insights'   => [
+                'keywords'       => array_values(array_filter((array) ($insight['core_keywords'] ?? []), 'is_string')),
+                'formula_count'  => (int) ($insight['formula_count'] ?? 0),
+                'diagrams_found' => $diagramsFound,
+                'corrections'    => $corrections,
+            ],
+            'gamification' => $reward,
+            'note'       => $note,
+        ], 201);
+    }
+
+    /** GET /tutor/notes/{note}/flashcards — term/definition cards minted from this note (Play Hub). */
+    public function flashcards(Request $request, TopicNote $note)
+    {
+        $this->authorizeNote($request, $note);
+        $cards = $request->user()->flashcards()
+            ->where('source_type', 'note')->where('source_id', $note->id)
+            ->orderBy('box_level')->orderBy('id')
+            ->get(['id', 'front', 'back', 'box_level', 'due_at']);
+
+        return response()->json([
+            'note_id'    => $note->id,
+            'flashcards' => $cards->map(fn ($c) => [
+                'id' => $c->id, 'term' => $c->front, 'definition' => $c->back,
+                'box_level' => (int) $c->box_level,
+            ]),
+        ]);
+    }
+
+    /** Trim "Unknown"/empty AI scope values to null so the resolver doesn't match them. */
+    protected function cleanName(?string $name): ?string
+    {
+        $n = trim((string) $name);
+        return ($n === '' || strcasecmp($n, 'unknown') === 0) ? null : $n;
+    }
 
     /** GET /tutor/notes — notes relevant to the given context (topic + its chapter + its subject) + usage. */
     public function index(Request $request)

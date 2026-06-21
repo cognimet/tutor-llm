@@ -6,18 +6,19 @@ import {
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
   Mic, MicOff, Camera, Maximize2, PenLine, LogOut,
   Sparkles as SparklesIcon, CalendarClock, Paperclip, ListChecks,
+  FileText, Loader2, HelpCircle, Calculator,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
 import CreditMeter from "../../ui/CreditMeter.jsx";
 import { ThemeToggle } from "../../ui/components.jsx";
-import { tutorApi, plannerApi } from "../../api/endpoints.js";
+import { tutorApi, plannerApi, notesApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
 import Markdown from "../../ui/Markdown.jsx";
 import RichMessage from "../../ui/RichMessage.jsx";
 import AssessmentFlow from "./AssessmentFlow.jsx";
 import Whiteboard from "../../ui/Whiteboard.jsx";
 import StudyHub from "../../ui/StudyHub.jsx";
-import NotesPicker from "../../ui/NotesPicker.jsx";
+import NotesPicker, { fmtBytes } from "../../ui/NotesPicker.jsx";
 import NextStep from "../../ui/NextStep.jsx";
 import ScreenTimeTracker from "../../ui/ScreenTimeTracker.jsx";
 import NotesChecklist from "../../ui/NotesChecklist.jsx";
@@ -433,6 +434,82 @@ function SessionList({ sessions, sessionId, onPick, t, searchRef }) {
 
 /* ===================================================================== main */
 
+/**
+ * Note Inspector — the sliding panel under the note-aware header title. Lists the
+ * active uploaded notes, their AI "Main Agenda" (summary), and per-note grounded
+ * quick actions (summary / flashcards / formulas).
+ */
+function NoteInspectorDropdown({ notes, loading, onClose, onTrigger }) {
+  const perNote = [["summary", "📑 Summary"], ["flashcards", "🗂️ Flashcards"], ["cheat_sheet", "📐 Formulas"]];
+  return (
+    <div className="msg-in absolute left-0 top-full z-50 mt-2 w-[22rem] max-w-[90vw] rounded-3xl border border-slate-100 bg-white/95 p-4 shadow-2xl backdrop-blur-md dark:border-white/10 dark:bg-slate-900/95">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 dark:border-white/10">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-indigo-500">📚 Active notes</p>
+        <button onClick={onClose} className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Close</button>
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-xs font-bold text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" /> Fetching note agendas…
+        </div>
+      ) : notes.length === 0 ? (
+        <p className="py-6 text-center text-xs text-slate-400">No notes loaded in this chat.</p>
+      ) : (
+        <div className="mt-3 max-h-80 space-y-4 overflow-y-auto">
+          {notes.map((n) => (
+            <div key={n.id} className="space-y-1.5 border-b border-slate-50 pb-3 last:border-0 last:pb-0 dark:border-white/5">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 shrink-0 text-slate-400" />
+                <span className="truncate text-xs font-extrabold text-slate-800 dark:text-slate-200">{n.title}</span>
+                {n.size_bytes ? <span className="ml-auto shrink-0 text-[10px] font-bold text-slate-400">{fmtBytes(n.size_bytes)}</span> : null}
+              </div>
+              <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-white/5">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Main agenda</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                  {n.summary || "No summary yet — tap Summary below for a clear overview."}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {perNote.map(([id, label]) => (
+                  <button key={id} onClick={() => onTrigger(id, n.title)}
+                    className="rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-extrabold text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300">
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Quick Study Options — a 1-tap pill carousel above the composer, shown only when
+ * the session is grounded in uploaded notes. Each fires a structured, note-scoped
+ * prompt the strict-grounding backend answers purely from the active notes.
+ */
+function QuickStudyOptionsBar({ active, onTrigger }) {
+  if (!active) return null;
+  const options = [
+    { id: "summary",       label: "Quick Summary",    icon: <FileText className="h-3.5 w-3.5" />,                 color: "hover:bg-emerald-50 dark:hover:bg-emerald-500/10" },
+    { id: "flashcards",    label: "Note Flashcards",  icon: <Sparkles className="h-3.5 w-3.5 text-amber-500" />,  color: "hover:bg-amber-50 dark:hover:bg-amber-500/10" },
+    { id: "cheat_sheet",   label: "Extract Formulas", icon: <Calculator className="h-3.5 w-3.5 text-blue-500" />, color: "hover:bg-blue-50 dark:hover:bg-blue-500/10" },
+    { id: "grounded_quiz", label: "Grounded Quiz",    icon: <HelpCircle className="h-3.5 w-3.5 text-rose-500" />, color: "hover:bg-rose-50 dark:hover:bg-rose-500/10" },
+  ];
+  return (
+    <div className="no-scrollbar mb-2.5 flex items-center gap-2 overflow-x-auto pb-0.5">
+      <span className="shrink-0 pr-0.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">From your notes</span>
+      {options.map((opt) => (
+        <button key={opt.id} onClick={() => onTrigger(opt.id)}
+          className={`flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-extrabold text-slate-600 transition-all active:scale-95 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 ${opt.color}`}>
+          {opt.icon}<span>{opt.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function TutorChat({ session: initial, onBack, onLogout, onProgressChange }) {
   const [ctx, setCtx] = useState(initial);
   const t = tint(ctx.tint);
@@ -469,14 +546,19 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
   const [studyTab, setStudyTab] = useState(null);    // open Study hub at this tab (null = closed)
   const [bigAssess, setBigAssess] = useState(false); // big (exam-scope) assessment
   const [attached, setAttached] = useState([]);      // notes riding with the next message [{id,title}]
+  const [inspectorOpen, setInspectorOpen] = useState(false); // note-inspector dropdown in the header
+  const [activeNotes, setActiveNotes] = useState([]); // detailed records of the session's grounded notes
+  const [activeNotesLoading, setActiveNotesLoading] = useState(false);
   const [examDate, setExamDate] = useState(null);    // soonest exam date for the countdown chip
   const [guide, setGuide] = useState({ planTaskTitle: null, dueCards: 0, mistakes: [] }); // "Next →" inputs
+  const [checklistRefresh, setChecklistRefresh] = useState(0); // bumps when a cleared gate auto-ticks a plan task
 
   const scrollRef = useRef(null);
   const taRef = useRef(null);
   const abortRef = useRef(null);
   const searchRef = useRef(null);
   const menuRef = useRef(null);
+  const inspectorRef = useRef(null);
   const prevLen = useRef(0);
   const fileRef = useRef(null);   // snap-a-doubt file input
   const recRef = useRef(null);    // SpeechRecognition instance
@@ -598,6 +680,9 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
         const s = await tutorApi.start({
           topic_id: ctx.topic_id, topic_name: ctx.topic_name,
           chapter_name: ctx.chapter_name, subject_name: ctx.subject_name,
+          // Carry the Notebook-Hub selection so the whole session stays grounded
+          // in exactly these notes (backend stores them on the session).
+          selected_note_ids: ctx.selected_note_ids || [],
         });
         if (!alive) return;
         setSessionId(s.id);
@@ -639,6 +724,30 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
     return () => window.removeEventListener("mousedown", onDown);
   }, [menuOpen]);
 
+  // Close the Note Inspector on any outside click.
+  useEffect(() => {
+    if (!inspectorOpen) return;
+    const onDown = (e) => { if (!inspectorRef.current?.contains(e.target)) setInspectorOpen(false); };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [inspectorOpen]);
+
+  // Load rich records for the session's grounded notes (titles, agendas, sizes)
+  // — powers the note-aware header title and the Note Inspector dropdown.
+  const groundedIdsKey = (ctx.selected_note_ids || []).join(",");
+  useEffect(() => {
+    const ids = ctx.selected_note_ids || [];
+    if (!ids.length || !ctx.subject_name) { setActiveNotes([]); return; }
+    let alive = true;
+    setActiveNotesLoading(true);
+    notesApi.list({ scope: "subject", subject_name: ctx.subject_name })
+      .then((d) => { if (alive) setActiveNotes((d.notes || []).filter((n) => ids.includes(n.id))); })
+      .catch(() => { if (alive) setActiveNotes([]); })
+      .finally(() => { if (alive) setActiveNotesLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groundedIdsKey, ctx.subject_name]);
+
   const lastUserContent = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "user") return messages[i].content;
     return "";
@@ -663,6 +772,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
       if (e.key === "Escape") {
         if (boardOpen || studyTab) { return; } // these overlays handle their own Esc
         if (showShortcuts) { setShowShortcuts(false); return; }
+        if (inspectorOpen) { setInspectorOpen(false); return; }
         if (menuOpen) { setMenuOpen(false); return; }
         if (drawerOpen) { setDrawerOpen(false); return; }
         if (streaming) { stop(); return; }
@@ -684,7 +794,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streaming, showShortcuts, menuOpen, drawerOpen, boardOpen, studyTab]);
+  }, [streaming, showShortcuts, menuOpen, drawerOpen, boardOpen, studyTab, inspectorOpen]);
 
   const onScroll = () => {
     const el = scrollRef.current;
@@ -759,6 +869,52 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
     runStream(`/tutor/sessions/${sessionId}/stream`, {
       message: value, mode, ...(noteIds.length ? { note_ids: noteIds } : {}),
     });
+  };
+
+  // 1-tap note study actions (header Note Inspector + Quick Study bar). Each
+  // injects a structured prompt; the session is already grounded in the selected
+  // notes, so the backend answers strictly from them. An optional note title
+  // narrows the focus to a single note.
+  const handleTriggerOption = (optionId, noteTitle = "") => {
+    const ofNote = noteTitle ? ` "${noteTitle}"` : "";
+    let promptText = "";
+    switch (optionId) {
+      case "summary":
+        promptText = `Please give me a high-fidelity summary of my note${ofNote}. Break it into:\n`
+          + "- 📌 **The main agenda** (the big picture in 2 sentences)\n"
+          + "- 🔑 **Core concepts & definitions**\n"
+          + "- 💡 **Real-world examples & analogies**";
+        break;
+      case "flashcards":
+        promptText = `Extract 5 critical terms and definitions from my note${ofNote || "s"} and turn them into quick flashcard-style revision questions for me.`;
+        break;
+      case "cheat_sheet":
+        promptText = `Extract all formulas, units, equations and key cheat-sheet points from my note${ofNote || "s"} and present them as a clean, copy-pasteable revision block.`;
+        break;
+      case "grounded_quiz":
+        promptText = "Quiz me! Ask one multiple-choice question (MCQ) strictly grounded in my uploaded notes, and wait for my answer before moving to the next one.";
+        break;
+      default:
+        return;
+    }
+    setInspectorOpen(false);
+    send(promptText);
+  };
+
+  // Student cleared a Progress Gate. Two things happen:
+  //  1) If the checkpoint covers a task in the active study plan, the backend
+  //     auto-ticks it — we bump the checklist so the tick shows live.
+  //  2) Nudge the tutor to stream the next part of the lesson.
+  const handleQuizSuccess = (payload) => {
+    const text = payload && typeof payload === "object" ? payload.question : "";
+    if (text) {
+      const scope = ctx.topic_id ? { topic_id: ctx.topic_id } : { topic_name: ctx.topic_name };
+      plannerApi.cover({ ...scope, subject_name: ctx.subject_name, text })
+        .then((r) => { if (r?.matched) { setChecklistRefresh((n) => n + 1); loadGuide(); } })
+        .catch(() => { /* non-blocking */ });
+    }
+    if (streaming || !sessionId) return;
+    send("✅ I answered the checkpoint correctly — please continue to the next part of the lesson.");
   };
 
   // Snap-a-doubt: photo -> OCR -> auto-send through the normal tutor flow.
@@ -894,7 +1050,8 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
     try {
       const s = await tutorApi.start({
         topic_id: ctx.topic_id, topic_name: ctx.topic_name,
-        chapter_name: ctx.chapter_name, subject_name: ctx.subject_name, fresh: true,
+        chapter_name: ctx.chapter_name, subject_name: ctx.subject_name,
+        selected_note_ids: ctx.selected_note_ids || [], fresh: true,
       });
       setSessionId(s.id);
       setMessages(s.messages || []);
@@ -999,6 +1156,18 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
         : "text-slate-500 ring-slate-200 hover:text-indigo-600 dark:ring-white/10 dark:text-slate-300 dark:hover:text-indigo-300"
     }`;
 
+  // Note-grounded sessions get a note-aware header: the active note's name (plus
+  // "+N more") instead of the opaque "Science / Science" topic label.
+  const noteCount = (ctx.selected_note_ids || []).length;
+  const hasNotes = noteCount > 0;
+  const extraNotes = (activeNotes.length || noteCount) - 1;
+  // Topic is the headline; the note/PDF name(s) ride along in the subtitle.
+  const headerTitle = ctx.topic_name;
+  const notesLabel = hasNotes
+    ? (activeNotes[0]?.title || `${noteCount} note${noteCount > 1 ? "s" : ""}`)
+      + (extraNotes > 0 ? ` + ${extraNotes} more note${extraNotes > 1 ? "s" : ""}` : "")
+    : "";
+
   return (
     <div className="flex h-screen flex-col">
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -1011,12 +1180,31 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className={`hidden h-9 w-9 shrink-0 place-items-center rounded-xl text-lg sm:grid ${t.soft}`}>{ctx.emoji || "📘"}</div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-extrabold leading-tight text-slate-900 dark:text-white">{ctx.topic_name}</p>
-              <p className="truncate text-[11px] font-bold text-slate-400">{ctx.subject_name}{ctx.chapter_name ? ` · ${ctx.chapter_name}` : ""}</p>
+            <div className="relative min-w-0 flex-1" ref={inspectorRef}>
+              {hasNotes ? (
+                <button
+                  onClick={() => setInspectorOpen((v) => !v)}
+                  title="View the notes this chat is grounded in"
+                  className="flex max-w-full items-center gap-1 text-left"
+                >
+                  <span className="truncate text-sm font-extrabold leading-tight text-slate-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400">{headerTitle}</span>
+                  <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${inspectorOpen ? "rotate-180" : ""}`} />
+                </button>
+              ) : (
+                <p className="truncate text-sm font-extrabold leading-tight text-slate-900 dark:text-white">{headerTitle}</p>
+              )}
+              <p className="truncate text-[11px] font-bold text-slate-400">{ctx.subject_name}{ctx.chapter_name ? ` · ${ctx.chapter_name}` : ""}{notesLabel ? ` · ${notesLabel}` : ""}</p>
+              {inspectorOpen && hasNotes && (
+                <NoteInspectorDropdown
+                  notes={activeNotes}
+                  loading={activeNotesLoading}
+                  onClose={() => setInspectorOpen(false)}
+                  onTrigger={(type, title) => handleTriggerOption(type, title)}
+                />
+              )}
             </div>
             <span className={`hidden items-center gap-1.5 rounded-full ${t.soft} px-2.5 py-1 text-[11px] font-extrabold ${t.text} xl:inline-flex`}>
-              <ShieldCheck className="h-3.5 w-3.5" /> Topic-scoped
+              <ShieldCheck className="h-3.5 w-3.5" /> {hasNotes ? "Notes-grounded" : "Topic-scoped"}
             </span>
             {/* Exam countdown — opens the planner */}
             {examDaysLeft !== null && examDaysLeft >= 0 && (
@@ -1150,7 +1338,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
                             <p className="whitespace-pre-wrap">{m.content}</p>
                           </div>
                         ) : (
-                          <RichMessage text={m.content} streaming={m.pending} className="md-lg" />
+                          <RichMessage text={m.content} streaming={m.pending} className="md-lg" onQuizSuccess={handleQuizSuccess} />
                         )}
                         {m.stopped && (
                           <p className="mt-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Stopped</p>
@@ -1204,6 +1392,9 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
           {/* Composer block — same reading column as the messages */}
           <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
             <div className="mx-auto w-full max-w-3xl xl:max-w-4xl 2xl:max-w-5xl">
+            {/* Study-from-notes: 1-tap grounded actions (summary, flashcards,
+                formulas, grounded quiz) drawn strictly from the active notes. */}
+            <QuickStudyOptionsBar active={hasNotes} onTrigger={handleTriggerOption} />
             {/* One guiding nudge + contextual follow-ups, on a single scrollable
                 strip so the composer stays close to the conversation. */}
             {(!showStarters || showFollowups) && (
@@ -1211,7 +1402,8 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
                 {!showStarters && (
                   <NextStep state={nextState} handlers={nextHandlers} className="shrink-0" />
                 )}
-                {showFollowups && FOLLOWUPS.map((s) => (
+                {/* Follow-up suggestion chips — hidden in study-with-notes sessions. */}
+                {showFollowups && !hasNotes && FOLLOWUPS.map((s) => (
                   <button key={s.label} onClick={() => send(s.label)}
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-colors hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm">
                     <span>{s.icon}</span> {s.label}
@@ -1303,7 +1495,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
               )}
             </div>
             <p className="mt-2 flex items-center justify-center gap-1.5 px-2 text-center text-[11px] text-slate-400">
-              <Sparkles className="h-3 w-3" /> Scoped to <b>{ctx.topic_name}</b>
+              <Sparkles className="h-3 w-3" /> {hasNotes ? <>Grounded in <b>{noteCount} of your note{noteCount > 1 ? "s" : ""}</b></> : <>Scoped to <b>{ctx.topic_name}</b></>}
               <span className="hidden sm:inline">· Shift+Enter for a new line ·</span>
               <button onClick={() => setShowShortcuts(true)} className="hidden font-extrabold text-slate-400 underline decoration-slate-300 underline-offset-2 hover:text-indigo-600 sm:inline">shortcuts</button>
             </p>
@@ -1334,7 +1526,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
           {/* Panel body */}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
             {sidePanel === "checklist" ? (
-              <NotesChecklist subjectName={ctx.subject_name || ctx.topic_name} grad={t.grad} />
+              <NotesChecklist topicName={ctx.topic_name} chapterName={ctx.chapter_name} subjectName={ctx.subject_name || ctx.topic_name} noteIds={ctx.selected_note_ids || []} grad={t.grad} onPrompt={(text) => send(text)} refreshKey={checklistRefresh} />
             ) : (
               <>
                 <button onClick={newChat} className={`mb-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
@@ -1382,7 +1574,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <NotesChecklist subjectName={ctx.subject_name || ctx.topic_name} grad={t.grad} />
+              <NotesChecklist topicName={ctx.topic_name} chapterName={ctx.chapter_name} subjectName={ctx.subject_name || ctx.topic_name} noteIds={ctx.selected_note_ids || []} grad={t.grad} onPrompt={(text) => send(text)} refreshKey={checklistRefresh} />
             </div>
           </div>
         </div>

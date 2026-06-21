@@ -124,7 +124,61 @@ h1, h2, h3, .font-display {
 }
 .drawer-in-right { animation: drawer-right 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
 
+/* Tuto mascot states (spec §4) */
+@keyframes tuto-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes tuto-spin { 0% { transform: rotate(0); } 100% { transform: rotate(360deg); } }
+@keyframes tuto-breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+.tuto-bob { animation: tuto-bob 2.4s ease-in-out infinite; }
+.tuto-spin { animation: tuto-spin 1.2s linear infinite; }
+.tuto-breathe { animation: tuto-breathe 3.5s ease-in-out infinite; }
+
+/* Progress Gate: wrong-answer shake (Visual Learning spec §3). */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.animate-shake { animation: shake 0.4s ease-in-out; }
+
+/* Textbook Canvas: flash a freshly-anchored passage or figure (Visual spec §1). */
+@keyframes anchor-flash {
+  0%   { background-color: rgba(16, 185, 129, 0.35); }
+  100% { background-color: rgba(16, 185, 129, 0); }
+}
+.anchor-flash { animation: anchor-flash 1.8s ease-out; border-radius: 0.5rem; }
+
+/* ---------------------------------------------------------------------------
+   Gamified Storybook (Fancy Learning spec): slide-in cards, wiggling streak
+   badge, vocab pop-pills, and the glowing "Learning Path" timeline thread.
+--------------------------------------------------------------------------- */
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up { animation: slide-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50%      { transform: rotate(1.5deg); }
+}
+.animate-wiggle { animation: wiggle 1.6s ease-in-out infinite; }
+
+/* Neon "Learning Path" thread + glowing nodes (Fancy Learning spec §1). */
+.learning-timeline-line {
+  background: linear-gradient(180deg, #6366f1 0%, #10b981 100%);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.35);
+}
+.timeline-glow-node {
+  box-shadow: 0 0 12px #10b981, inset 0 0 3px #10b981;
+  animation: pulse-glow 2s infinite alternate;
+}
+@keyframes pulse-glow {
+  0%   { box-shadow: 0 0 6px #10b981, inset 0 0 2px #10b981; }
+  100% { box-shadow: 0 0 16px #10b981, inset 0 0 3px #10b981; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .msg-in, .drawer-in, .drawer-in-right, .thinking i, .md-stream > :last-child::after,
-  .auth-rise, .auth-float { animation: none; }
+  .auth-rise, .auth-float, .tuto-bob, .tuto-spin, .tuto-breathe,
+  .animate-shake, .anchor-flash, .animate-slide-up, .animate-wiggle, .timeline-glow-node { animation: none; }
 }

@@ -74,6 +74,38 @@ export const notesApi = {
   },
   get: (id) => api.get(`/tutor/notes/${id}`).then((r) => r.data.note),
   remove: (id) => api.delete(`/tutor/notes/${id}`).then((r) => r.data),
+  // Zero-friction "Smart Drop": AI auto-scopes + audits. Returns the full
+  // auto-confirm payload { note, confidence, detected, insights, gamification }.
+  autoScope: (file, onProgress) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post("/tutor/notes/auto-scope", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 200000,
+      onUploadProgress: onProgress,
+    }).then((r) => r.data);
+  },
+  flashcards: (id) => api.get(`/tutor/notes/${id}/flashcards`).then((r) => r.data.flashcards),
+};
+
+// --- Student: gamification (Dual-Engine: Junior stars/pet/stickers + Senior XP/trophies) ---
+export const gamificationApi = {
+  stats: () => api.get("/tutor/me/gamification").then((r) => r.data),
+  // action: start_quest | answer_correct | master_concept | complete_quest | complete_plan
+  reward: (payload) => api.post("/tutor/quest/reward", payload).then((r) => r.data),
+
+  // Spec §8 — full engine-aware profile + claim/sticker/companion endpoints.
+  profile: () => api.get("/gamification/profile").then((r) => r.data.data),
+  // payload: { activity_type, task_id?, topic?, perfect? }
+  claim: (payload) => api.post("/gamification/claim-reward", payload).then((r) => r.data),
+  stickers: () => api.get("/gamification/stickers").then((r) => r.data.data),
+  // placement: { is_placed, placed_x, placed_y, canvas_scale }
+  placeSticker: (stickerId, placement) =>
+    api.post("/gamification/stickers/place", { sticker_id: stickerId, placement }).then((r) => r.data),
+  // type: "feed" | "pat"
+  companion: (type, itemKey) =>
+    api.post("/gamification/companion/interact", { interaction_type: type, item_key: itemKey }).then((r) => r.data),
+  buyShield: () => api.post("/gamification/shield").then((r) => r.data),
 };
 
 // --- Student: Day/Week/Month/Exam planner ---
@@ -85,6 +117,9 @@ export const plannerApi = {
   replan: (planId) =>
     api.post(`/tutor/planner/${planId}/replan`, {}, { timeout: 200000 }).then((r) => r.data.plan),
   toggleTask: (taskId) => api.patch(`/tutor/planner/tasks/${taskId}/toggle`).then((r) => r.data.task),
+  // A cleared in-chat Progress Gate auto-ticks the matching plan task.
+  // payload: { topic_id?|topic_name?, subject_name?, text, concept? } → { task, matched }
+  cover: (payload) => api.post("/tutor/planner/cover", payload).then((r) => r.data),
   archive: (planId) => api.delete(`/tutor/planner/${planId}`).then((r) => r.data),
 };
 

@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from "react";
-import { Search, ChevronRight, ArrowLeft, MessageCircle, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X, NotebookPen } from "lucide-react";
+import { Search, ChevronRight, ArrowLeft, MessageCircle, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X, NotebookPen, Trophy } from "lucide-react";
 import { Card, Button } from "../../ui/components.jsx";
 import { tint } from "../../ui/tints.js";
 import CurriculumPicker from "../../ui/CurriculumPicker.jsx";
 
-export default function StudentHome({ user, path, subjects, progress, onOpenTopic, onOpenNotebooks, onSetLevel }) {
+export default function StudentHome({ user, path, subjects, progress, onOpenTopic, onOpenNotebooks, onOpenRewards, onSetLevel }) {
   const [active, setActive] = useState(null);
   const [q, setQ] = useState("");
   const [picking, setPicking] = useState(false);
@@ -57,6 +57,18 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
           <div className="min-w-0 flex-1">
             <p className="text-lg font-extrabold">Study from my notes</p>
             <p className="text-sm text-white/85">Upload your notes & PDFs, get a Day/Week/Exam plan, then learn & test — with your notes as the priority.</p>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0" />
+        </button>
+      )}
+
+      {onOpenRewards && (
+        <button onClick={onOpenRewards}
+          className="mt-4 flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-amber-400 to-orange-500 p-5 text-left text-white shadow-lg shadow-amber-500/30 transition-all hover:-translate-y-0.5 hover:shadow-xl">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/20"><Trophy className="h-6 w-6" /></span>
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-extrabold">My Rewards</p>
+            <p className="text-sm text-white/85">Your XP, level, streak, trophies, badges{user?.grade && user.grade <= 4 ? ", pet & sticker book" : ""} — all in one place.</p>
           </div>
           <ChevronRight className="h-5 w-5 shrink-0" />
         </button>

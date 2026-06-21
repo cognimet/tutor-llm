@@ -1,14 +1,19 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
-  CalendarDays, Check, Loader2, Sparkles, BookOpen, Target, Repeat, ClipboardCheck, PartyPopper, RefreshCw,
+  CalendarDays, Check, Loader2, Sparkles, BookOpen, Target, Repeat, ClipboardCheck,
+  PartyPopper, RefreshCw, Gamepad2, ClipboardList,
 } from "lucide-react";
-import { plannerApi } from "../api/endpoints.js";
+import { plannerApi, notesApi, gamificationApi } from "../api/endpoints.js";
+import NotesPlayHub from "./NotesPlayHub.jsx";
+import { CelebrationOverlay } from "./Gamification.jsx";
 
 /**
  * The study-notes plan as a checklist, pinned beside the chat. Same look as the
  * Study-hub planner (tasks grouped by date, circle checkboxes), plus an overall
- * completion bar. The plan is notes-driven (whole subject, `from_notes`); the
- * student ticks tasks off as they learn in the chat next to it.
+ * completion bar. The plan is notes-driven and ISOLATED to the active session:
+ * it's scoped to the chat's topic and built strictly from the open notes
+ * (`noteIds`), so a different/old note's plan never bleeds in. Falls back to a
+ * whole-subject plan when no topic/notes are in scope.
  */
 const MS_DAY = 86400000;
 const startToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
@@ -25,9 +30,14 @@ const KIND = {
   revise:   { icon: Repeat,         cls: "bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300" },
   assess:   { icon: ClipboardCheck, cls: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300" },
 };
-const HORIZONS = [["day", "Today", "☀️"], ["week", "This week", "📅"], ["exam", "Before my exam", "🎯"]];
+// Gamified study-horizon presets (spec §4.3).
+const HORIZONS = [
+  ["day", "Class Test Sprint", "🏃"],
+  ["week", "Weekly Adventure", "📅"],
+  ["exam", "Exam Shield", "🛡️"],
+];
 
-export default function NotesChecklist({ subjectName, grad = "from-indigo-500 to-violet-500" }) {
+export default function NotesChecklist({ topicName, chapterName, subjectName, noteIds = [], grad = "from-indigo-500 to-violet-500", onPrompt, refreshKey = 0 }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -35,18 +45,55 @@ export default function NotesChecklist({ subjectName, grad = "from-indigo-500 to
   const [examDate, setExamDate] = useState("");
   const [cheer, setCheer] = useState(false);
   const [remaking, setRemaking] = useState(false);   // re-build the plan from notes
+  const [tab, setTab] = useState("board");           // board | play
+  const [noteId, setNoteId] = useState(null);        // active note for the Play Hub
+  const [celebration, setCelebration] = useState(null); // XP/badge reward overlay
+
+  // The plan is scoped to the chat's topic; when launched from specific notes we
+  // also isolate generation to exactly those notes. Stable string key for deps.
+  const noteIdsKey = (noteIds || []).join(",");
+
+  // Play Hub source: the active note when studying from notes, else the most
+  // recent note in the subject.
+  useEffect(() => {
+    if (noteIds && noteIds.length) { setNoteId(noteIds[0]); return; }
+    let alive = true;
+    notesApi.list({ scope: "subject", subject_name: subjectName })
+      .then((d) => { if (alive) setNoteId((d.notes || [])[0]?.id ?? null); })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjectName, noteIdsKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { const d = await plannerApi.index({ scope: "subject", subject_name: subjectName }); setPlans(d.plans || []); }
-    catch { /* */ } finally { setLoading(false); }
-  }, [subjectName]);
+    try {
+      // Topic scope isolates this plan from other notes/topics in the subject;
+      // fall back to a subject-wide plan only when there's no topic in scope.
+      const params = topicName ? { topic_name: topicName } : { scope: "subject", subject_name: subjectName };
+      const d = await plannerApi.index(params);
+      setPlans(d.plans || []);
+    } catch { /* */ } finally { setLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topicName, subjectName, noteIdsKey]);
   useEffect(() => { load(); }, [load]);
+
+  // A cleared Progress Gate auto-ticked a task on the server → re-pull so the
+  // checklist shows the tick (and the completion bar) without a manual refresh.
+  useEffect(() => {
+    if (refreshKey) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   const make = async () => {
     setBusy(true);
     try {
-      await plannerApi.generate({ scope: "subject", subject_name: subjectName, from_notes: true, horizon, exam_date: horizon === "exam" ? examDate : undefined });
+      const payload = topicName
+        ? { scope: "topic", topic_name: topicName, chapter_name: chapterName, subject_name: subjectName,
+            from_notes: true, note_ids: noteIds, horizon, exam_date: horizon === "exam" ? examDate : undefined }
+        : { scope: "subject", subject_name: subjectName, from_notes: true,
+            horizon, exam_date: horizon === "exam" ? examDate : undefined };
+      await plannerApi.generate(payload);
       await load();
       setRemaking(false);
     } catch { /* */ } finally { setBusy(false); }
@@ -56,8 +103,21 @@ export default function NotesChecklist({ subjectName, grad = "from-indigo-500 to
     try {
       const u = await plannerApi.toggleTask(task.id);
       setPlans((ps) => ps.map((p) => ({ ...p, tasks: (p.tasks || []).map((t) => t.id === task.id ? u : t) })));
-      if (u.status === "done") { setCheer(true); setTimeout(() => setCheer(false), 1500); }
+      if (u.status === "done") {
+        setCheer(true); setTimeout(() => setCheer(false), 1500);
+        // Award XP for completing a quest → drives the celebration overlay.
+        try {
+          const reward = await gamificationApi.reward({ action: "complete_quest", topic: topicName || subjectName });
+          setCelebration(reward);
+        } catch { /* gamification is non-blocking */ }
+      }
     } catch { /* */ }
+  };
+
+  // "Let's Go!" — push a pre-formatted, notes-grounded prompt into the chat.
+  const launchQuest = (task) => {
+    onPrompt?.(`Let's work on "${task.title}". Teach it to me step by step using my own notes, `
+      + `with a clear example and a quick visual if it helps.`);
   };
 
   const allTasks = plans.flatMap((p) => p.tasks || []);
@@ -69,8 +129,7 @@ export default function NotesChecklist({ subjectName, grad = "from-indigo-500 to
   }
 
   // No plan yet (or remaking) → build one from the student's notes.
-  if (allTasks.length === 0 || remaking) {
-    return (
+  const board = (allTasks.length === 0 || remaking) ? (
       <div className="flex flex-col gap-3 p-1">
         <div className="text-center">
           <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-2xl dark:bg-indigo-500/15">🗺️</span>
@@ -99,10 +158,7 @@ export default function NotesChecklist({ subjectName, grad = "from-indigo-500 to
           <button onClick={() => setRemaking(false)} className="text-center text-[11px] font-bold text-slate-400 hover:text-indigo-600">Cancel</button>
         )}
       </div>
-    );
-  }
-
-  return (
+  ) : (
     <div className="space-y-4">
       {/* Overall completion */}
       <div className="rounded-2xl border border-slate-100 bg-white p-3 dark:border-white/10 dark:bg-slate-800/60">
@@ -137,22 +193,30 @@ export default function NotesChecklist({ subjectName, grad = "from-indigo-500 to
                       const k = KIND[t.kind] || KIND.learn;
                       const isDone = t.status === "done";
                       return (
-                        <button key={t.id} onClick={() => toggle(t)}
-                          className={`flex w-full items-start gap-2.5 rounded-2xl border p-2.5 text-left transition-all ${
+                        <div key={t.id}
+                          className={`rounded-2xl border p-2.5 transition-all ${
                             isDone ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-500/20 dark:bg-emerald-500/5"
                               : "border-slate-100 bg-white hover:border-indigo-200 dark:border-white/10 dark:bg-slate-800"}`}>
-                          <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition-colors ${
-                            isDone ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 dark:border-white/20"}`}>
-                            {isDone && <Check className="h-3 w-3" strokeWidth={3} />}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className={`block text-[13px] font-extrabold leading-snug ${isDone ? "text-slate-400 line-through" : "text-slate-800 dark:text-slate-100"}`}>{t.title}</span>
-                            <span className="mt-1 inline-flex items-center gap-1">
-                              <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold ${k.cls}`}><k.icon className="h-2.5 w-2.5" /> {t.kind}</span>
-                              <span className="text-[10px] font-bold text-slate-400">~{t.estimated_minutes}m</span>
+                          <button onClick={() => toggle(t)} className="flex w-full items-start gap-2.5 text-left">
+                            <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition-colors ${
+                              isDone ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 dark:border-white/20"}`}>
+                              {isDone && <Check className="h-3 w-3" strokeWidth={3} />}
                             </span>
-                          </span>
-                        </button>
+                            <span className="min-w-0 flex-1">
+                              <span className={`block text-[13px] font-extrabold leading-snug ${isDone ? "text-slate-400 line-through" : "text-slate-800 dark:text-slate-100"}`}>{t.title}</span>
+                              <span className="mt-1 inline-flex items-center gap-1">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold ${k.cls}`}><k.icon className="h-2.5 w-2.5" /> {t.kind}</span>
+                                <span className="text-[10px] font-bold text-slate-400">~{t.estimated_minutes}m</span>
+                              </span>
+                            </span>
+                          </button>
+                          {!isDone && onPrompt && (
+                            <button onClick={() => launchQuest(t)}
+                              className={`mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-br ${grad} px-3 py-1.5 text-[11px] font-extrabold text-white shadow-sm active:scale-[0.98]`}>
+                              Let's Go! 🚀
+                            </button>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
@@ -163,6 +227,26 @@ export default function NotesChecklist({ subjectName, grad = "from-indigo-500 to
         );
       })}
       <p className="pb-1 text-center text-[11px] font-bold text-slate-400">Tap a task when you finish it 👆</p>
+    </div>
+  );
+
+  // Quest Board / Play Hub tabs (spec §3 & §4.4).
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 dark:bg-white/5">
+        {[["board", "Quest Board", ClipboardList], ["play", "Play Hub", Gamepad2]].map(([id, label, Icon]) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold transition-colors ${
+              tab === id ? "bg-white text-indigo-600 shadow-sm dark:bg-slate-800 dark:text-indigo-300"
+                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"}`}>
+            <Icon className="h-3.5 w-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+        {tab === "play" ? <NotesPlayHub noteId={noteId} /> : board}
+      </div>
+      <CelebrationOverlay reward={celebration} onClose={() => setCelebration(null)} />
     </div>
   );
 }

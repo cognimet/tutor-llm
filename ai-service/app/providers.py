@@ -31,6 +31,37 @@ _BACKOFF_5XX = [1, 2, 4, 8]
 _MAX_TOKENS = 2048
 
 
+def pydantic_to_gemini_schema(model) -> dict:
+    """Converts a Pydantic model into the OpenAPI schema structure expected by
+    Gemini's REST API (uppercase type names, no $defs)."""
+    if not model:
+        return {}
+    schema = model.model_json_schema()
+
+    type_mapping = {
+        "string": "STRING", "integer": "INTEGER", "number": "NUMBER",
+        "boolean": "BOOLEAN", "array": "ARRAY", "object": "OBJECT",
+    }
+
+    def convert_prop(prop_schema: dict) -> dict:
+        t = prop_schema.get("type", "string")
+        gemini_type = type_mapping.get(t, "STRING")
+        out = {"type": gemini_type}
+        if gemini_type == "ARRAY" and "items" in prop_schema:
+            out["items"] = convert_prop(prop_schema["items"])
+        elif gemini_type == "OBJECT" and "properties" in prop_schema:
+            out["properties"] = {k: convert_prop(v) for k, v in prop_schema["properties"].items()}
+            if "required" in prop_schema:
+                out["required"] = prop_schema["required"]
+        elif "anyOf" in prop_schema:
+            types = [x.get("type") for x in prop_schema["anyOf"] if x.get("type") != "null"]
+            if types:
+                out["type"] = type_mapping.get(types[0], "STRING")
+        return out
+
+    return convert_prop(schema)
+
+
 def decode_json(text: str):
     """Tolerant JSON extraction (strips fences, grabs first {...}/[...] block)."""
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
@@ -157,10 +188,12 @@ class GeminiProvider:
         except (KeyError, IndexError, TypeError):
             return ""
 
-    def _payload(self, system: str, user: str, json_mode: bool) -> dict:
+    def _payload(self, system: str, user: str, json_mode: bool, schema=None) -> dict:
         gen = {"temperature": 0.4 if json_mode else 0.7, "maxOutputTokens": _MAX_TOKENS}
         if json_mode:
             gen["responseMimeType"] = "application/json"
+            if schema is not None:
+                gen["responseSchema"] = pydantic_to_gemini_schema(schema)
         return {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -174,10 +207,10 @@ class GeminiProvider:
             {"x-goog-api-key": self.key}, self.timeout)
         return self._text_of(data), self._usage(data)
 
-    async def json(self, system: str, user: str, fallback) -> tuple[dict, Usage]:
+    async def json(self, system: str, user: str, fallback, schema=None) -> tuple[dict, Usage]:
         data = await _post_with_retry(
             f"{self.base}/models/{self.model}:generateContent",
-            self._payload(system, user, True),
+            self._payload(system, user, True, schema),
             {"x-goog-api-key": self.key}, self.timeout)
         decoded = decode_json(self._text_of(data))
         return (decoded if isinstance(decoded, (dict, list)) else fallback), self._usage(data)
@@ -228,7 +261,7 @@ class OpenAIProvider:
         return Usage(model=self.model, prompt_tokens=p, completion_tokens=c,
                      total_tokens=int(u.get("total_tokens", p + c)))
 
-    def _payload(self, system: str, user: str, json_mode: bool) -> dict:
+    def _payload(self, system: str, user: str, json_mode: bool, schema=None) -> dict:
         payload = {
             "model": self.model,
             "messages": [{"role": "system", "content": system},
@@ -237,7 +270,17 @@ class OpenAIProvider:
             "max_tokens": _MAX_TOKENS,
         }
         if json_mode:
-            payload["response_format"] = {"type": "json_object"}
+            if schema is not None:
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": schema.__name__ if hasattr(schema, "__name__") else "ResponseSchema",
+                        "schema": schema.model_json_schema(),
+                        "strict": True,
+                    },
+                }
+            else:
+                payload["response_format"] = {"type": "json_object"}
         return payload
 
     @staticmethod
@@ -253,9 +296,9 @@ class OpenAIProvider:
                                       self._headers(), self.timeout)
         return self._text_of(data), self._usage(data)
 
-    async def json(self, system: str, user: str, fallback) -> tuple[dict, Usage]:
+    async def json(self, system: str, user: str, fallback, schema=None) -> tuple[dict, Usage]:
         data = await _post_with_retry(f"{self.base}/chat/completions",
-                                      self._payload(system, user, True),
+                                      self._payload(system, user, True, schema),
                                       self._headers(), self.timeout)
         decoded = decode_json(self._text_of(data))
         return (decoded if isinstance(decoded, (dict, list)) else fallback), self._usage(data)
@@ -339,7 +382,10 @@ class AnthropicProvider:
                                       self._headers(), self.timeout)
         return self._text_of(data), self._usage(data)
 
-    async def json(self, system: str, user: str, fallback) -> tuple[dict, Usage]:
+    async def json(self, system: str, user: str, fallback, schema=None) -> tuple[dict, Usage]:
+        # Anthropic has no native response_schema; the firm JSON instruction in
+        # _payload + tolerant decode_json() handle it. `schema` is accepted for a
+        # uniform interface and ignored here.
         data = await _post_with_retry(f"{self.base}/v1/messages",
                                       self._payload(system, user, True),
                                       self._headers(), self.timeout)
@@ -400,13 +446,15 @@ class GoogleGenAIProvider:
             self._client = genai.Client()
         return self._client
 
-    def _config(self, system: str, json_mode: bool):
+    def _config(self, system: str, json_mode: bool, schema=None):
         from google.genai import types
         kw = {"temperature": 0.4 if json_mode else 0.7, "max_output_tokens": _MAX_TOKENS}
         if system:
             kw["system_instruction"] = system
         if json_mode:
             kw["response_mime_type"] = "application/json"
+            if schema is not None:
+                kw["response_schema"] = schema
         return types.GenerateContentConfig(**kw)
 
     def _usage(self, resp) -> Usage:
@@ -425,10 +473,10 @@ class GoogleGenAIProvider:
             log.error("google text failed: %s", e)
             return "", Usage(model=self.model)
 
-    async def json(self, system: str, user: str, fallback) -> tuple[dict, Usage]:
+    async def json(self, system: str, user: str, fallback, schema=None) -> tuple[dict, Usage]:
         try:
             resp = await self._client_().aio.models.generate_content(
-                model=self.model, contents=user, config=self._config(system, True))
+                model=self.model, contents=user, config=self._config(system, True, schema))
             decoded = decode_json(resp.text or "")
             return (decoded if isinstance(decoded, (dict, list)) else fallback), self._usage(resp)
         except Exception as e:  # noqa: BLE001

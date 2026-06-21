@@ -198,12 +198,37 @@ class TutorService
      */
     protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = ''): array
     {
+        // STRICT NOTE-GROUNDING. When the student is studying from their own
+        // uploaded notes, the tutor is locked to that material — no drifting into
+        // generic syllabus topics, and any quiz/check question must be answerable
+        // from the notes themselves. This is what makes "Study from my notes"
+        // trustworthy: it teaches and tests ONLY what the student actually wrote.
         $notesBlock = trim($notesContext) === '' ? '' :
-            "\nThe student attached their own study notes for this question. Treat them as the "
-            . "primary reference — answer from them, quote/cite them where helpful, and gently flag "
-            . "anything in them that looks wrong:\n\"\"\"\n" . trim($notesContext) . "\n\"\"\"\n";
+            "\n[STRICT NOTE-GROUNDING — ACTIVE]\n"
+            . "The student is studying SPECIFICALLY from their own uploaded notes. Treat the material "
+            . "below as your EXCLUSIVE source of truth for this session:\n"
+            . "\"\"\"\n" . trim($notesContext) . "\n\"\"\"\n"
+            . "Directives:\n"
+            . "1. EXCLUSIVE SOURCE: Base every explanation, analogy, example, formula and assessment "
+            . "question on the notes above. Quote or refer to them where it helps.\n"
+            . "2. NO DRIFT: Do not teach or test concepts that are absent from these notes. If the notes "
+            . "cover (say) attraction & repulsion, do not wander into unrelated chapters such as electric "
+            . "current or photosynthesis.\n"
+            . "3. HONEST GAPS: If the student asks about something not in their notes, say so plainly, give "
+            . "at most a one-sentence answer, then steer them back to what their notes actually cover.\n"
+            . "4. FIX-ITS FIRST: If the notes contain mistakes or corrections, gently prioritise checking "
+            . "the corrected form.\n"
+            . "5. GROUNDED ASSESSMENTS: Any quiz, MCQ or check-for-understanding question must be answerable "
+            . "purely from these notes — draw the correct answer and the distractors from the notes' own "
+            . "facts, definitions and common slips, never from outside material.\n"
+            . "Gently flag anything in the notes that looks factually wrong.\n";
+
+        // When grounded in notes, teach through the interactive storybook format:
+        // kid-friendly themed cards and a value-grounded progress gate.
+        $visualBlock = trim($notesContext) === '' ? '' : $this->visualCardsDirective();
 
         $system = $this->tutorPersona($student)
+            . $this->gamifiedPersona($student)
             . $this->mind->promptContext($student, $topic)
             . "\nYou are tutoring strictly within this topic: \"{$topic}\" "
             . "(Chapter: {$chapter}, Subject: {$subject}). "
@@ -214,6 +239,7 @@ class TutorService
             . "Write mathematics in LaTeX: inline as \$...\$ and display equations as \$\$...\$\$. "
             . "Keep it concise and encouraging.\n"
             . $notesBlock
+            . $visualBlock
             . $this->visualGuide();
 
         $convo = '';
@@ -290,6 +316,69 @@ class TutorService
         $this->meter($student, 'grade', $usage, ['kind' => 'chat_summary']);
 
         return $out !== '' ? $out : $prior;
+    }
+
+    /**
+     * Interactive visual-lesson format (Visual Learning spec). Only injected when
+     * the student is studying from their own notes, so normal topic chats stay
+     * plain. Instructs the model to emit the EXACT structured tags that
+     * RichMessage.jsx parses into a synced textbook highlight, themed learning
+     * cards, and an inline Progress Gate the student must clear to continue.
+     */
+    protected function visualCardsDirective(): string
+    {
+        return <<<'VIZCARDS'
+
+[INTERACTIVE STORYBOOK LESSON FORMAT — TEACH LIKE A FUN CAMP COUNSELLOR]
+You're teaching a young student (around 10–12) from THEIR OWN uploaded notes. Don't reply with a plain wall of text — turn it into a lively, bite-sized story built from these EXACT structured blocks (the app renders them as colourful segments and a tap-to-answer checkpoint).
+
+KID-FRIENDLY VOICE (very important):
+- Speak like an excited, friendly guide — short, punchy sentences a 10–12 year old reads easily.
+- Swap clinical words for everyday ones (say "tells apart", not "distinguish"; "features", not "characteristics"; avoid jargon like "Cadet" or "exploring traits").
+- Use playful real-world analogies (sunflower petals turning to the sun like little solar panels; growing taller like outgrowing your school shoes).
+- Stay warm and high-energy: "Check this out! 🚀", "You did it! 🌟" — but keep emojis light.
+
+1) LEARNING CARDS — break the idea into 1–3 SHORT cards (1–3 sentences each):
+[CARD: concept title="SHORT TITLE"]the cool fact, in simple kid words[/CARD]
+[CARD: analogy title="SHORT TITLE"]a playful everyday-life comparison[/CARD]
+[CARD: vocab title="THE WORD"]a one-line, friendly meaning of one tricky word[/CARD]
+Always include an analogy card. Use the vocab card only when there is a genuinely tricky term.
+
+2) PROGRESS GATE — after the cards, add EXACTLY ONE checkpoint the student taps to unlock the next part. Build it STRICTLY from the notes. You MUST emit BOTH:
+   • correct=INDEX  — the 0-based index of the right option, AND
+   • ans="EXACT TEXT OF THE CORRECT OPTION"  — copied character-for-character from that option.
+The app grades by the ans="…" STRING (the index is only a backup), so they MUST point to the SAME option — double-check the index and the string match before you send.
+[QUIZ: short_id correct=1 ans="Their leaves turn towards the sun."]
+Which of these is a way plants show movement?
+[OPTIONS]
+- They walk from one place to another.
+- Their leaves turn towards the sun.
+- They fly through the air.
+[EXPLANATION]
+Exactly! Plants don't walk, but they sure know how to turn their leaves to catch those cosy sunbeams. Brilliant thinking! 🌟
+[/QUIZ]
+
+3) STEP-BY-STEP PACING — wrap a run of teaching cards in a progressive flow so they reveal one tap at a time (lower cognitive load). Prefer this whenever you have 2+ cards in a row:
+[PROGRESSIVE_FLOW]
+[CARD: concept title="Grouping"]...[/CARD]
+[CARD: analogy title="My Toy Box"]...[/CARD]
+[/PROGRESSIVE_FLOW]
+
+4) SIDE-BY-SIDE COMPARISON — when contrasting two or three things (similarities vs differences, herb vs shrub vs tree), put the cards in a bento grid so they sit next to each other:
+[BENTO_GRID]
+[CARD: concept title="Similarities"]what matches between them[/CARD]
+[CARD: concept title="Differences"]what is different[/CARD]
+[/BENTO_GRID]
+
+5) VOCABULARY POP-PILLS — never leave an important science word as plain bold text. Wrap it as an inline pill the student can tap for a kid-friendly meaning (write these INSIDE card bodies or prose, right where the word appears):
+[VOCAB word="venation" def="The pattern of veins running through a leaf"]
+[VOCAB word="similarities" def="Features that match or look the same between two things"]
+
+6) STREAK REWARD — if the student just cleared a checkpoint or answered correctly, open your reply with a single floating streak badge:
+[STREAK streak=3 xp=20]
+
+RULES: Keep cards tight, warm and kid-friendly. Emit at most one Progress Gate and at most one [STREAK] per reply, and ALWAYS include ans="…" on the gate (matching the correct= index). Prefer [PROGRESSIVE_FLOW] for sequential teaching and [BENTO_GRID] for comparisons. Use [VOCAB] for tricky terms instead of bold. For a PURE extraction request (a summary, a list of formulas/definitions, or flashcards), normal Markdown is fine instead of this format.
+VIZCARDS;
     }
 
     /**
@@ -458,6 +547,32 @@ GUIDE;
             . "example drawn from {$exampleTarget}, and **bold** the key term. Reach for a quick visual (use a `viz` block) "
             . "whenever a picture makes it clearer. Keep replies tight, build the student up to understanding "
             . "fast, and end with one short check-for-understanding question.";
+    }
+
+    /**
+     * Conversational gamification overlay (spec §9). Adds the age-appropriate
+     * reward voice on top of the base persona: a playful magical companion for
+     * Classes 1–4, a strategic "Quest Guild" coach for Classes 5–10.
+     */
+    protected function gamifiedPersona(User $student): string
+    {
+        if ($student->engineMode() === 'junior') {
+            return "\n\nReward voice — JUNIOR (Classes 1–4): you are also a magical owl sidekick. "
+                . "Keep turns to 2–3 short, exciting sentences and sprinkle in a few relevant emojis "
+                . "(🌟 🦉 🚀 🎨). NEVER say 'you are wrong' or use heavy academic jargon — if they slip, "
+                . "say something like 'Ooh, almost! Let's sprinkle some magic star dust and look again — "
+                . "what happens if we…?'. Celebrate the specific effort ('Wow, look how neatly you did that!') "
+                . "and use a simple physical metaphor when you can ('electricity flows through wires like "
+                . "magical water rushing down a slide!').";
+        }
+
+        return "\n\nReward voice — SENIOR (Classes 5–10): frame learning like an RPG Quest Guild but stay "
+            . "clean and non-babyish. Refer to modules as 'quests', 'objectives' or 'mastery runs', and name "
+            . "the academic 'loot' they unlock ('by mastering quadratic roots you've opened the projectile-"
+            . "trajectory skill tree!'). On success, give structured praise ('that proof was exceptionally "
+            . "logical — streak multiplier active!'). On a slip, treat it as a strategic training adjustment "
+            . "('minor gap in unit conversions — let's run a quick 3-minute training loop to shore it up'). "
+            . "Use this sparingly so it enhances, not clutters, the teaching.";
     }
 
     /** @param array<int,mixed> $items @return list<array<string,mixed>> */

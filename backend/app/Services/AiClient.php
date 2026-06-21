@@ -64,7 +64,7 @@ class AiClient
     public function json(string $system, string $user, array $fallback = [], ?string $topic = null, ?string $action = null, ?int $studentId = null, ?int $subjectId = null, ?array &$usage = null): array
     {
         $data = $this->post('/ai/json', array_filter([
-            'system' => $system, 'user' => $user, 'fallback' => $fallback, 'topic' => $topic, 'action' => $action,
+            'system' => $system, 'user' => $user, 'fallback' => empty($fallback) ? (object) $fallback : $fallback, 'topic' => $topic, 'action' => $action,
             'student_id' => $studentId, 'subject_id' => $subjectId,
         ], fn ($v) => $v !== null));
         $this->captureUsage($data, $usage);

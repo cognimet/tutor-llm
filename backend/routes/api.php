@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\LearnerProfileController;
 use App\Http\Controllers\Api\LearningPlanController;
 use App\Http\Controllers\Api\FigureController;
 use App\Http\Controllers\Api\MistakeController;
+use App\Http\Controllers\Api\GamificationController;
 use App\Http\Controllers\Api\NotesController;
 use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\PlannerController;
@@ -80,8 +81,26 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tutor/notes', [NotesController::class, 'index']);
         Route::post('/tutor/notes', [NotesController::class, 'store'])
             ->middleware('token.gate:notes');
+        // Zero-friction "Smart Drop": AI auto-scopes + audits the upload.
+        Route::post('/tutor/notes/auto-scope', [NotesController::class, 'autoScope'])
+            ->middleware('token.gate:notes');
         Route::get('/tutor/notes/{note}', [NotesController::class, 'show']);
+        Route::get('/tutor/notes/{note}/flashcards', [NotesController::class, 'flashcards']);
         Route::delete('/tutor/notes/{note}', [NotesController::class, 'destroy']);
+
+        // Gamification (XP / level / streak / badges) for the Quest flow.
+        Route::get('/tutor/me/gamification', [GamificationController::class, 'stats']);
+        Route::post('/tutor/quest/reward', [GamificationController::class, 'reward']);
+
+        // Universal (Dual-Engine) Gamification — spec §8 (Junior + Senior).
+        Route::prefix('gamification')->group(function () {
+            Route::get('/profile', [GamificationController::class, 'profile']);
+            Route::post('/claim-reward', [GamificationController::class, 'claimReward']);
+            Route::get('/stickers', [GamificationController::class, 'stickers']);
+            Route::post('/stickers/place', [GamificationController::class, 'placeSticker']);
+            Route::post('/companion/interact', [GamificationController::class, 'companionInteract']);
+            Route::post('/shield', [GamificationController::class, 'buyShield']);
+        });
 
         // Textbook diagrams: figures ingested from an uploaded book (page images
         // the chat shows beside the lesson) + ingest progress for the upload UI.
@@ -97,6 +116,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/tutor/planner/{plan}/replan', [PlannerController::class, 'replan'])
             ->middleware('token.gate:plan');
         Route::patch('/tutor/planner/tasks/{task}/toggle', [PlannerController::class, 'toggleTask']);
+        // A cleared in-chat Progress Gate auto-ticks the matching plan task.
+        Route::post('/tutor/planner/cover', [PlannerController::class, 'cover']);
         Route::delete('/tutor/planner/{plan}', [PlannerController::class, 'destroy']);
 
         // Spaced-repetition flashcards (from notes + mistakes)

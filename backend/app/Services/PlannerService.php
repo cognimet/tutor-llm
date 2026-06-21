@@ -33,14 +33,16 @@ class PlannerService
         $exam = $examDate ? Carbon::parse($examDate)->startOfDay() : null;
         $daysRemaining = $exam ? max(1, Carbon::today()->diffInDays($exam, false)) : null;
 
+        $gaps = $isSubject ? $this->openGapsForSubject($user, $ctx['subject_id'] ?? null)
+                           : $this->openGaps($user, $label);
+
         $built = $this->ai->studySchedule([
             'topic'          => $label,
             'horizon'        => $horizon,
             'days_remaining' => $daysRemaining,
             'exam_date'      => $exam?->toDateString(),
             'notes_summary'  => $this->notesSummary($user, $ctx),
-            'gaps'           => $isSubject ? $this->openGapsForSubject($user, $ctx['subject_id'] ?? null)
-                                           : $this->openGaps($user, $label),
+            'gaps'           => $gaps,
             'mastery'        => $isSubject ? 0 : $this->masteryFor($user, $label),
             'from_notes'     => (bool) ($ctx['from_notes'] ?? $isSubject),
         ]);
@@ -64,10 +66,20 @@ class PlannerService
             'exam_date'    => $exam?->toDateString(),
             'title'        => $built['title'] ?: $this->defaultTitle($horizon, $label),
             'status'       => 'active',
-            'meta'         => ['summary' => $built['summary'] ?? '', 'scope' => $isSubject ? 'subject' : 'topic'],
+            'meta'         => [
+                'summary'  => $built['summary'] ?? '',
+                'scope'    => $isSubject ? 'subject' : 'topic',
+                // Remember which uploaded notes this plan was built from, so it
+                // stays isolated to them (and replan keeps the same scope).
+                'note_ids' => array_values(array_filter(array_map('intval', $ctx['note_ids'] ?? []))),
+            ],
         ]);
 
-        $this->writeTasks($plan, $built['tasks'] ?? [], $exam, $daysRemaining);
+        // Never ship an empty plan: if the LLM returned nothing (rate-limited /
+        // empty), fall back to a sensible deterministic schedule.
+        $tasks = ! empty($built['tasks']) ? $built['tasks']
+            : $this->defaultTasks($horizon, $label, $daysRemaining, $gaps);
+        $this->writeTasks($plan, $tasks, $exam, $daysRemaining);
 
         return $plan->load('tasks');
     }
@@ -82,16 +94,19 @@ class PlannerService
 
         $ctx = $isSubject
             ? ['scope' => 'subject', 'subject_id' => $plan->subject_id, 'subject_name' => $plan->subject_name]
-            : ['topic_name' => $plan->topic_name, 'topic_id' => $plan->topic_id];
+            : ['topic_name' => $plan->topic_name, 'topic_id' => $plan->topic_id, 'note_ids' => $plan->meta['note_ids'] ?? []];
+
+        $label = $isSubject ? ($plan->subject_name ?? $plan->topic_name) : $plan->topic_name;
+        $gaps = $isSubject ? $this->openGapsForSubject($user, $plan->subject_id)
+                           : $this->openGaps($user, $plan->topic_name);
 
         $built = $this->ai->studySchedule([
-            'topic'          => $isSubject ? ($plan->subject_name ?? $plan->topic_name) : $plan->topic_name,
+            'topic'          => $label,
             'horizon'        => $plan->horizon,
             'days_remaining' => $daysRemaining,
             'exam_date'      => $exam?->toDateString(),
             'notes_summary'  => $this->notesSummary($user, $ctx),
-            'gaps'           => $isSubject ? $this->openGapsForSubject($user, $plan->subject_id)
-                                           : $this->openGaps($user, $plan->topic_name),
+            'gaps'           => $gaps,
             'mastery'        => $isSubject ? 0 : $this->masteryFor($user, $plan->topic_name),
             'from_notes'     => (bool) $plan->from_notes,
         ]);
@@ -99,7 +114,9 @@ class PlannerService
 
         // Preserve completed history; replace everything still to do.
         $plan->tasks()->where('status', 'todo')->delete();
-        $this->writeTasks($plan, $built['tasks'] ?? [], $exam, $daysRemaining);
+        $tasks = ! empty($built['tasks']) ? $built['tasks']
+            : $this->defaultTasks($plan->horizon, $label, $daysRemaining, $gaps);
+        $this->writeTasks($plan, $tasks, $exam, $daysRemaining);
         $plan->update(['meta' => array_merge($plan->meta ?? [], [
             'summary'      => $built['summary'] ?? ($plan->meta['summary'] ?? ''),
             'replanned_at' => now()->toIso8601String(),
@@ -133,12 +150,80 @@ class PlannerService
         }
     }
 
+    /**
+     * Deterministic fallback schedule used when the LLM returns no tasks (free-tier
+     * rate-limit / empty response), so the planner never produces an empty plan.
+     * Builds a learn → practise → revise → assess sequence around the open gaps
+     * (or the topic/subject label when there are none).
+     *
+     * @param  array  $gaps  [['concept'=>..,'severity'=>..], ...]
+     * @return array<int,array<string,mixed>>  tasks in the AI schedule shape
+     */
+    protected function defaultTasks(string $horizon, string $label, ?int $daysRemaining, array $gaps = []): array
+    {
+        $concepts = array_values(array_filter(array_map(
+            fn ($g) => is_array($g) ? ($g['concept'] ?? null) : null, $gaps)));
+        $focus = ! empty($concepts) ? array_slice($concepts, 0, 6) : [$label];
+
+        $mk = fn (int $day, string $kind, string $title, string $detail, ?string $concept = null, int $min = 25): array => [
+            'day_index' => $day, 'kind' => $kind, 'title' => $title,
+            'detail' => $detail, 'concept' => $concept, 'estimated_minutes' => $min,
+        ];
+
+        if ($horizon === 'day') {
+            $c = $focus[0];
+            return [
+                $mk(0, 'learn', "Understand {$label}", "Read your notes for {$label} and write the key ideas in your own words.", $c, 30),
+                $mk(0, 'practice', "Practise {$label}", "Solve 5 questions or worked examples on {$label}.", $c, 25),
+                $mk(0, 'revise', 'Quick revision', "Make a 5-point summary of {$label} you can revise later.", null, 15),
+            ];
+        }
+
+        if ($horizon === 'exam') {
+            $span = max(1, $daysRemaining ?? 7);
+            $tasks = [];
+            $n = max(count($focus), 1);
+            foreach ($focus as $i => $c) {
+                $day = $n > 1 ? (int) floor($i * ($span - 1) / max(1, $n - 1)) : 0;
+                $tasks[] = $mk($day, 'learn', "Master {$c}", "Revise {$c} from your notes and clear any doubts.", $c, 35);
+                $tasks[] = $mk($day, 'practice', "Practise {$c}", "Solve previous-year / textbook questions on {$c}.", $c, 30);
+            }
+            $tasks[] = $mk(max(0, $span - 2), 'revise', 'Full revision', 'Revise all key formulas, definitions and diagrams.', null, 40);
+            $tasks[] = $mk(max(0, $span - 1), 'assess', 'Mock test', "Take a timed self-test covering {$label}.", null, 45);
+            return $tasks;
+        }
+
+        // week (default) and month
+        $span = $horizon === 'month' ? 28 : 7;
+        $step = $horizon === 'month' ? 4 : 1;
+        $tasks = [];
+        $day = 0;
+        foreach ($focus as $c) {
+            $d = min($span - 1, $day);
+            $tasks[] = $mk($d, 'learn', "Learn {$c}", "Study {$c} from your notes and textbook.", $c, 30);
+            $tasks[] = $mk($d, 'practice', "Practise {$c}", "Solve questions on {$c}.", $c, 25);
+            $day += $step;
+            if ($day >= $span) break;
+        }
+        $tasks[] = $mk(max(0, $span - 2), 'revise', "Revise {$label}", 'Summarise everything you have learned so far.', null, 20);
+        $tasks[] = $mk($span - 1, 'assess', "Self-test {$label}", 'Take a short quiz to check your understanding.', null, 30);
+        return $tasks;
+    }
+
     protected function notesSummary(User $user, array $ctx): string
     {
+        $noteIds = array_values(array_filter(array_map('intval', $ctx['note_ids'] ?? [])));
         $isSubject = ($ctx['scope'] ?? null) === 'subject';
+        // Build from the note's ACTUAL content (not just a gist) whenever the plan
+        // is notes-driven — a subject plan or one isolated to specific notes.
+        $richContent = $isSubject || ! empty($noteIds);
         $q = $user->notes()->where('status', 'ready');
 
-        if ($isSubject && (! empty($ctx['subject_id']) || ! empty($ctx['subject_name']))) {
+        if (! empty($noteIds)) {
+            // Isolate the plan to EXACTLY the notes the student is studying — never
+            // bleed in other notes (incl. stale ones) from the same topic/subject.
+            $q->whereIn('id', $noteIds);
+        } elseif ($isSubject && (! empty($ctx['subject_id']) || ! empty($ctx['subject_name']))) {
             // Match by subject id OR name, so notes are never missed if the id
             // didn't resolve at upload time.
             $q->where(function ($w) use ($ctx) {
@@ -158,9 +243,7 @@ class PlannerService
         foreach ($notes->sortByDesc('is_primary') as $n) {              // ★ primary notes first
             $star = $n->is_primary ? '★ ' : '';
             $body = trim((string) $n->summary);
-            // For a notes-driven (subject) plan, include the note's ACTUAL content
-            // so the plan mirrors what's really in the PDF — not just a gist.
-            if ($isSubject) {
+            if ($richContent) {
                 $excerpt = trim((string) $n->extracted_text);
                 if ($excerpt !== '') {
                     $body = ($body !== '' ? $body . "\n" : '') . mb_substr($excerpt, 0, 900);
@@ -171,7 +254,7 @@ class PlannerService
             }
         }
 
-        return mb_substr(implode("\n\n", $parts), 0, $isSubject ? 7000 : 2400);
+        return mb_substr(implode("\n\n", $parts), 0, $richContent ? 7000 : 2400);
     }
 
     protected function openGaps(User $user, string $topicName): array

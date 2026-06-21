@@ -415,11 +415,45 @@ function Diagram({ spec }) {
 
 /* -------------------------------------------------------------------- entry */
 
+// LLMs routinely emit visualization specs with raw (unescaped) control
+// characters — most often literal newlines/tabs inside a multi-line `mermaid`
+// graph string. Strict JSON.parse rejects those ("Bad control character in
+// string literal"). This walker re-escapes \n \r \t that appear *inside* string
+// literals, leaving structural whitespace alone, so an otherwise-valid spec
+// still parses instead of degrading to the "not valid JSON" notice.
+function escapeControlCharsInStrings(src) {
+  let out = "", inStr = false, escaped = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inStr) {
+      if (escaped) { out += ch; escaped = false; continue; }
+      if (ch === "\\") { out += ch; escaped = true; continue; }
+      if (ch === '"') { out += ch; inStr = false; continue; }
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\r") { out += "\\r"; continue; }
+      if (ch === "\t") { out += "\\t"; continue; }
+      out += ch;
+    } else {
+      if (ch === '"') { inStr = true; }
+      out += ch;
+    }
+  }
+  return out;
+}
+
+// Tolerant spec parser: try strict JSON first, then a repaired pass. Returns the
+// parsed object or null. Exported so RichMessage detects these specs too.
+export function parseVizSpec(code) {
+  const raw = String(code ?? "");
+  try { return JSON.parse(raw); } catch { /* fall through to repair */ }
+  try { return JSON.parse(escapeControlCharsInStrings(raw)); } catch { return null; }
+}
+
 export default function Visualization({ code, spec: specProp }) {
   const parsed = useMemo(() => {
     if (specProp && typeof specProp === "object") return { spec: specProp, error: null };
-    try { return { spec: JSON.parse(code), error: null }; }
-    catch (e) { return { spec: null, error: e.message }; }
+    const spec = parseVizSpec(code);
+    return spec ? { spec, error: null } : { spec: null, error: "invalid spec" };
   }, [code, specProp]);
 
   if (!parsed.spec) return <Fallback note="The visualization spec wasn't valid JSON." raw={code} />;

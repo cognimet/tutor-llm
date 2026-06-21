@@ -53,12 +53,21 @@ class TutorController extends Controller
     public function startSession(Request $request)
     {
         $data = $request->validate([
-            'topic_id'     => ['nullable', 'exists:topics,id'],
-            'topic_name'   => ['required', 'string', 'max:160'],
-            'chapter_name' => ['nullable', 'string', 'max:160'],
-            'subject_name' => ['nullable', 'string', 'max:160'],
-            'fresh'        => ['nullable', 'boolean'],
+            'topic_id'            => ['nullable', 'exists:topics,id'],
+            'topic_name'          => ['required', 'string', 'max:160'],
+            'chapter_name'        => ['nullable', 'string', 'max:160'],
+            'subject_name'        => ['nullable', 'string', 'max:160'],
+            'selected_note_ids'   => ['nullable', 'array'],
+            'selected_note_ids.*' => ['integer'],
+            'fresh'               => ['nullable', 'boolean'],
         ]);
+
+        // Notes the student picked in the Notebook Hub — this session stays
+        // grounded in exactly these uploaded notes (see notesContextFor + the
+        // strict grounding prompt). Empty/absent means a normal topic session.
+        $selectedNoteIds = ! empty($data['selected_note_ids'])
+            ? array_values(array_unique(array_map('intval', $data['selected_note_ids'])))
+            : null;
 
         if (empty($data['fresh'])) {
             $existing = $request->user()->chatSessions()
@@ -71,17 +80,23 @@ class TutorController extends Controller
                 ->first();
 
             if ($existing) {
+                // Re-entering the topic with a fresh note selection re-scopes the
+                // existing chat to those notes; otherwise keep what it had.
+                if ($selectedNoteIds !== null) {
+                    $existing->update(['selected_note_ids' => $selectedNoteIds]);
+                }
                 return response()->json(['session' => $existing->load('messages')]);
             }
         }
 
         $session = $request->user()->chatSessions()->create([
-            'topic_id'        => $data['topic_id'] ?? null,
-            'title'           => $data['topic_name'],
-            'topic_name'      => $data['topic_name'],
-            'chapter_name'    => $data['chapter_name'] ?? null,
-            'subject_name'    => $data['subject_name'] ?? null,
-            'last_message_at' => now(),
+            'topic_id'          => $data['topic_id'] ?? null,
+            'title'             => $data['topic_name'],
+            'topic_name'        => $data['topic_name'],
+            'chapter_name'      => $data['chapter_name'] ?? null,
+            'subject_name'      => $data['subject_name'] ?? null,
+            'selected_note_ids' => $selectedNoteIds,
+            'last_message_at'   => now(),
         ]);
 
         // Seed a friendly opening message.
@@ -159,7 +174,9 @@ class TutorController extends Controller
         ]);
 
         $user = $request->user();
-        $noteIds = $data['note_ids'] ?? [];
+        // Explicit per-message notes win; otherwise fall back to the notes this
+        // session was launched with (Study-from-notes grounding).
+        $noteIds = ! empty($data['note_ids']) ? $data['note_ids'] : ($session->selected_note_ids ?? []);
         $notesContext = $this->notesContextFor($user, $noteIds);
 
         $session->messages()->create([
@@ -211,7 +228,9 @@ class TutorController extends Controller
         ]);
 
         $user = $request->user();
-        $noteIds = $data['note_ids'] ?? [];
+        // Explicit per-message notes win; otherwise fall back to the notes this
+        // session was launched with (Study-from-notes grounding).
+        $noteIds = ! empty($data['note_ids']) ? $data['note_ids'] : ($session->selected_note_ids ?? []);
         $notesContext = $this->notesContextFor($user, $noteIds);
 
         $session->messages()->create([
@@ -240,8 +259,10 @@ class TutorController extends Controller
         $lastUser = $session->messages()->where('role', 'user')->reorder('id', 'desc')->first();
         abort_unless($lastUser, 422, 'Nothing to regenerate yet.');
 
-        // Re-attach whatever notes rode with the original question.
-        $notesContext = $this->notesContextFor($user, $lastUser->meta['note_ids'] ?? []);
+        // Re-attach whatever notes rode with the original question, falling back
+        // to the session's launch-time note selection (Study-from-notes grounding).
+        $regenNoteIds = ! empty($lastUser->meta['note_ids']) ? $lastUser->meta['note_ids'] : ($session->selected_note_ids ?? []);
+        $notesContext = $this->notesContextFor($user, $regenNoteIds);
 
         return $this->streamReply($session, $user, $lastUser->content, $mode, $notesContext);
     }

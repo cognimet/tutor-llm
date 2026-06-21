@@ -14,6 +14,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name', 'email', 'password', 'role',
         'level_id', 'board', 'grade', 'stream', 'language', 'avatar', 'is_active',
+        'xp_points', 'level', 'current_streak', 'last_active_date',
     ];
 
     protected $appends = ['curriculum_path'];
@@ -27,6 +28,10 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'grade' => 'integer',
+            'xp_points' => 'integer',
+            'level' => 'integer',
+            'current_streak' => 'integer',
+            'last_active_date' => 'date',
         ];
     }
 
@@ -74,4 +79,31 @@ class User extends Authenticatable
     public function flashcards()        { return $this->hasMany(Flashcard::class); }
     public function mistakes()          { return $this->hasMany(Mistake::class); }
     public function learningEvents()    { return $this->hasMany(LearningEvent::class); }
+
+    /* Gamification (dual-engine) */
+    public function gamificationProfile() { return $this->hasOne(GamificationProfile::class); }
+    public function trophies()            { return $this->hasMany(StudentTrophy::class); }
+    public function stickers()            { return $this->hasMany(StudentSticker::class); }
+    public function companionPet()        { return $this->hasOne(CompanionPet::class); }
+    public function levelUpLogs()         { return $this->hasMany(LevelUpLog::class); }
+
+    /**
+     * The student's class number (1–12), resolved from `grade` or the linked
+     * Level's class_number. Null when unknown.
+     */
+    public function classNumber(): ?int
+    {
+        if ($this->grade) {
+            return (int) $this->grade;
+        }
+        $level = $this->relationLoaded('level') ? $this->level : ($this->level_id ? $this->level()->first() : null);
+        return $level && $level->class_number ? (int) $level->class_number : null;
+    }
+
+    /** Which gamification engine applies: Classes 1–4 → junior, else senior. */
+    public function engineMode(): string
+    {
+        $class = $this->classNumber();
+        return ($class !== null && $class >= 1 && $class <= 4) ? 'junior' : 'senior';
+    }
 }

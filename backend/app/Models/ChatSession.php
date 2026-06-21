@@ -8,10 +8,13 @@ class ChatSession extends Model
 {
     protected $fillable = [
         'user_id', 'topic_id', 'title',
-        'subject_name', 'chapter_name', 'topic_name', 'last_message_at',
+        'subject_name', 'chapter_name', 'topic_name', 'selected_note_ids', 'last_message_at',
     ];
 
-    protected $casts = ['last_message_at' => 'datetime'];
+    protected $casts = [
+        'last_message_at'   => 'datetime',
+        'selected_note_ids' => 'array',
+    ];
 
     public function user()     { return $this->belongsTo(User::class); }
     public function topic()    { return $this->belongsTo(Topic::class); }
