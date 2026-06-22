@@ -183,14 +183,15 @@ export function sanitizeLessonStream(content) {
 // Loosely read a numeric attribute (streak=3 / xp=20) from a tag's attr string.
 const numAttr = (s, name) => { const m = new RegExp(name + "\\s*=\\s*(\\d+)").exec(s || ""); return m ? parseInt(m[1], 10) : undefined; };
 
-// Stable, compact hash of a gate's question+options (FNV-1a → base36) so its
-// "cleared" state can be remembered per chat (see ProgressGate.persistKey).
-function gateHash(question, options) {
-  const s = String(question) + "|" + (options || []).join("|");
+// Stable, compact hash (FNV-1a → base36) used to build a durable target_id for
+// each interactive block, so its DB-logged state re-hydrates on reload.
+function blockHash(text) {
+  const s = String(text || "");
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0).toString(36);
 }
+const gateHash = (question, options) => blockHash(String(question) + "|" + (options || []).join("|"));
 
 // Pull any [VISUAL_ANCHOR] tags out of a body string (so they never render as
 // raw text), collecting them into anchorsOut so they still drive the left pane.
@@ -347,7 +348,7 @@ function renderCardNode(card, key) {
   );
 }
 
-export default function RichMessage({ text, streaming = false, className = "", onAnchor, onQuizSuccess, persistScope }) {
+export default function RichMessage({ text, streaming = false, className = "", onAnchor, onQuizSuccess, persistScope, messageId, progressLogs = [], onLogUpdate }) {
   // On a finished render, auto-close any unclosed block tags so a truncated
   // stream never leaves a stuck "Building your card…" placeholder.
   const safeText = useMemo(
@@ -382,17 +383,28 @@ export default function RichMessage({ text, streaming = false, className = "", o
       case "text": return <TextBlock key={i} text={b.text} streaming={streaming && i === lastTextIdx} />;
       case "pending": return <PendingBlock key={i} />;
       case "card": return renderCardNode(b, i);
-      case "quiz":
+      case "quiz": {
+        const gateId = `gate:${messageId}:${gateHash(b.question, b.options)}`;
+        const gateLogs = progressLogs.filter((l) => l.type === "quiz_attempt" && l.target_id === gateId);
         return (
           <ProgressGate key={i} question={b.question} options={b.options} correctAnswer={b.correct}
-            correctText={b.correctText}
-            persistKey={persistScope ? `tuto:gate:${persistScope}:${gateHash(b.question, b.options)}` : undefined}
-            explanation={b.explanation} onCorrectUnlock={() => onQuizSuccess?.({ id: b.id, question: b.question })} />
+            correctText={b.correctText} explanation={b.explanation}
+            targetId={gateId} sessionId={persistScope} historicalLogs={gateLogs} onLogUpdate={onLogUpdate}
+            onCorrectUnlock={() => onQuizSuccess?.({ id: b.id, question: b.question })} />
         );
+      }
       case "bento":
         return <BentoGrid key={i} cols={b.cards.length >= 3 ? 3 : 2}>{b.cards.map((c, ci) => renderCardNode(c, `${i}-${ci}`))}</BentoGrid>;
-      case "flow":
-        return <LessonProgressiveWrapper key={i}>{b.cards.map((c, ci) => renderCardNode(c, `${i}-${ci}`))}</LessonProgressiveWrapper>;
+      case "flow": {
+        const flowId = `flow:${messageId}:${blockHash(JSON.stringify(b.cards))}`;
+        const flowLogs = progressLogs.filter((l) => l.type === "read_continue" && l.target_id === flowId);
+        return (
+          <LessonProgressiveWrapper key={i}
+            targetId={flowId} sessionId={persistScope} historicalLogs={flowLogs} onLogUpdate={onLogUpdate}>
+            {b.cards.map((c, ci) => renderCardNode(c, `${i}-${ci}`))}
+          </LessonProgressiveWrapper>
+        );
+      }
       case "streak":
         return <FloatingStreakBadge key={i} streakValue={b.streak} xpGained={b.xp} />;
       default: return null;

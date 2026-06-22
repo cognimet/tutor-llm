@@ -49,6 +49,12 @@ export const tutorApi = {
       headers: { "Content-Type": "multipart/form-data" },
     }).then((r) => r.data);
   },
+  // Durable storybook progress: log a gate attempt / continue click, and
+  // re-hydrate all logged states when a session loads.
+  logProgress: (sessionId, payload) =>
+    api.post(`/tutor/sessions/${sessionId}/progress-log`, payload).then((r) => r.data),
+  getProgressState: (sessionId) =>
+    api.get(`/tutor/sessions/${sessionId}/progress-state`).then((r) => r.data.logs),
 };
 
 // --- Student: study notes (uploaded files, kept per topic) ---

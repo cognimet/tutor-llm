@@ -50,6 +50,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tutor/sessions/{session}', [TutorController::class, 'show']);
         Route::patch('/tutor/sessions/{session}', [TutorController::class, 'update']);   // rename
         Route::get('/tutor/sessions/{session}/mind', [TutorController::class, 'mind']);  // "shows its mind" panel
+        // Durable storybook progress: log gate attempts / continue clicks, and re-hydrate on load.
+        Route::post('/tutor/sessions/{session}/progress-log', [TutorController::class, 'logProgress']);
+        Route::get('/tutor/sessions/{session}/progress-state', [TutorController::class, 'getProgressState']);
         // Snap-a-doubt: photo -> OCR text (client then sends it as a message)
         Route::post('/tutor/snap', [TutorController::class, 'snap'])
             ->middleware('token.gate:snap');

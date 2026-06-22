@@ -82,13 +82,20 @@ export default function StudentApp() {
               subjects={subjects}
               onBack={backHome}
               onStudy={(s) => openTopic({
+                topic_id: s.topic_id || null,
                 topic_name: s.topic_name || s.name,
                 subject_name: s.subject_name || s.name,
                 chapter_name: s.chapter_name || null,
                 tint: s.tint,
                 emoji: s.emoji,
-                from_notes: true,
+                // Syllabus-Quest launches set from_notes:false; note + Smart-Drop
+                // launches are note-grounded (default true when unspecified).
+                from_notes: s.from_notes ?? true,
                 selected_note_ids: s.selected_note_ids || [],
+                // Carry the launcher's teaching style + companion persona so the
+                // chat opens in that mode and the backend persists the vibe.
+                quest_style: s.quest_style || "teach",
+                tutor_vibe: s.tutor_vibe || "coach",
               })}
             />
           } />

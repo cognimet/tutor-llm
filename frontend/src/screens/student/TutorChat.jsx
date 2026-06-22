@@ -485,21 +485,22 @@ function NoteInspectorDropdown({ notes, loading, onClose, onTrigger }) {
 }
 
 /**
- * Quick Study Options — a 1-tap pill carousel above the composer, shown only when
- * the session is grounded in uploaded notes. Each fires a structured, note-scoped
- * prompt the strict-grounding backend answers purely from the active notes.
+ * Quick Study Options — a 1-tap pill carousel above the composer, shown in BOTH
+ * note-grounded and syllabus-direct sessions. Each fires a structured prompt scoped
+ * to the active notes ("From your notes") or the official topic ("From syllabus").
  */
-function QuickStudyOptionsBar({ active, onTrigger }) {
-  if (!active) return null;
+function QuickStudyOptionsBar({ hasNotes, onTrigger }) {
   const options = [
-    { id: "summary",       label: "Quick Summary",    icon: <FileText className="h-3.5 w-3.5" />,                 color: "hover:bg-emerald-50 dark:hover:bg-emerald-500/10" },
-    { id: "flashcards",    label: "Note Flashcards",  icon: <Sparkles className="h-3.5 w-3.5 text-amber-500" />,  color: "hover:bg-amber-50 dark:hover:bg-amber-500/10" },
+    { id: "summary",       label: "Quick Summary",    icon: <FileText className="h-3.5 w-3.5 text-emerald-500" />, color: "hover:bg-emerald-50 dark:hover:bg-emerald-500/10" },
+    { id: "flashcards",    label: hasNotes ? "Note Flashcards" : "Topic Flashcards",  icon: <Sparkles className="h-3.5 w-3.5 text-amber-500" />,  color: "hover:bg-amber-50 dark:hover:bg-amber-500/10" },
     { id: "cheat_sheet",   label: "Extract Formulas", icon: <Calculator className="h-3.5 w-3.5 text-blue-500" />, color: "hover:bg-blue-50 dark:hover:bg-blue-500/10" },
     { id: "grounded_quiz", label: "Grounded Quiz",    icon: <HelpCircle className="h-3.5 w-3.5 text-rose-500" />, color: "hover:bg-rose-50 dark:hover:bg-rose-500/10" },
   ];
   return (
     <div className="no-scrollbar mb-2.5 flex items-center gap-2 overflow-x-auto pb-0.5">
-      <span className="shrink-0 pr-0.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">From your notes</span>
+      <span className="shrink-0 pr-0.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">
+        {hasNotes ? "From your notes" : "From syllabus"}
+      </span>
       {options.map((opt) => (
         <button key={opt.id} onClick={() => onTrigger(opt.id)}
           className={`flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-extrabold text-slate-600 transition-all active:scale-95 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 ${opt.color}`}>
@@ -512,12 +513,16 @@ function QuickStudyOptionsBar({ active, onTrigger }) {
 
 export default function TutorChat({ session: initial, onBack, onLogout, onProgressChange }) {
   const [ctx, setCtx] = useState(initial);
+  const noteCount = (ctx.selected_note_ids || []).length;
+  const hasNotes = noteCount > 0;
   const t = tint(ctx.tint);
 
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState("teach");
+  // The tutor's teaching style. Seeded from the launcher's quest_style (so a
+  // Syllabus Quest opens in the chosen format) and adjustable via the ModePicker.
+  const [mode, setMode] = useState(initial?.quest_style || "teach");
   const [streaming, setStreaming] = useState(false);
   const [assessing, setAssessing] = useState(false);
   const [sessions, setSessions] = useState([]);
@@ -552,6 +557,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
   const [examDate, setExamDate] = useState(null);    // soonest exam date for the countdown chip
   const [guide, setGuide] = useState({ planTaskTitle: null, dueCards: 0, mistakes: [] }); // "Next →" inputs
   const [checklistRefresh, setChecklistRefresh] = useState(0); // bumps when a cleared gate auto-ticks a plan task
+  const [sessionProgressLogs, setSessionProgressLogs] = useState([]); // DB-hydrated gate/reveal states for this session
 
   const scrollRef = useRef(null);
   const taRef = useRef(null);
@@ -574,6 +580,14 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
   const loadMind = useCallback(async (id) => {
     if (!id) return;
     try { setMind(await tutorApi.mind(id)); } catch { /* ignore */ }
+  }, []);
+
+  // Re-hydrate the storybook's gate attempts + progressive reveals for a session,
+  // so cleared checkpoints and revealed cards stay put across refresh / revisits.
+  const loadSessionLogs = useCallback(async (id) => {
+    if (!id) { setSessionProgressLogs([]); return; }
+    try { setSessionProgressLogs((await tutorApi.getProgressState(id)) || []); }
+    catch { /* non-blocking */ }
   }, []);
 
   // Pull the bits the "Next →" guide + countdown chip need: exam date, the
@@ -650,14 +664,6 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
     try { localStorage.setItem("tutorchat:sidepanel", sideOpen ? "open" : "closed"); } catch { /* */ }
   }, [sideOpen]);
 
-  // Opened from "Study from my notes": pin the plan checklist beside the chat.
-  useEffect(() => {
-    if (ctx.from_notes && window.matchMedia("(min-width: 1024px)").matches) {
-      setSidePanel("checklist");
-      setSideOpen(true);
-    }
-  }, [ctx.from_notes]);
-
   // Side panel: inline on desktop, drawer on mobile.
   const toggleSide = useCallback((tab) => {
     if (!window.matchMedia("(min-width: 1024px)").matches) {
@@ -683,6 +689,9 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
           // Carry the Notebook-Hub selection so the whole session stays grounded
           // in exactly these notes (backend stores them on the session).
           selected_note_ids: ctx.selected_note_ids || [],
+          // Persist the Syllabus-Quest launch config on the session so the
+          // teaching style + companion persona shape every later turn.
+          quest_style: ctx.quest_style, tutor_vibe: ctx.tutor_vibe,
         });
         if (!alive) return;
         setSessionId(s.id);
@@ -699,6 +708,9 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
     return () => { alive = false; abortRef.current?.abort(); stopSpeaking(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.topic_id, ctx.topic_name]);
+
+  // Load the session's saved gate/reveal progress whenever the active chat changes.
+  useEffect(() => { loadSessionLogs(sessionId); }, [sessionId, loadSessionLogs]);
 
   // Keep pinned to the latest message while near the bottom.
   useEffect(() => {
@@ -877,22 +889,32 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
   // narrows the focus to a single note.
   const handleTriggerOption = (optionId, noteTitle = "") => {
     const ofNote = noteTitle ? ` "${noteTitle}"` : "";
+    // Syllabus-direct sessions have no notes attached, so scope each quick action
+    // to the official topic ("${ctx.topic_name}") instead of note identifiers.
     let promptText = "";
     switch (optionId) {
       case "summary":
-        promptText = `Please give me a high-fidelity summary of my note${ofNote}. Break it into:\n`
+        promptText = (hasNotes
+          ? `Please give me a high-fidelity summary of my note${ofNote}. Break it into:\n`
+          : `Please give me a high-fidelity summary of the topic "${ctx.topic_name}" from the syllabus. Break it into:\n`)
           + "- 📌 **The main agenda** (the big picture in 2 sentences)\n"
           + "- 🔑 **Core concepts & definitions**\n"
           + "- 💡 **Real-world examples & analogies**";
         break;
       case "flashcards":
-        promptText = `Extract 5 critical terms and definitions from my note${ofNote || "s"} and turn them into quick flashcard-style revision questions for me.`;
+        promptText = hasNotes
+          ? `Extract 5 critical terms and definitions from my note${ofNote || "s"} and turn them into quick flashcard-style revision questions for me.`
+          : `Extract 5 critical terms and definitions from the syllabus topic "${ctx.topic_name}" and turn them into quick flashcard-style revision questions for me.`;
         break;
       case "cheat_sheet":
-        promptText = `Extract all formulas, units, equations and key cheat-sheet points from my note${ofNote || "s"} and present them as a clean, copy-pasteable revision block.`;
+        promptText = hasNotes
+          ? `Extract all formulas, units, equations and key cheat-sheet points from my note${ofNote || "s"} and present them as a clean, copy-pasteable revision block.`
+          : `Extract all formulas, units, equations and key cheat-sheet points for the syllabus topic "${ctx.topic_name}" and present them as a clean, copy-pasteable revision block.`;
         break;
       case "grounded_quiz":
-        promptText = "Quiz me! Ask one multiple-choice question (MCQ) strictly grounded in my uploaded notes, and wait for my answer before moving to the next one.";
+        promptText = hasNotes
+          ? "Quiz me! Ask one multiple-choice question (MCQ) strictly grounded in my uploaded notes, and wait for my answer before moving to the next one."
+          : `Quiz me! Ask one multiple-choice question (MCQ) strictly grounded in the syllabus topic "${ctx.topic_name}", and wait for my answer before moving to the next one.`;
         break;
       default:
         return;
@@ -1052,6 +1074,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
         topic_id: ctx.topic_id, topic_name: ctx.topic_name,
         chapter_name: ctx.chapter_name, subject_name: ctx.subject_name,
         selected_note_ids: ctx.selected_note_ids || [], fresh: true,
+        quest_style: ctx.quest_style, tutor_vibe: ctx.tutor_vibe,
       });
       setSessionId(s.id);
       setMessages(s.messages || []);
@@ -1158,8 +1181,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
 
   // Note-grounded sessions get a note-aware header: the active note's name (plus
   // "+N more") instead of the opaque "Science / Science" topic label.
-  const noteCount = (ctx.selected_note_ids || []).length;
-  const hasNotes = noteCount > 0;
+  // (noteCount / hasNotes are declared once near the top of the component.)
   const extraNotes = (activeNotes.length || noteCount) - 1;
   // Topic is the headline; the note/PDF name(s) ride along in the subtitle.
   const headerTitle = ctx.topic_name;
@@ -1206,17 +1228,19 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
             <span className={`hidden items-center gap-1.5 rounded-full ${t.soft} px-2.5 py-1 text-[11px] font-extrabold ${t.text} xl:inline-flex`}>
               <ShieldCheck className="h-3.5 w-3.5" /> {hasNotes ? "Notes-grounded" : "Topic-scoped"}
             </span>
-            {/* Exam countdown — opens the planner */}
-            {examDaysLeft !== null && examDaysLeft >= 0 && (
+            {/* Exam countdown — opens the planner (notes-grounded study only) */}
+            {ctx.from_notes && examDaysLeft !== null && examDaysLeft >= 0 && (
               <button onClick={() => setStudyTab("plan")} title="Open your exam plan"
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-extrabold text-amber-600 transition-colors hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                 <CalendarClock className="h-3.5 w-3.5" />
                 {examDaysLeft === 0 ? "Exam today" : `${examDaysLeft}d to exam`}
               </button>
             )}
-            <button onClick={() => setStudyTab("plan")} title="Study hub — notes, planner, flashcards"
+            {/* Study hub — plan for notes-grounded study, what-to-work-on for syllabus-direct */}
+            <button onClick={() => setStudyTab(ctx.from_notes ? "plan" : "fix")}
+              title={ctx.from_notes ? "Study hub — notes, planner, flashcards" : "Study hub — mistakes, notes, flashcards"}
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br ${t.grad} px-3 py-2 text-xs font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
-              <SparklesIcon className="h-4 w-4" /> <span className="hidden sm:inline">Study</span>
+              <SparklesIcon className="h-4 w-4" /> <span className="hidden sm:inline">Study Hub</span>
             </button>
             <button onClick={() => setAssessing(true)} title="Check understanding"
               className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 transition-colors hover:text-indigo-600 dark:text-slate-300 dark:ring-white/10 dark:hover:text-indigo-300">
@@ -1338,7 +1362,11 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
                             <p className="whitespace-pre-wrap">{m.content}</p>
                           </div>
                         ) : (
-                          <RichMessage text={m.content} streaming={m.pending} className="md-lg" persistScope={sessionId} onQuizSuccess={handleQuizSuccess} />
+                          <RichMessage text={m.content} streaming={m.pending} className="md-lg" persistScope={sessionId}
+                            messageId={i}
+                            progressLogs={sessionProgressLogs}
+                            onLogUpdate={(log) => setSessionProgressLogs((prev) => [...prev, log])}
+                            onQuizSuccess={handleQuizSuccess} />
                         )}
                         {m.stopped && (
                           <p className="mt-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Stopped</p>
@@ -1392,9 +1420,8 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
           {/* Composer block — same reading column as the messages */}
           <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
             <div className="mx-auto w-full max-w-3xl xl:max-w-4xl 2xl:max-w-5xl">
-            {/* Study-from-notes: 1-tap grounded actions (summary, flashcards,
-                formulas, grounded quiz) drawn strictly from the active notes. */}
-            <QuickStudyOptionsBar active={hasNotes} onTrigger={handleTriggerOption} />
+            {/* 1-tap quick actions (summary, flashcards, formulas, quiz) drawn from active notes or official syllabus. */}
+            <QuickStudyOptionsBar hasNotes={hasNotes} onTrigger={handleTriggerOption} />
             {/* One guiding nudge + contextual follow-ups, on a single scrollable
                 strip so the composer stays close to the conversation. */}
             {(!showStarters || showFollowups) && (
