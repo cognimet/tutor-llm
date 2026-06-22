@@ -8,7 +8,8 @@ class ChatSession extends Model
 {
     protected $fillable = [
         'user_id', 'topic_id', 'title',
-        'subject_name', 'chapter_name', 'topic_name', 'selected_note_ids', 'last_message_at',
+        'subject_name', 'chapter_name', 'topic_name', 'selected_note_ids',
+        'quest_style', 'tutor_vibe', 'last_message_at',
     ];
 
     protected $casts = [

@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { CheckCircle2, XCircle, ChevronRight } from "lucide-react";
 import { confettiBurst } from "./confetti.js";
+import { tutorApi } from "../api/endpoints.js";
 
 // Value-grounded grading: the answer STRING wins over the numeric index, so a
 // wrong/off-by-one `correct` from the model can't mark a wrong option right.
@@ -13,55 +14,93 @@ function resolveCorrectIndex(options, correctAnswer, correctText) {
   return correctAnswer;
 }
 
-// Per-chat "this gate was already cleared" memory, so a checkpoint stays cleared
-// when the student leaves the chat and comes back (instead of resetting).
-function readCleared(key) {
-  if (!key) return false;
-  try { return localStorage.getItem(key) === "1"; } catch { return false; }
-}
-function writeCleared(key) {
-  if (!key) return;
-  try { localStorage.setItem(key, "1"); } catch { /* storage unavailable */ }
-}
-
 /**
  * On-the-go interactive checkpoint (Visual Learning spec §3). The tutor emits a
  * [QUIZ: id correct=N ans="…"]…[OPTIONS]…[EXPLANATION]…[/QUIZ] block, parsed by
- * RichMessage and rendered here. The student must pick the correct option to
- * "clear" the gate — a wrong pick shakes with a Socratic hint (and keeps the
- * gate open), a correct pick fires confetti and unlocks the next part of the
- * lesson via onCorrectUnlock. When `persistKey` is given, a cleared gate is
- * remembered so revisiting the chat keeps it cleared.
+ * RichMessage and rendered here. A correct pick clears the gate (confetti +
+ * unlock the next part); a wrong pick shakes with a Socratic hint.
+ *
+ * Progress is DURABLE: every attempt is logged to the session (quiz_attempt with
+ * the selected index, option text, question and first-try/retry sequence), and
+ * on load the gate re-hydrates from those logs — so a cleared checkpoint stays
+ * cleared across refresh / leaving the chat, on any device.
  */
-export default function ProgressGate({ question, options = [], correctAnswer = 0, correctText = "", explanation = "", onCorrectUnlock, persistKey }) {
+export default function ProgressGate({
+  question,
+  options = [],
+  correctAnswer = 0,
+  correctText = "",
+  explanation = "",
+  targetId,
+  sessionId,
+  historicalLogs = [],
+  onCorrectUnlock,
+  onLogUpdate,
+}) {
   const correctIdx = useMemo(
     () => resolveCorrectIndex(options, correctAnswer, correctText),
     [options, correctAnswer, correctText],
   );
 
-  // Hydrate from the remembered state so a previously-cleared gate renders as
-  // cleared (correct option chosen) without replaying confetti or re-unlocking.
-  const initCleared = () => readCleared(persistKey);
-  const [cleared, setCleared] = useState(initCleared);
-  const [restored] = useState(initCleared);            // cleared from memory, not a live answer
-  const [selectedIdx, setSelectedIdx] = useState(() => (initCleared() ? correctIdx : null));
-  const [attempts, setAttempts] = useState(0);         // re-keys the hint box to replay the shake
-  const [unlocked, setUnlocked] = useState(initCleared); // guard: fire onCorrectUnlock once (never on restore)
+  // Remembered state derived from this gate's DB logs.
+  const dbCleared = useMemo(() => historicalLogs.some((l) => l.is_correct), [historicalLogs]);
+  const dbAttempts = historicalLogs.length;
+  const dbSelectedIdx = useMemo(() => {
+    const correctLog = historicalLogs.find((l) => l.is_correct);
+    if (correctLog) return correctLog.metadata?.selected_idx ?? correctIdx;
+    const last = historicalLogs[historicalLogs.length - 1];
+    return last ? (last.metadata?.selected_idx ?? null) : null;
+  }, [historicalLogs, correctIdx]);
+
+  const [cleared, setCleared] = useState(dbCleared);
+  const [restored, setRestored] = useState(dbCleared);   // cleared from history, not a live answer
+  const [selectedIdx, setSelectedIdx] = useState(dbSelectedIdx);
+  const [attempts, setAttempts] = useState(dbAttempts);
+  const [unlocked, setUnlocked] = useState(dbCleared);    // guard: fire onCorrectUnlock once (never on restore)
+
+  // Logs often arrive after first paint (session fetch). Hydrate then — but never
+  // override a live answer the student just gave this mount.
+  useEffect(() => {
+    if (cleared) return;
+    if (dbCleared || historicalLogs.length) {
+      setCleared(dbCleared);
+      setRestored(dbCleared);
+      setSelectedIdx(dbSelectedIdx);
+      setAttempts(dbAttempts);
+      setUnlocked(dbCleared);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbCleared, dbSelectedIdx, dbAttempts, historicalLogs.length]);
 
   const handleSelect = (idx) => {
     if (cleared) return;                 // locked after a correct answer
     setSelectedIdx(idx);
 
-    if (idx === correctIdx) {
+    const isCorrect = idx === correctIdx;
+    const nextAttempts = attempts + 1;
+    setAttempts(nextAttempts);
+
+    if (isCorrect) {
       setCleared(true);
-      writeCleared(persistKey);          // remember it so coming back keeps it cleared
+      setRestored(false);
       confettiBurst({ particleCount: 90, spread: 70, originY: 0.7 });
-      if (!unlocked) {
-        setUnlocked(true);
-        setTimeout(() => onCorrectUnlock?.(), 1800);
-      }
-    } else {
-      setAttempts((a) => a + 1);
+    }
+
+    // Persist the attempt (server assigns the authoritative attempt_number).
+    if (sessionId && targetId) {
+      const log = {
+        type: "quiz_attempt",
+        target_id: targetId,
+        is_correct: isCorrect,
+        metadata: { selected_idx: idx, option_text: options[idx], question_text: question },
+      };
+      tutorApi.logProgress(sessionId, log).catch(() => { /* non-blocking */ });
+      onLogUpdate?.({ ...log, attempt_number: nextAttempts });
+    }
+
+    if (isCorrect && !unlocked) {
+      setUnlocked(true);
+      setTimeout(() => onCorrectUnlock?.(), 1800);
     }
   };
 

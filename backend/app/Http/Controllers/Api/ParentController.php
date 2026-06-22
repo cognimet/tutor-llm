@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ConceptMastery;
 use App\Models\KnowledgeGap;
 use App\Models\Misconception;
+use App\Models\StudentProgressLog;
 use App\Models\User;
 use App\Services\ProgressService;
 use Illuminate\Http\Request;
@@ -41,9 +42,37 @@ class ParentController extends Controller
         $parent = $request->user();
         abort_unless($parent->children()->where('users.id', $child->id)->exists(), 403, 'Not your child.');
 
+        // Durable storybook engagement: read-pacing + first-try checkpoint accuracy.
+        $logs = StudentProgressLog::where('user_id', $child->id)->get();
+        $quiz = $logs->where('type', 'quiz_attempt');
+        $firstTries = $quiz->where('attempt_number', 1);
+
+        // Which checkpoints they slipped on first try (and whether they recovered).
+        $struggles = [];
+        foreach ($quiz->groupBy('target_id') as $attempts) {
+            $first = $attempts->firstWhere('attempt_number', 1);
+            if ($first && ! $first->is_correct) {
+                $struggles[] = [
+                    'question'      => $first->metadata['question_text'] ?? 'Checkpoint',
+                    'cleared'       => $attempts->contains(fn ($a) => $a->is_correct === true),
+                    'attempts_count' => $attempts->count(),
+                ];
+            }
+        }
+
         return response()->json([
             'child'    => $child->only(['id', 'name', 'email', 'board', 'grade']) + ['curriculum_path' => $child->curriculum_path],
             'progress' => $this->progress->summary($child),
+
+            // --- Durable engagement & comprehension metrics ---
+            'telemetry' => [
+                'read_continues_clicked'        => $logs->where('type', 'read_continue')->count(),
+                'checkpoints_challenged'        => $firstTries->count(),
+                'checkpoints_first_try_correct' => $firstTries->where('is_correct', true)->count(),
+                'checkpoints_first_try_wrong'   => $firstTries->where('is_correct', false)->count(),
+                'checkpoint_struggles'          => array_slice($struggles, 0, 10),
+            ],
+
             'gaps'     => $child->knowledgeGaps()->where('resolved', false)->latest()->get(),
             'recent_assessments' => $child->assessments()
                 ->where('status', 'completed')->latest()->take(10)

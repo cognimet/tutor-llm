@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import {
   X, CalendarDays, FileText, Layers, AlertTriangle, Upload, Loader2,
   Check, RefreshCw, Sparkles, Trash2, ClipboardCheck, RotateCcw,
@@ -34,17 +34,24 @@ const KIND = {
   assess:   { icon: ClipboardCheck, label: "Assess", cls: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300" },
 };
 
-const TABS = [
-  ["plan", "Plan", CalendarDays],
-  ["fix", "What to work on", Target],
-  ["notes", "Notes", FileText],
-  ["cards", "Cards", Layers],
-  ["me", "Me", Activity],
-];
-
 /* ================================================================== shell */
 export default function StudyHub({ ctx, grad, initialTab = "plan", mind, onClose, onBigAssessment, onReExplain }) {
-  const [tab, setTab] = useState(initialTab);
+  // Plan mode is reserved for note-grounded study. Syllabus-direct quests
+  // (from_notes === false) drop the Plan tab and focus on active recall:
+  // what to work on, notes, cards, and the learner's stage.
+  const availableTabs = useMemo(() => {
+    const base = [
+      ["fix", "What to work on", Target],
+      ["notes", "Notes", FileText],
+      ["cards", "Cards", Layers],
+      ["me", "Me", Activity],
+    ];
+    return ctx.from_notes ? [["plan", "Plan", CalendarDays], ...base] : base;
+  }, [ctx.from_notes]);
+
+  // If we're asked to open the Plan tab in syllabus mode, fall back to "fix".
+  const defaultTab = !ctx.from_notes && initialTab === "plan" ? "fix" : initialTab;
+  const [tab, setTab] = useState(defaultTab);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -78,7 +85,7 @@ export default function StudyHub({ ctx, grad, initialTab = "plan", mind, onClose
 
       {/* Tabs */}
       <div className="flex justify-center gap-1 border-b border-slate-200/60 px-3 py-2 dark:border-white/10">
-        {TABS.map(([id, label, Icon]) => (
+        {availableTabs.map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-extrabold transition-colors ${
               tab === id ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"

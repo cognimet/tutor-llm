@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ProcessChatTurn;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
+use App\Models\StudentProgressLog;
 use App\Services\AiClient;
 use App\Services\CurriculumResolver;
 use App\Services\EventTracker;
@@ -59,6 +60,10 @@ class TutorController extends Controller
             'subject_name'        => ['nullable', 'string', 'max:160'],
             'selected_note_ids'   => ['nullable', 'array'],
             'selected_note_ids.*' => ['integer'],
+            // Syllabus Quest launch config (persisted so the chosen teaching
+            // style + companion persona survive reloads and later turns).
+            'quest_style'         => ['nullable', 'string', 'in:teach,socratic,quiz,exam'],
+            'tutor_vibe'          => ['nullable', 'string', 'in:coach,adventure,comic'],
             'fresh'               => ['nullable', 'boolean'],
         ]);
 
@@ -68,6 +73,11 @@ class TutorController extends Controller
         $selectedNoteIds = ! empty($data['selected_note_ids'])
             ? array_values(array_unique(array_map('intval', $data['selected_note_ids'])))
             : null;
+
+        // Launch config: only treated as "set" when present (so re-entering a
+        // topic without re-picking doesn't wipe the existing choice).
+        $questStyle = $data['quest_style'] ?? null;
+        $tutorVibe  = $data['tutor_vibe'] ?? null;
 
         if (empty($data['fresh'])) {
             $existing = $request->user()->chatSessions()
@@ -81,10 +91,13 @@ class TutorController extends Controller
 
             if ($existing) {
                 // Re-entering the topic with a fresh note selection re-scopes the
-                // existing chat to those notes; otherwise keep what it had.
-                if ($selectedNoteIds !== null) {
-                    $existing->update(['selected_note_ids' => $selectedNoteIds]);
-                }
+                // existing chat to those notes; a fresh launch config (style/vibe)
+                // likewise re-tunes it. Each is only overwritten when provided.
+                $patch = [];
+                if ($selectedNoteIds !== null) $patch['selected_note_ids'] = $selectedNoteIds;
+                if ($questStyle !== null)      $patch['quest_style'] = $questStyle;
+                if ($tutorVibe !== null)       $patch['tutor_vibe'] = $tutorVibe;
+                if ($patch) $existing->update($patch);
                 return response()->json(['session' => $existing->load('messages')]);
             }
         }
@@ -96,6 +109,8 @@ class TutorController extends Controller
             'chapter_name'      => $data['chapter_name'] ?? null,
             'subject_name'      => $data['subject_name'] ?? null,
             'selected_note_ids' => $selectedNoteIds,
+            'quest_style'       => $questStyle,
+            'tutor_vibe'        => $tutorVibe,
             'last_message_at'   => now(),
         ]);
 
@@ -198,6 +213,7 @@ class TutorController extends Controller
             $notesContext,
             $summary,
             $subjectId,
+            $session->tutor_vibe,
         );
 
         $message = $session->messages()->create(['role' => 'tutor', 'content' => $reply]);
@@ -283,6 +299,68 @@ class TutorController extends Controller
         return response()->json(['ok' => true, 'rating' => $meta['rating']]);
     }
 
+    /**
+     * Log a progressive "continue" reveal or a Progress Gate answer attempt, so a
+     * storybook lesson's micro-progress survives a refresh / leaving the chat.
+     * (Auto-ticking a matching study-plan task is handled client-side via
+     * planner/cover when the gate is first cleared, so it isn't repeated here.)
+     */
+    public function logProgress(Request $request, ChatSession $session)
+    {
+        $this->authorizeSession($request, $session);
+
+        $data = $request->validate([
+            'type'       => ['required', 'string', 'in:read_continue,quiz_attempt'],
+            'target_id'  => ['required', 'string', 'max:160'],
+            'is_correct' => ['nullable', 'boolean'],
+            'metadata'   => ['nullable', 'array'],
+        ]);
+
+        // Serial attempt number per gate (1 = first try); read-continue clicks stay 1.
+        $attemptNumber = 1;
+        if ($data['type'] === 'quiz_attempt') {
+            $attemptNumber = StudentProgressLog::where('user_id', $request->user()->id)
+                ->where('chat_session_id', $session->id)
+                ->where('type', 'quiz_attempt')
+                ->where('target_id', $data['target_id'])
+                ->count() + 1;
+        }
+
+        $log = StudentProgressLog::create([
+            'user_id'         => $request->user()->id,
+            'chat_session_id' => $session->id,
+            'type'            => $data['type'],
+            'target_id'       => $data['target_id'],
+            'is_correct'      => $data['is_correct'] ?? null,
+            'attempt_number'  => $attemptNumber,
+            'metadata'        => $data['metadata'] ?? [],
+        ]);
+
+        return response()->json([
+            'success'        => true,
+            'attempt_number' => $attemptNumber,
+            'is_correct'     => $log->is_correct,
+        ]);
+    }
+
+    /**
+     * Return every progress log for a session so the chat can re-hydrate its
+     * Progress Gates and progressive reveals on load.
+     */
+    public function getProgressState(Request $request, ChatSession $session)
+    {
+        $this->authorizeSession($request, $session);
+
+        $logs = StudentProgressLog::where('chat_session_id', $session->id)
+            ->orderBy('created_at')
+            ->get(['type', 'target_id', 'is_correct', 'attempt_number', 'metadata']);
+
+        return response()->json([
+            'session_id' => $session->id,
+            'logs'       => $logs,
+        ]);
+    }
+
     /* ------------------------------------------------------------------ */
 
     /**
@@ -298,8 +376,9 @@ class TutorController extends Controller
         $chapter = $session->chapter_name ?? '';
         $subject = $session->subject_name ?? '';
         $subjectId = $this->resolver->subjectId($user, $session->topic_id, $subject);
+        $tutorVibe = $session->tutor_vibe; // companion archetype persona overlay
 
-        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $summary, $topic, $chapter, $subject, $subjectId, $mode, $notesContext) {
+        $response = new StreamedResponse(function () use ($session, $user, $prompt, $history, $summary, $topic, $chapter, $subject, $subjectId, $mode, $notesContext, $tutorVibe) {
             $emit = function (string $event, array $payload) {
                 echo "event: {$event}\n";
                 echo 'data: ' . json_encode($payload) . "\n\n";
@@ -312,14 +391,14 @@ class TutorController extends Controller
             $full = $this->tutor->explainStream(
                 $user, $topic, $chapter, $subject, $history, $prompt,
                 fn (string $delta) => $emit('delta', ['text' => $delta]),
-                $mode, $notesContext, $summary, $subjectId,
+                $mode, $notesContext, $summary, $subjectId, $tutorVibe,
             );
 
             // If streaming produced nothing (e.g. transient upstream error),
             // fall back to the retrying non-streaming path so the student still
             // gets an answer.
             if ($full === '') {
-                $full = $this->tutor->explain($user, $topic, $chapter, $subject, $history, $prompt, $mode, $notesContext, $summary, $subjectId);
+                $full = $this->tutor->explain($user, $topic, $chapter, $subject, $history, $prompt, $mode, $notesContext, $summary, $subjectId, $tutorVibe);
                 if ($full !== '') {
                     $emit('delta', ['text' => $full]);
                 }

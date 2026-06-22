@@ -3,7 +3,10 @@
 namespace App\Services;
 
 use App\Models\ChatSession;
+use App\Models\StudyPlan;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Pedagogical layer. Turns product intents (teach, assess, detect gaps, plan)
@@ -48,9 +51,9 @@ class TutorService
     /**
      * @param array $history  [['role' => 'user'|'tutor', 'content' => '...'], ...]
      */
-    public function explain(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = '', ?int $subjectId = null): string
+    public function explain(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = '', ?int $subjectId = null, ?string $tutorVibe = null): string
     {
-        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary);
+        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary, $tutorVibe);
 
         // Pass the topic + student + subject so the AI service grounds the reply
         // in NOTES-FIRST, graph-aware RAG (the student's own notes — incl.
@@ -68,9 +71,9 @@ class TutorService
      * returns the full reply. Returns '' if nothing streamed (caller may fall
      * back to explain()).
      */
-    public function explainStream(User $student, string $topic, string $chapter, string $subject, array $history, string $message, callable $onDelta, string $mode = 'teach', string $notesContext = '', string $summary = '', ?int $subjectId = null): string
+    public function explainStream(User $student, string $topic, string $chapter, string $subject, array $history, string $message, callable $onDelta, string $mode = 'teach', string $notesContext = '', string $summary = '', ?int $subjectId = null, ?string $tutorVibe = null): string
     {
-        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary);
+        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary, $tutorVibe);
 
         $usage = [];
         $reply = $this->ai->stream($system, $user, $onDelta, $topic, $student->id, $subjectId, $usage);
@@ -196,40 +199,72 @@ class TutorService
      * Shared prompt builder for the tutor chat (text + streaming).
      * @return array{0:string,1:string}  [system, user]
      */
-    protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = ''): array
+    protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = '', ?string $tutorVibe = null): array
     {
-        // STRICT NOTE-GROUNDING. When the student is studying from their own
-        // uploaded notes, the tutor is locked to that material — no drifting into
-        // generic syllabus topics, and any quiz/check question must be answerable
-        // from the notes themselves. This is what makes "Study from my notes"
-        // trustworthy: it teaches and tests ONLY what the student actually wrote.
-        $notesBlock = trim($notesContext) === '' ? '' :
-            "\n[STRICT NOTE-GROUNDING — ACTIVE]\n"
-            . "The student is studying SPECIFICALLY from their own uploaded notes. Treat the material "
-            . "below as your EXCLUSIVE source of truth for this session:\n"
-            . "\"\"\"\n" . trim($notesContext) . "\n\"\"\"\n"
-            . "Directives:\n"
-            . "1. EXCLUSIVE SOURCE: Base every explanation, analogy, example, formula and assessment "
-            . "question on the notes above. Quote or refer to them where it helps.\n"
-            . "2. NO DRIFT: Do not teach or test concepts that are absent from these notes. If the notes "
-            . "cover (say) attraction & repulsion, do not wander into unrelated chapters such as electric "
-            . "current or photosynthesis.\n"
-            . "3. HONEST GAPS: If the student asks about something not in their notes, say so plainly, give "
-            . "at most a one-sentence answer, then steer them back to what their notes actually cover.\n"
-            . "4. FIX-ITS FIRST: If the notes contain mistakes or corrections, gently prioritise checking "
-            . "the corrected form.\n"
-            . "5. GROUNDED ASSESSMENTS: Any quiz, MCQ or check-for-understanding question must be answerable "
-            . "purely from these notes — draw the correct answer and the distractors from the notes' own "
-            . "facts, definitions and common slips, never from outside material.\n"
-            . "Gently flag anything in the notes that looks factually wrong.\n";
+        if (trim($notesContext) === '') {
+            // OFFICIAL SYLLABUS DIRECT STUDY. No personal notes are attached, so the
+            // tutor teaches straight from the official curriculum — the same RAG that
+            // AiClient injects for this subject/topic (grade-appropriate textbook
+            // chunks + verified learning indicators). This is what turns an empty
+            // notebook into a guided, never-dead-end lesson instead of a locked door.
+            $grade = $student->classNumber();
+            $gradeLine = $grade ? "a Class {$grade} learner" : "this learner's exact level";
+            $notesBlock =
+                "\n[OFFICIAL SYLLABUS DIRECT STUDY — ACTIVE]\n"
+                . "The student has NOT attached personal notes, so teach this topic DIRECTLY from the "
+                . "official curriculum for their class. The grounding material provided to you (the "
+                . "RAG-retrieved curriculum/textbook chunks for this subject and topic) is your source "
+                . "of truth — lean on it rather than free-recall.\n"
+                . "Directives:\n"
+                . "1. CURRICULUM GROUNDING: Explain using the official, grade-appropriate curriculum — "
+                . "standard textbook definitions, worked examples and the verified learning indicators "
+                . "for \"{$topic}\" (Chapter: {$chapter}, Subject: {$subject}).\n"
+                . "2. STAY ON SYLLABUS: Cover this topic thoroughly but don't wander into unrelated "
+                . "chapters. If the student drifts off-topic, answer briefly then steer them back.\n"
+                . "3. ACCURATE & HONEST: Use only standard, verified facts. If something isn't part of "
+                . "the curriculum for this class, say so plainly rather than inventing specifics.\n"
+                . "4. STEP-BY-STEP PEDAGOGY: Introduce one idea at a time, paced for {$gradeLine}, using "
+                . "the interactive storybook lesson format below with friendly, real-world analogies.\n";
+        } else {
+            // STRICT NOTE-GROUNDING. When the student is studying from their own
+            // uploaded notes, the tutor is locked to that material — no drifting into
+            // generic syllabus topics, and any quiz/check question must be answerable
+            // from the notes themselves. This is what makes "Study from my notes"
+            // trustworthy: it teaches and tests ONLY what the student actually wrote.
+            $notesBlock =
+                "\n[STRICT NOTE-GROUNDING — ACTIVE]\n"
+                . "The student is studying SPECIFICALLY from their own uploaded notes. Treat the material "
+                . "below as your EXCLUSIVE source of truth for this session:\n"
+                . "\"\"\"\n" . trim($notesContext) . "\n\"\"\"\n"
+                . "Directives:\n"
+                . "1. EXCLUSIVE SOURCE: Base every explanation, analogy, example, formula and assessment "
+                . "question on the notes above. Quote or refer to them where it helps.\n"
+                . "2. NO DRIFT: Do not teach or test concepts that are absent from these notes. If the notes "
+                . "cover (say) attraction & repulsion, do not wander into unrelated chapters such as electric "
+                . "current or photosynthesis.\n"
+                . "3. HONEST GAPS: If the student asks about something not in their notes, say so plainly, give "
+                . "at most a one-sentence answer, then steer them back to what their notes actually cover.\n"
+                . "4. FIX-ITS FIRST: If the notes contain mistakes or corrections, gently prioritise checking "
+                . "the corrected form.\n"
+                . "5. GROUNDED ASSESSMENTS: Any quiz, MCQ or check-for-understanding question must be answerable "
+                . "purely from these notes — draw the correct answer and the distractors from the notes' own "
+                . "facts, definitions and common slips, never from outside material.\n"
+                . "Gently flag anything in the notes that looks factually wrong.\n";
+        }
 
-        // When grounded in notes, teach through the interactive storybook format:
-        // kid-friendly themed cards and a value-grounded progress gate.
-        $visualBlock = trim($notesContext) === '' ? '' : $this->visualCardsDirective();
+        // Teach through the interactive storybook format for BOTH syllabus-direct
+        // study and note-grounded study — kid-friendly themed cards and a value-
+        // grounded progress gate — so a lesson never reads as a wall of text.
+        // (Pure extraction requests still fall back to plain Markdown; see the
+        // directive's own escape hatch.)
+        $visualBlock = $this->visualCardsDirective();
 
         $system = $this->tutorPersona($student)
             . $this->gamifiedPersona($student)
+            . $this->resolveVibeDirective($tutorVibe)   // companion archetype overlay (adventure/comic)
             . $this->mind->promptContext($student, $topic)
+            . $this->buildAdaptiveSocioMetrics($student, $topic)   // first-try struggles + read pacing
+            . $this->buildPlanPromptContext($student, $topic)      // active study-plan milestones
             . "\nYou are tutoring strictly within this topic: \"{$topic}\" "
             . "(Chapter: {$chapter}, Subject: {$subject}). "
             . "If the student drifts off this topic, gently steer them back.\n"
@@ -319,11 +354,89 @@ class TutorService
     }
 
     /**
+     * Compile the student's pacing behaviour and FIRST-TRY checkpoint failures on
+     * THIS topic, so the tutor can gently reinforce the ideas they found tough.
+     */
+    protected function buildAdaptiveSocioMetrics(User $student, string $topic): string
+    {
+        // First-try checkpoint misses on this topic (joined via the session's topic).
+        $struggled = DB::table('student_progress_logs as spl')
+            ->join('chat_sessions as cs', 'cs.id', '=', 'spl.chat_session_id')
+            ->where('spl.user_id', $student->id)
+            ->where('cs.topic_name', $topic)
+            ->where('spl.type', 'quiz_attempt')
+            ->where('spl.attempt_number', 1)
+            ->where('spl.is_correct', false)
+            ->limit(20)
+            ->pluck('spl.metadata');
+
+        $concepts = [];
+        foreach ($struggled as $metadata) {
+            $meta = is_array($metadata) ? $metadata : json_decode((string) $metadata, true);
+            $q = $meta['question_text'] ?? null;
+            if ($q) {
+                $concepts['"' . Str::limit($q, 60) . '"'] = true;   // key-dedupe
+            }
+        }
+        $concepts = array_keys($concepts);
+
+        // How many "Got it! Continue" reveals the student has clicked on this topic.
+        $continueCount = DB::table('student_progress_logs as spl')
+            ->join('chat_sessions as cs', 'cs.id', '=', 'spl.chat_session_id')
+            ->where('spl.user_id', $student->id)
+            ->where('cs.topic_name', $topic)
+            ->where('spl.type', 'read_continue')
+            ->count();
+
+        $block = "\n[STUDENT BEHAVIOUR & COMPREHENSION METRICS — ADAPTIVE TEACHING]\n";
+        $block .= "- Read pacing: the student has tapped 'Got it! Continue' {$continueCount} time(s) to unlock more of the lesson.\n";
+
+        if (! empty($concepts)) {
+            $list = implode(', ', array_slice($concepts, 0, 8));
+            $block .= "- Checkpoint struggles: they got their VERY FIRST attempt wrong on these checkpoints: [{$list}].\n";
+            $block .= "Directive: they found these ideas tough. As you continue, gently re-explain or use an extra-simple, playful analogy to reinforce these — don't just repeat the same words.\n";
+        } else {
+            $block .= "- Checkpoint mastery: a perfect first-try record so far! Keep the pace lively and praise the streak.\n";
+        }
+
+        return $block;
+    }
+
+    /**
+     * Surface the active study-plan tasks for THIS topic, so the tutor can point
+     * the student at the next pending milestone and motivate them to tick it off.
+     */
+    protected function buildPlanPromptContext(User $student, string $topic): string
+    {
+        $plan = StudyPlan::where('user_id', $student->id)
+            ->where('topic_name', $topic)
+            ->where('status', 'active')
+            ->with('tasks')
+            ->latest()
+            ->first();
+
+        if (! $plan || $plan->tasks->isEmpty()) {
+            return '';
+        }
+
+        $block = "\n[ACTIVE STUDY PLAN FOR THIS TOPIC]\n";
+        $block .= "The student is working through this plan:\n";
+        foreach ($plan->tasks as $task) {
+            $marker = $task->status === 'done' ? '[DONE]' : '[TODO]';
+            $scope = $task->concept ? " (focus: {$task->concept})" : '';
+            $block .= "- {$marker} {$task->title}{$scope}\n";
+        }
+        $block .= "Directive: naturally reference the next pending milestone and encourage them to tackle and tick it off — don't dump the whole list at once.\n";
+
+        return $block;
+    }
+
+    /**
      * Interactive visual-lesson format (Visual Learning spec). Only injected when
      * the student is studying from their own notes, so normal topic chats stay
      * plain. Instructs the model to emit the EXACT structured tags that
-     * RichMessage.jsx parses into a synced textbook highlight, themed learning
-     * cards, and an inline Progress Gate the student must clear to continue.
+     * RichMessage.jsx parses into kid-friendly themed segments and an inline
+     * Progress Gate the student must clear to continue.
      */
     protected function visualCardsDirective(): string
     {
@@ -573,6 +686,34 @@ GUIDE;
             . "logical — streak multiplier active!'). On a slip, treat it as a strategic training adjustment "
             . "('minor gap in unit conversions — let's run a quick 3-minute training loop to shore it up'). "
             . "Use this sparingly so it enhances, not clutters, the teaching.";
+    }
+
+    /**
+     * Companion archetype overlay for the Syllabus Quest launcher. The student
+     * picks a vibe at launch and it is persisted on the session (chat_sessions.
+     * tutor_vibe), so it tints EVERY turn — not just the first.
+     *
+     * 'coach' is the Mentor-Master default already supplied by gamifiedPersona(),
+     * so it returns '' here to avoid stacking two personas. Only the alternative
+     * archetypes add an extra flavour layer on top.
+     */
+    protected function resolveVibeDirective(?string $vibe): string
+    {
+        return match ($vibe) {
+            'adventure' =>
+                "\n\n[COMPANION ARCHETYPE — EXPLORER GUIDE 🗺️] You are a brave, upbeat expedition guide. "
+                . "Frame each new concept as a landmark we've just discovered on the map, and each question "
+                . "as an ancient puzzle that unlocks the next door. Weave in light expedition language "
+                . "('Expedition', 'Map', 'Unlock', 'Milestone', 'base camp') — but keep the actual teaching "
+                . "crisp and accurate; the theme decorates the lesson, it never replaces the substance.",
+            'comic' =>
+                "\n\n[COMPANION ARCHETYPE — PLAYFUL PAL 🦄] You are a friendly, funny cartoon sidekick. "
+                . "Use playful cartoon logic, the odd fun sound effect ('BAM!', 'ZOOM!', 'WHOOSH!') and "
+                . "ultra-simple, vivid everyday analogies. Keep the energy high and the giggles gentle — "
+                . "but every fact you teach must still be correct and on-syllabus.",
+            // 'coach' / null → Mentor-Master, already carried by gamifiedPersona().
+            default => '',
+        };
     }
 
     /** @param array<int,mixed> $items @return list<array<string,mixed>> */

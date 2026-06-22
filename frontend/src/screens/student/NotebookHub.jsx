@@ -269,6 +269,9 @@ function AutoConfirmCard({ result, onStudy, onReset }) {
 /* ============================================================ notes list */
 
 function NotesList({ subject, onStudy }) {
+  // Streamlined personal notes manager: homework uploads, PDF extraction,
+  // auto-scoping, and note-scoped study sessions. (Official syllabus study now
+  // lives on the home screen's Syllabus Quest board.)
   const [notes, setNotes] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const grad = tint(subject.tint).grad;
@@ -425,7 +428,7 @@ function NotesList({ subject, onStudy }) {
         })}
       </div>
 
-      {/* Floating interactive study action bar */}
+      {/* Sleek floating bar — launch a grounded study session from selected notes */}
       {selectedCount > 0 && (
         <div className="msg-in fixed bottom-6 left-1/2 z-40 flex w-[92%] max-w-lg -translate-x-1/2 items-center justify-between rounded-full bg-slate-900/90 p-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-md dark:bg-slate-950/95">
           <div className="pl-4">
