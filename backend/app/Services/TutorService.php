@@ -254,10 +254,12 @@ class TutorService
 
         // Teach through the interactive storybook format for BOTH syllabus-direct
         // study and note-grounded study — kid-friendly themed cards and a value-
-        // grounded progress gate — so a lesson never reads as a wall of text.
+        // grounded progress gate — so a lesson never reads as a wall of text. The
+        // grounding source (notes vs official syllabus) is reframed inside so the
+        // subject/topic study screen renders identically to the notes screen.
         // (Pure extraction requests still fall back to plain Markdown; see the
         // directive's own escape hatch.)
-        $visualBlock = $this->visualCardsDirective();
+        $visualBlock = $this->visualCardsDirective(trim($notesContext) !== '');
 
         $system = $this->tutorPersona($student)
             . $this->gamifiedPersona($student)
@@ -438,12 +440,23 @@ class TutorService
      * RichMessage.jsx parses into kid-friendly themed segments and an inline
      * Progress Gate the student must clear to continue.
      */
-    protected function visualCardsDirective(): string
+    protected function visualCardsDirective(bool $fromNotes = true): string
     {
-        return <<<'VIZCARDS'
+        // The SAME storybook format powers both pathways; only the grounding
+        // source is reframed so a syllabus-direct lesson never reads as "from
+        // notes" that don't exist. This is what makes the subject/topic study
+        // screen look identical to the notes screen (streak, timeline, cards).
+        $sourceFraming = $fromNotes
+            ? 'from THEIR OWN uploaded notes'
+            : 'directly from the official class syllabus and standard textbook curriculum for this topic';
+        $gateSource = $fromNotes
+            ? 'Build it STRICTLY from the notes.'
+            : 'Build it STRICTLY from the curriculum content you are teaching in this lesson.';
+
+        return <<<VIZCARDS
 
 [INTERACTIVE STORYBOOK LESSON FORMAT — TEACH LIKE A FUN CAMP COUNSELLOR]
-You're teaching a young student (around 10–12) from THEIR OWN uploaded notes. Don't reply with a plain wall of text — turn it into a lively, bite-sized story built from these EXACT structured blocks (the app renders them as colourful segments and a tap-to-answer checkpoint).
+You're teaching a young student (around 10–12) {$sourceFraming}. Don't reply with a plain wall of text — turn it into a lively, bite-sized story built from these EXACT structured blocks (the app renders them as colourful segments and a tap-to-answer checkpoint).
 
 KID-FRIENDLY VOICE (very important):
 - Speak like an excited, friendly guide — short, punchy sentences a 10–12 year old reads easily.
@@ -457,7 +470,7 @@ KID-FRIENDLY VOICE (very important):
 [CARD: vocab title="THE WORD"]a one-line, friendly meaning of one tricky word[/CARD]
 Always include an analogy card. Use the vocab card only when there is a genuinely tricky term.
 
-2) PROGRESS GATE — after the cards, add EXACTLY ONE checkpoint the student taps to unlock the next part. Build it STRICTLY from the notes. You MUST emit BOTH:
+2) PROGRESS GATE — after the cards, add EXACTLY ONE checkpoint the student taps to unlock the next part. {$gateSource} You MUST emit BOTH:
    • correct=INDEX  — the 0-based index of the right option, AND
    • ans="EXACT TEXT OF THE CORRECT OPTION"  — copied character-for-character from that option.
 The app grades by the ans="…" STRING (the index is only a backup), so they MUST point to the SAME option — double-check the index and the string match before you send.
