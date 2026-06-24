@@ -74,6 +74,9 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
       selected_note_ids: [],
       quest_style: "teach",
       tutor_vibe: "coach",
+      // Carry the exact topics the student picked so the chat page can show them
+      // (a multi-topic quest otherwise only knows it's "N selected topics").
+      topic_names: selectedTopics.map((t) => t.name),
     };
 
     if (selectedTopics.length === 1) {

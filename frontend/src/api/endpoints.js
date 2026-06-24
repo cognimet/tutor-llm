@@ -208,6 +208,8 @@ export const parentApi = {
   gaps: (childId) => api.get(`/parent/children/${childId}/gaps`).then((r) => r.data),
   linkChild: (child_email, relationship) =>
     api.post("/parent/children/link", { child_email, relationship }).then((r) => r.data),
+  // Create a brand-new student account and link it to the signed-in parent.
+  addChild: (payload) => api.post("/parent/children", payload).then((r) => r.data),
 };
 
 // --- Admin ---

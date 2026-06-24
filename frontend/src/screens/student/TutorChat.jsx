@@ -242,6 +242,16 @@ function EmptyState({ ctx, t, greeting, onSend, onPractice, onMind, onBoard }) {
         <p className="mt-1 text-xs font-bold text-slate-400">
           {ctx.subject_name}{ctx.chapter_name ? ` · ${ctx.chapter_name}` : ""}
         </p>
+        {(ctx.topic_names || []).length > 1 && (
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+            {ctx.topic_names.map((name) => (
+              <span key={name}
+                className={`rounded-full ${t.soft} px-2.5 py-1 text-[11px] font-extrabold ${t.text} ring-1 ${t.ring}`}>
+                {name}
+              </span>
+            ))}
+          </div>
+        )}
         {greeting && (
           <p className="mx-auto mt-4 max-w-[34rem] text-[0.95rem] leading-relaxed text-slate-500 dark:text-slate-400">
             {greeting}
@@ -1185,6 +1195,10 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
   const extraNotes = (activeNotes.length || noteCount) - 1;
   // Topic is the headline; the note/PDF name(s) ride along in the subtitle.
   const headerTitle = ctx.topic_name;
+  // A multi-topic Syllabus Quest carries the exact topics the student picked, so
+  // the chat page can name them (the title only says "N selected topics").
+  const topicNames = ctx.topic_names || [];
+  const showTopicChips = topicNames.length > 1;
   const notesLabel = hasNotes
     ? (activeNotes[0]?.title || `${noteCount} note${noteCount > 1 ? "s" : ""}`)
       + (extraNotes > 0 ? ` + ${extraNotes} more note${extraNotes > 1 ? "s" : ""}` : "")
@@ -1298,6 +1312,22 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
             </button>
           </div>
 
+          {/* Selected-topics strip — names the exact topics in a multi-topic quest
+              so they stay visible throughout the chat, not just on the home picker. */}
+          {showTopicChips && (
+            <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-slate-200/60 bg-white/40 px-3 py-2 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/30 sm:px-4">
+              <span className="shrink-0 pr-0.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
+                Topics
+              </span>
+              {topicNames.map((name) => (
+                <span key={name} title={name}
+                  className={`shrink-0 rounded-full ${t.soft} px-2.5 py-1 text-[11px] font-extrabold ${t.text} ring-1 ${t.ring}`}>
+                  {name}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
             {!booting && <FigureStrip ctx={ctx} />}
             {booting ? (
@@ -1409,16 +1439,17 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
             )}
           </div>
 
-          {!atBottom && (
-            <button onClick={jumpToLatest} title="Jump to latest"
-              className="absolute bottom-36 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white dark:bg-slate-800 px-3 py-2 text-xs font-extrabold text-slate-500 shadow-lg ring-1 ring-slate-200 dark:ring-white/10 transition-colors hover:text-indigo-600">
-              {hasNew ? <span className={`h-2 w-2 rounded-full ${t.dot} animate-pulse`} /> : <ArrowDown className="h-4 w-4" />}
-              {hasNew ? "New reply" : "Latest"}
-            </button>
-          )}
-
           {/* Composer block — same reading column as the messages */}
-          <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
+          <div className="relative px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
+            {/* Jump-to-latest floats just above the composer chrome (anchored to
+                this block so it never overlaps the quick-study / follow-up bars). */}
+            {!atBottom && (
+              <button onClick={jumpToLatest} title="Jump to latest"
+                className="absolute -top-11 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white dark:bg-slate-800 px-3 py-2 text-xs font-extrabold text-slate-500 shadow-lg ring-1 ring-slate-200 dark:ring-white/10 transition-colors hover:text-indigo-600">
+                {hasNew ? <span className={`h-2 w-2 rounded-full ${t.dot} animate-pulse`} /> : <ArrowDown className="h-4 w-4" />}
+                {hasNew ? "New reply" : "Latest"}
+              </button>
+            )}
             <div className="mx-auto w-full max-w-3xl xl:max-w-4xl 2xl:max-w-5xl">
             {/* 1-tap quick actions (summary, flashcards, formulas, quiz) drawn from active notes or official syllabus. */}
             <QuickStudyOptionsBar hasNotes={hasNotes} onTrigger={handleTriggerOption} />
@@ -1454,50 +1485,60 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
               </div>
             )}
 
-            <div className="flex items-end gap-1.5 rounded-[1.75rem] bg-white dark:bg-slate-800 p-2 shadow-lg shadow-slate-200/60 dark:shadow-black/20 ring-1 ring-slate-200 dark:ring-white/10 transition-shadow focus-within:ring-2 focus-within:ring-indigo-300 sm:gap-2">
-              {/* Attach notes (upload + select) — rides with the next message */}
-              <NotesPicker
-                ctx={ctx}
-                grad={t.grad}
-                selectedIds={attached.map((n) => n.id)}
-                onToggle={(note) => setAttached((a) =>
-                  a.some((x) => x.id === note.id)
-                    ? a.filter((x) => x.id !== note.id)
-                    : [...a, { id: note.id, title: note.title }])}
-              />
-              {/* Snap-a-doubt: photo -> OCR -> tutor solves it teaching-style */}
-              <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onSnapFile} />
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={streaming || snapBusy}
-                title="Snap a doubt (photo of a problem)"
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-white/5 hover:text-indigo-600 disabled:opacity-40"
-              >
-                {snapBusy
-                  ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
-                  : <Camera className="h-5 w-5" />}
-              </button>
-              {/* Whiteboard: sketch your working, the tutor reads the board */}
-              <button
-                onClick={() => setBoardOpen(true)}
-                disabled={streaming || snapBusy}
-                title="Open the whiteboard"
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-white/5 hover:text-indigo-600 disabled:opacity-40"
-              >
-                <PenLine className="h-5 w-5" />
-              </button>
-              {voiceSupported && (
+            {/* On mobile the textarea takes its own full-width row (order-1) and
+                the tools + actions wrap onto a second row, so typing isn't
+                squeezed into a sliver. On sm+ it's a single inline row. */}
+            <div className="flex flex-wrap items-end gap-1.5 rounded-[1.75rem] bg-white dark:bg-slate-800 p-2 shadow-lg shadow-slate-200/60 dark:shadow-black/20 ring-1 ring-slate-200 dark:ring-white/10 transition-shadow focus-within:ring-2 focus-within:ring-indigo-300 sm:flex-nowrap sm:gap-2">
+              {/* Tools — left cluster (row 2 on mobile) */}
+              <div className="order-2 flex items-end gap-1.5 sm:order-none sm:gap-2">
+                {/* Attach notes (upload + select) — rides with the next message */}
+                <NotesPicker
+                  ctx={ctx}
+                  grad={t.grad}
+                  selectedIds={attached.map((n) => n.id)}
+                  onToggle={(note) => setAttached((a) =>
+                    a.some((x) => x.id === note.id)
+                      ? a.filter((x) => x.id !== note.id)
+                      : [...a, { id: note.id, title: note.title }])}
+                />
+                {/* Snap-a-doubt: photo -> OCR -> tutor solves it teaching-style */}
+                <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onSnapFile} />
                 <button
-                  onClick={toggleVoice}
-                  disabled={streaming}
-                  title={listening ? "Stop listening" : "Speak your question"}
-                  className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl transition-colors disabled:opacity-40 ${
-                    listening ? "bg-rose-50 text-rose-500 ring-1 ring-rose-200 animate-pulse" : "text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-indigo-600"
-                  }`}
+                  onClick={() => fileRef.current?.click()}
+                  disabled={streaming || snapBusy}
+                  title="Snap a doubt (photo of a problem)"
+                  aria-label="Snap a doubt — photo of a problem"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-white/5 hover:text-indigo-600 disabled:opacity-40"
                 >
-                  {listening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  {snapBusy
+                    ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-500" />
+                    : <Camera className="h-5 w-5" />}
                 </button>
-              )}
+                {/* Whiteboard: sketch your working, the tutor reads the board */}
+                <button
+                  onClick={() => setBoardOpen(true)}
+                  disabled={streaming || snapBusy}
+                  title="Open the whiteboard"
+                  aria-label="Open the whiteboard"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-white/5 hover:text-indigo-600 disabled:opacity-40"
+                >
+                  <PenLine className="h-5 w-5" />
+                </button>
+                {voiceSupported && (
+                  <button
+                    onClick={toggleVoice}
+                    disabled={streaming}
+                    title={listening ? "Stop listening" : "Speak your question"}
+                    aria-label={listening ? "Stop voice input" : "Speak your question"}
+                    aria-pressed={listening}
+                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl transition-colors disabled:opacity-40 ${
+                      listening ? "bg-rose-50 text-rose-500 ring-1 ring-rose-200 animate-pulse" : "text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-indigo-600"
+                    }`}
+                  >
+                    {listening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  </button>
+                )}
+              </div>
               <textarea ref={taRef} rows={1} value={input}
                 onChange={(e) => { setInput(e.target.value); autoGrow(e.target); }}
                 onKeyDown={(e) => {
@@ -1506,20 +1547,24 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
                   if (e.key === "ArrowUp" && !input && !streaming && lastUserContent) { e.preventDefault(); focusComposer(lastUserContent); }
                 }}
                 placeholder={`Ask anything about ${ctx.topic_name}…`}
-                className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2 text-sm outline-none placeholder:text-slate-400" />
-              {/* Tutor mode lives inside the composer to keep the canvas clean */}
-              <ModePicker mode={mode} onPick={setMode} />
-              {streaming ? (
-                <button onClick={stop} title="Stop generating (Esc)"
-                  className="group grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-800 text-white shadow-lg transition-transform active:scale-95">
-                  <Square className="h-4 w-4 fill-current" />
-                </button>
-              ) : (
-                <button onClick={() => send()} disabled={!input.trim()} title="Send (Enter)"
-                  className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${t.grad} text-white shadow-lg shadow-indigo-500/30 transition-transform active:scale-95 disabled:opacity-40`}>
-                  <Send className="h-5 w-5" />
-                </button>
-              )}
+                aria-label={`Ask anything about ${ctx.topic_name}`}
+                className="order-1 min-w-0 basis-full grow-0 resize-none bg-transparent px-3 py-2.5 text-base outline-none placeholder:text-slate-400 sm:order-none sm:basis-0 sm:grow sm:py-2 sm:text-sm" />
+              {/* Actions — right cluster (row 2 on mobile, pushed right) */}
+              <div className="order-3 ml-auto flex items-end gap-1.5 sm:order-none sm:ml-0 sm:gap-2">
+                {/* Tutor mode lives inside the composer to keep the canvas clean */}
+                <ModePicker mode={mode} onPick={setMode} />
+                {streaming ? (
+                  <button onClick={stop} title="Stop generating (Esc)" aria-label="Stop generating"
+                    className="group grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-800 text-white shadow-lg transition-transform active:scale-95">
+                    <Square className="h-4 w-4 fill-current" />
+                  </button>
+                ) : (
+                  <button onClick={() => send()} disabled={!input.trim()} title="Send (Enter)" aria-label="Send message"
+                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${t.grad} text-white shadow-lg shadow-indigo-500/30 transition-transform active:scale-95 disabled:opacity-40`}>
+                    <Send className="h-5 w-5" />
+                  </button>
+                )}
+              </div>
             </div>
             <p className="mt-2 flex items-center justify-center gap-1.5 px-2 text-center text-[11px] text-slate-400">
               <Sparkles className="h-3 w-3" /> {hasNotes ? <>Grounded in <b>{noteCount} of your note{noteCount > 1 ? "s" : ""}</b></> : <>Scoped to <b>{ctx.topic_name}</b></>}

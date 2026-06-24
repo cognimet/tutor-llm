@@ -150,6 +150,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/children/{child}/report', [ParentController::class, 'childReport']);
         Route::get('/children/{child}/usage', [UsageController::class, 'child']);
         Route::get('/children/{child}/gaps', [ParentController::class, 'childGaps']);
+        Route::post('/children', [ParentController::class, 'addChild']);
         Route::post('/children/link', [ParentController::class, 'linkChild']);
     });
 
