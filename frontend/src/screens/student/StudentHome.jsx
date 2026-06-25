@@ -87,10 +87,10 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
       payload.chapter_name = parentChapter?.name || null;
     } else if (selectedTopics.length > 1) {
       payload.topic_name = `${selectedTopics.length} selected topics`;
-      payload.chapter_name = "Custom Syllabus Quest";
+      payload.chapter_name = "My Picked Topics";
     } else {
       payload.topic_name = subject.name;
-      payload.chapter_name = "Whole Subject Syllabus";
+      payload.chapter_name = "Whole Subject";
     }
 
     onOpenTopic(payload);
@@ -168,7 +168,7 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/20">
               <Compass className="h-6 w-6" />
             </div>
-            <h3 className="mt-5 text-xl font-extrabold">Syllabus Quest Board 🏛️</h3>
+            <h3 className="mt-5 text-xl font-extrabold">My Learning Adventures 🏛️</h3>
             <p className="mt-1 text-sm leading-relaxed text-white/80">
               Study directly from official class textbooks and pre-loaded verified boards. Master curriculum chapters topic-by-topic.
             </p>
@@ -176,10 +176,10 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
         </div>
       )}
 
-      {/* 4. Focus areas detected by AI */}
+      {/* 4. Focus Areas */}
       {progress?.gaps?.length > 0 && (
         <Card className="border border-slate-100 bg-white/50 p-5 backdrop-blur-sm dark:border-white/5">
-          <p className="text-xs font-extrabold uppercase tracking-widest text-slate-400">Focus areas detected by AI</p>
+          <p className="text-xs font-extrabold uppercase tracking-widest text-slate-400">Focus Areas</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {progress.gaps.slice(0, 6).map((g) => (
               <span key={g.id} className={`rounded-full border px-3 py-1 text-xs font-extrabold shadow-sm ${sev(g.severity)}`}>
@@ -203,7 +203,7 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
           </Card>
         ) : !subject ? (
           <div>
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Official Syllabus Library</h2>
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Subjects Library</h2>
             <p className="mt-1 text-sm text-slate-400">Pick a subject to explore its chapters and start learning.</p>
 
             <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -244,7 +244,7 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
               <div className="flex items-center gap-4">
                 <div className={`grid h-14 w-14 place-items-center rounded-2xl text-2xl ${tint(subject.tint).soft}`}>{subject.emoji}</div>
                 <div>
-                  <h2 className="text-2xl font-extrabold">{subject.name} Syllabus</h2>
+                  <h2 className="text-2xl font-extrabold">{subject.name} Chapters</h2>
                   <p className="text-sm text-slate-400">{subject.blurb}</p>
                 </div>
               </div>
@@ -318,10 +318,10 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
         <div className="msg-in fixed bottom-6 left-1/2 z-40 flex w-[92%] max-w-lg -translate-x-1/2 items-center justify-between rounded-full bg-slate-900/90 p-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-md dark:bg-slate-950/95">
           <div className="pl-4">
             <p className="text-sm font-extrabold text-white">
-              {selectedCount > 0 ? `${selectedCount} topic${selectedCount > 1 ? "s" : ""} selected` : "Whole Subject Syllabus"}
+              {selectedCount > 0 ? `${selectedCount} topic${selectedCount > 1 ? "s" : ""} selected` : "Whole Subject"}
             </p>
             <p className="text-[10px] font-bold text-slate-400">
-              {selectedCount > 0 ? "Launch a unified study quest" : "Study direct subject syllabus — no notes"}
+              {selectedCount > 0 ? "Start a study adventure" : "Study the whole subject — no notes needed"}
             </p>
           </div>
           <button
@@ -376,7 +376,7 @@ function ChangeCurriculumModal({ currentLevelId, onClose, onSetLevel }) {
           <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">Change your curriculum</h3>
           <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-white/10"><X className="h-4 w-4" /></button>
         </div>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Switching updates the topics you see and tailors the AI tutor to your level.</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Switching updates the topics you see and tailors your lessons to your level.</p>
         <div className="mt-5"><CurriculumPicker value={currentLevelId} onChange={setSel} /></div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>

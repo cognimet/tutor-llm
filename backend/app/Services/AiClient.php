@@ -225,14 +225,17 @@ class AiClient
     }
 
     /**
-     * Validate generated questions against the topic's curriculum (RAG).
+     * Validate generated questions against the topic's curriculum (RAG) and,
+     * when supplied, against the student's focus areas (a kept question must
+     * map to one of them).
      * @return int[]  0-based indices (into $questions) to KEEP. Falls back to
      *               all indices if the service is unavailable/returns nothing.
      */
-    public function validateAssessment(string $topic, array $questions): array
+    public function validateAssessment(string $topic, array $questions, array $focusAreas = []): array
     {
         $data = $this->roleCall('/ai/assessment/validate', [
             'topic' => $topic, 'questions' => array_values($questions),
+            'focus_areas' => array_values($focusAreas),
         ]);
         $keep = $data['keep'] ?? null;
         if (! is_array($keep)) {

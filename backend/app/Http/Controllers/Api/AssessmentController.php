@@ -57,12 +57,27 @@ class AssessmentController extends Controller
         // Subject id (from the topic) makes generation notes-first — questions
         // lean on the student's own uploaded notes for this subject.
         $subjectId = $this->resolver->subjectId($user, $data['topic_id'] ?? null, null);
-        $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count, $subjectId);
+
+        // Target the student's open focus areas for THIS topic so the quiz is
+        // about what they're actually struggling with — not just the topic at
+        // large. Empty = a plain topic diagnostic (unchanged behaviour).
+        $focusAreas = $user->knowledgeGaps()
+            ->where('resolved', false)
+            ->where('topic_name', $data['topic_name'])
+            ->orderByRaw("CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END")
+            ->limit(6)
+            ->pluck('concept')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count, $subjectId, $focusAreas);
 
         // Free-tier models occasionally rate-limit or return malformed JSON;
         // one immediate retry rescues most transient failures.
         if (empty($questions)) {
-            $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count, $subjectId);
+            $questions = $this->tutor->generateAssessment($user, $data['topic_name'], $count, $subjectId, $focusAreas);
         }
 
         abort_if(

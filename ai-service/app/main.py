@@ -534,22 +534,25 @@ async def assessment_generate(req: AssessmentGenerateRequest, authorization: str
 
 class AssessmentValidateRequest(BaseModel):
     topic: str
-    questions: list[dict] = []   # [{question, options, correct_index, concept}]
+    questions: list[dict] = []   # [{question, options, correct_index, concept, focus_area}]
+    focus_areas: list[str] = []  # when set, a kept question must map to one of these
 
 
 @app.post("/ai/assessment/validate")
 async def assessment_validate(req: AssessmentValidateRequest, authorization: str | None = Header(None)):
-    """Post-hoc curriculum validation: given the topic's curriculum (RAG) and a
-    set of generated questions, return the indices that are on-syllabus AND
-    correctly keyed. Falls back to keeping all if there's nothing to validate
+    """Post-hoc moderation: given the topic's curriculum (RAG) and a set of
+    generated questions, return the indices that are on-syllabus AND correctly
+    keyed AND — when focus areas are supplied — actually assess one of those
+    focus areas. Falls back to keeping all if there's nothing to validate
     against, so it never empties a quiz on a flaky check."""
     _auth(authorization)
     n = len(req.questions)
     if n == 0:
         return {"keep": [], "usage": Usage(model="none", mock=settings.is_mock).model_dump()}
 
+    focus = [f for f in (req.focus_areas or []) if isinstance(f, str) and f.strip()]
     chunks = await rag.retrieve(req.topic, topic=req.topic)
-    if not chunks:  # no curriculum indexed for this topic — can't validate
+    if not chunks and not focus:  # nothing to validate against
         return {"keep": list(range(n)), "usage": Usage(model="none", mock=settings.is_mock).model_dump()}
 
     lines = []
@@ -557,15 +560,26 @@ async def assessment_validate(req: AssessmentValidateRequest, authorization: str
         opts = q.get("options") or []
         ci = q.get("correct_index", 0)
         correct = opts[ci] if isinstance(ci, int) and 0 <= ci < len(opts) else ""
-        lines.append(f'{i}. Q: {q.get("question", "")} | Marked correct: {correct}')
+        tag = q.get("focus_area") or q.get("concept") or ""
+        suffix = f' | Tagged focus area: {tag}' if focus else ""
+        lines.append(f'{i}. Q: {q.get("question", "")} | Marked correct: {correct}{suffix}')
+
+    focus_rule = ""
+    focus_ctx = ""
+    if focus:
+        focus_rule = (
+            " AND (c) directly assess ONE of the student's FOCUS AREAS listed below. Drop any "
+            "question that, regardless of its tag, does not genuinely test one of those focus areas."
+        )
+        focus_ctx = "\n\nFOCUS AREAS (a kept question must assess one of these):\n- " + "\n- ".join(focus)
 
     system = (
         "You are a strict exam moderator. You are given CURRICULUM and a numbered list of quiz "
         "questions. Return ONLY JSON {\"keep\":[indices]} — the indices of questions that are "
-        "(a) on-syllabus for this curriculum AND (b) have a correct marked answer. Drop anything "
-        "off-syllabus, ambiguous, or wrongly keyed."
+        "(a) on-syllabus for this curriculum AND (b) have a correct marked answer" + focus_rule +
+        ". Drop anything off-syllabus, ambiguous, or wrongly keyed."
     )
-    user = rag.as_context(chunks) + "\n\nQuestions:\n" + "\n".join(lines) + "\n\nReturn {\"keep\":[...]}."
+    user = rag.as_context(chunks) + focus_ctx + "\n\nQuestions:\n" + "\n".join(lines) + "\n\nReturn {\"keep\":[...]}."
     data, usage = await llm.json(system, user, {"keep": list(range(n))}, action="grade")
     keep = [i for i in (data.get("keep", []) if isinstance(data, dict) else []) if isinstance(i, int) and 0 <= i < n]
     if not keep:  # never nuke the whole quiz if the moderator returns nothing

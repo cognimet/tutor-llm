@@ -6,6 +6,14 @@ export const authApi = {
   register: (payload) => api.post("/register", payload).then((r) => r.data),
   me: () => api.get("/me").then((r) => r.data.user),
   updateProfile: (payload) => api.put("/me", payload).then((r) => r.data.user),
+  // Upload a profile picture (multipart). Returns the updated user.
+  uploadAvatar: (file) => {
+    const fd = new FormData();
+    fd.append("image", file);
+    return api
+      .post("/me/avatar", fd, { headers: { "Content-Type": "multipart/form-data" } })
+      .then((r) => r.data.user);
+  },
   logout: () => api.post("/logout").then((r) => r.data),
 };
 

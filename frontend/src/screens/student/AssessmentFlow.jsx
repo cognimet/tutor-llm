@@ -30,7 +30,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
         scope, ...(count ? { count } : {}),
       });
       if (!a || !Array.isArray(a.questions) || a.questions.length === 0) {
-        throw new Error("The AI returned an empty quiz. Please try again.");
+        throw new Error("We couldn't build your quiz just now. Please try again.");
       }
       setAssessment(a); setStage("quiz");
     } catch (err) {
@@ -165,7 +165,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
                 <p className="font-display text-5xl font-extrabold">{result.score}/{result.total}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-4 text-sm text-slate-600 dark:text-slate-300">
-                <p className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-100"><Sparkles className="h-4 w-4 text-indigo-500" /> What the AI noticed</p>
+                <p className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-100"><Sparkles className="h-4 w-4 text-indigo-500" /> What we noticed</p>
                 <p className="mt-1">{result.summary}</p>
               </div>
               {result.gaps?.length > 0 && (

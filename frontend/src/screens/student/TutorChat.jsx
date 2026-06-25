@@ -4,13 +4,13 @@ import {
   Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Plus, MessageSquare,
   ChevronRight, ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
-  Mic, MicOff, Camera, Maximize2, PenLine, LogOut,
+  Mic, MicOff, Camera, Maximize2, PenLine,
   Sparkles as SparklesIcon, CalendarClock, Paperclip, ListChecks,
   FileText, Loader2, HelpCircle, Calculator,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
 import CreditMeter from "../../ui/CreditMeter.jsx";
-import { ThemeToggle } from "../../ui/components.jsx";
+import { ThemeToggle, UserMenu } from "../../ui/components.jsx";
 import { tutorApi, plannerApi, notesApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
 import Markdown from "../../ui/Markdown.jsx";
@@ -521,7 +521,7 @@ function QuickStudyOptionsBar({ hasNotes, onTrigger }) {
   );
 }
 
-export default function TutorChat({ session: initial, onBack, onLogout, onProgressChange }) {
+export default function TutorChat({ user, session: initial, onBack, onLogout, onProfile, onProgressChange }) {
   const [ctx, setCtx] = useState(initial);
   const noteCount = (ctx.selected_note_ids || []).length;
   const hasNotes = noteCount > 0;
@@ -1306,10 +1306,7 @@ export default function TutorChat({ session: initial, onBack, onLogout, onProgre
             <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-slate-200 dark:bg-white/10 lg:block" />
             <CreditMeter className="hidden shrink-0 lg:flex" />
             <ThemeToggle className="shrink-0" />
-            <button onClick={onLogout} title="Log out"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 transition-colors hover:text-rose-500 dark:text-slate-300 dark:ring-white/10 dark:hover:text-rose-400">
-              <LogOut className="h-5 w-5" />
-            </button>
+            <UserMenu user={user} onProfile={onProfile} onLogout={onLogout} />
           </div>
 
           {/* Selected-topics strip — names the exact topics in a multi-topic quest

@@ -12,7 +12,7 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
-        'name', 'email', 'password', 'role',
+        'name', 'email', 'mobile', 'password', 'role',
         'level_id', 'board', 'grade', 'stream', 'language', 'avatar', 'is_active',
         'xp_points', 'level', 'current_streak', 'last_active_date',
     ];
@@ -58,7 +58,13 @@ class User extends Authenticatable
     /** "School · CBSE · Class 10 · Science" — denormalised for the UI + API payloads. */
     public function getCurriculumPathAttribute(): ?string
     {
-        $level = $this->relationLoaded('level') ? $this->level : ($this->level_id ? $this->level()->with('track.stage')->first() : null);
+        // NOTE: read the loaded relation via getRelation(), NOT $this->level —
+        // the `level` relationship name collides with the `level` integer column
+        // (gamification level), and Eloquent's getAttribute() returns the column,
+        // so $this->level would be an int once the relation is eager-loaded.
+        $level = $this->relationLoaded('level')
+            ? $this->getRelation('level')
+            : ($this->level_id ? $this->level()->with('track.stage')->first() : null);
         if (! $level) return null;
 
         $path = $level->pathLabel();

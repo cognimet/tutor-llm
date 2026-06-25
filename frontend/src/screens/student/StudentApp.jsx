@@ -9,6 +9,7 @@ import StudentHome from "./StudentHome.jsx";
 import TutorChat from "./TutorChat.jsx";
 import NotebookHub from "./NotebookHub.jsx";
 import GamificationDashboard from "./GamificationDashboard.jsx";
+import StudentProfile from "./StudentProfile.jsx";
 
 export default function StudentApp() {
   const { user, logout, patchUser } = useAuth();
@@ -59,7 +60,7 @@ export default function StudentApp() {
     <div className={isChat ? "h-screen" : "min-h-screen"}>
       <Backdrop />
       {/* Chat has its own single, combined header — skip the global bar there. */}
-      {!isChat && <AppHeader user={user} onLogout={logout} right={<CreditMeter />} />}
+      {!isChat && <AppHeader user={user} onLogout={logout} onProfile={() => navigate("/profile")} right={<CreditMeter />} />}
       {loading ? (
         <Spinner label="Loading your classroom…" />
       ) : (
@@ -108,9 +109,10 @@ export default function StudentApp() {
           } />
           <Route path="chat" element={
             session
-              ? <TutorChat user={user} session={session} onBack={backHome} onLogout={logout} onProgressChange={loadProgress} />
+              ? <TutorChat user={user} session={session} onBack={backHome} onLogout={logout} onProfile={() => navigate("/profile")} onProgressChange={loadProgress} />
               : <Navigate to="/" replace />
           } />
+          <Route path="profile" element={<StudentProfile onBack={backHome} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       )}

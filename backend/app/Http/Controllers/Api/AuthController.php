@@ -78,14 +78,35 @@ class AuthController extends Controller
         $user = $request->user();
         $data = $request->validate([
             'name'     => ['sometimes', 'string', 'max:120'],
+            // Email is editable from the profile page; stay unique but ignore self.
+            'email'    => ['sometimes', 'email', Rule::unique('users', 'email')->ignore($user->id)],
+            // Mobile is free-form and NOT unique (families share a number).
+            'mobile'   => ['sometimes', 'nullable', 'string', 'max:20'],
             'level_id' => ['sometimes', 'nullable', 'exists:levels,id'],
             'board'    => ['sometimes', 'nullable', 'string'],
             'grade'    => ['sometimes', 'nullable', 'integer', 'min:1', 'max:12'],
             'stream'   => ['sometimes', 'nullable', 'string', 'max:40'],
             'language' => ['sometimes', 'nullable', 'string'],
+            // Either a preset key ("preset:fox") or an uploaded image URL.
             'avatar'   => ['sometimes', 'nullable', 'string'],
         ]);
         $user->update($data);
+
+        return response()->json(['user' => $user->fresh()->load('level.track.stage')]);
+    }
+
+    // Upload a profile picture. Stores to the public disk and saves the URL on
+    // the user. Presets need no upload — the client sets `avatar` to a "preset:*"
+    // key through updateProfile() above.
+    public function uploadAvatar(Request $request)
+    {
+        $request->validate([
+            'image' => ['required', 'image', 'mimes:jpeg,jpg,png,webp', 'max:4096'],
+        ]);
+
+        $user = $request->user();
+        $path = $request->file('image')->store('avatars', 'public');
+        $user->update(['avatar' => \Illuminate\Support\Facades\Storage::disk('public')->url($path)]);
 
         return response()->json(['user' => $user->fresh()->load('level.track.stage')]);
     }

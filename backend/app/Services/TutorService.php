@@ -549,12 +549,23 @@ GUIDE;
 
     /* ---------------- 2. Mini-assessment generation ------------------ */
 
-    public function generateAssessment(User $student, string $topic, int $count = 3, ?int $subjectId = null): array
+    /**
+     * Generate a topic mini-assessment.
+     *
+     * @param string[] $focusAreas  When non-empty, every question MUST target one
+     *        of these specific focus areas (the student's open gaps). Each returned
+     *        question carries a `focus_area` tag so it's traceable, and questions
+     *        that don't map to a supplied focus area are dropped (deterministic
+     *        backstop) — guaranteeing relevance even if the model wanders.
+     */
+    public function generateAssessment(User $student, string $topic, int $count = 3, ?int $subjectId = null, array $focusAreas = []): array
     {
+        $focusAreas = array_values(array_filter(array_map('trim', $focusAreas)));
+        $hasFocus = ! empty($focusAreas);
+
         // Single RAG-grounded generation call. The AI service injects the topic's
         // curriculum (and the student's own notes) into this prompt, and the
-        // schema constraint below makes the model self-validate on-syllabus —
-        // removing the previous second "validate" round-trip and ~halving latency.
+        // schema constraint below makes the model self-validate on-syllabus.
         $system = $this->tutorPersona($student)
             . "\nYou create a short diagnostic assessment to reveal what the student "
             . "truly understands. When the provided material includes the student's own notes "
@@ -565,13 +576,25 @@ GUIDE;
             . "or facts outside this topic's syllabus, and make sure each question's keyed "
             . "correct_index is genuinely correct. Return ONLY JSON.";
 
+        if ($hasFocus) {
+            $list = '"' . implode('", "', $focusAreas) . '"';
+            $system .= "\nFOCUS RULE: this student is currently struggling with these specific "
+                . "focus areas: {$list}. EVERY question must directly assess ONE of these exact "
+                . "focus areas — do not test anything else. Set each question's \"focus_area\" field "
+                . "to the EXACT focus area string (copied verbatim from that list) that it assesses.";
+        }
+
         $user = "Create {$count} multiple-choice questions for the topic \"{$topic}\". "
-            . "Each question must probe a distinct sub-concept of THIS topic and include a plausible "
-            . "distractor that reflects a common misconception. Verify each correct_index before "
-            . "returning.\n"
+            . ($hasFocus
+                ? "Spread the questions across the focus areas listed above; each question must map to exactly one of them. "
+                : "Each question must probe a distinct sub-concept of THIS topic and ")
+            . "include a plausible distractor that reflects a common misconception. Verify each "
+            . "correct_index before returning.\n"
             . 'Return JSON of the form: '
             . '{"questions":[{"question":"...","options":["..","..","..",".."],'
-            . '"correct_index":0,"concept":"sub-concept name","explanation":"why correct"}]}';
+            . '"correct_index":0,"concept":"sub-concept name",'
+            . ($hasFocus ? '"focus_area":"exact focus area it tests",' : '')
+            . '"explanation":"why correct"}]}';
 
         // student_id + subject_id make the grounding notes-first (their uploaded
         // material is injected ahead of curriculum).
@@ -579,7 +602,35 @@ GUIDE;
         $data = $this->ai->json($system, $user, ['questions' => []], $topic, null, $student->id, $subjectId, $usage);
         $this->meter($student, 'assess_gen', $usage, ['topic' => $topic]);
 
-        return $this->normaliseQuestions($data['questions'] ?? []);
+        $questions = $this->normaliseQuestions($data['questions'] ?? [], $focusAreas);
+
+        // Curriculum + focus-area moderation. The AI service confirms each question
+        // is on-syllabus AND (when focus areas are supplied) maps to one of them;
+        // it falls back to keeping all if no curriculum is indexed, so it never
+        // empties a quiz on a flaky check.
+        if (! empty($questions)) {
+            $keep = $this->ai->validateAssessment($topic, $questions, $focusAreas);
+            $kept = array_values(array_intersect_key($questions, array_flip($keep)));
+            if (! empty($kept)) {
+                $questions = $kept;
+            }
+        }
+
+        // Deterministic backstop: when focus areas were requested, every kept
+        // question must carry a focus_area that matches one (case-insensitive).
+        // Guarantees traceability even if the moderator is lenient.
+        if ($hasFocus) {
+            $allowed = array_map('mb_strtolower', $focusAreas);
+            $traced = array_values(array_filter(
+                $questions,
+                fn ($q) => in_array(mb_strtolower($q['focus_area'] ?? ''), $allowed, true)
+            ));
+            if (! empty($traced)) {
+                $questions = $traced;
+            }
+        }
+
+        return $questions;
     }
 
     /* ---------------- 3. Knowledge-gap detection --------------------- */
@@ -730,7 +781,7 @@ GUIDE;
     }
 
     /** @param array<int,mixed> $items @return list<array<string,mixed>> */
-    protected function normaliseQuestions(array $items): array
+    protected function normaliseQuestions(array $items, array $focusAreas = []): array
     {
         $out = [];
         foreach ($items as $q) {
@@ -738,11 +789,21 @@ GUIDE;
             if (count($options) < 2) continue;
             $idx = (int) ($q['correct_index'] ?? 0);
             $idx = max(0, min($idx, count($options) - 1));
+            // Traceability tag: the focus area this question assesses. Snap a near
+            // match back onto the canonical focus-area string so the deterministic
+            // backstop in generateAssessment() can verify it cleanly.
+            $focus = trim((string) ($q['focus_area'] ?? ''));
+            if ($focus !== '' && ! empty($focusAreas)) {
+                foreach ($focusAreas as $fa) {
+                    if (mb_strtolower($fa) === mb_strtolower($focus)) { $focus = $fa; break; }
+                }
+            }
             $out[] = [
                 'question'      => (string) ($q['question'] ?? ''),
                 'options'       => $options,
                 'correct_index' => $idx,
                 'concept'       => (string) ($q['concept'] ?? 'General'),
+                'focus_area'    => $focus,
                 'explanation'   => (string) ($q['explanation'] ?? ''),
             ];
         }

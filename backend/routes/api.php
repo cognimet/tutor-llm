@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- Account (all roles) ---
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/me', [AuthController::class, 'updateProfile']);
+    Route::post('/me/avatar', [AuthController::class, 'uploadAvatar']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // --- Curriculum (read for any authed user) ---
