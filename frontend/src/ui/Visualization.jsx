@@ -5,6 +5,11 @@ import {
   ReferenceLine,
 } from "recharts";
 import { sample } from "./mathEval.js";
+import { latexToUnicode } from "./mathText.jsx";
+
+// SVG <text> can't run KaTeX, so convert LaTeX labels (e.g. "$2x+10^\circ$") to
+// readable Unicode ("2x+10°") before drawing them.
+const geoLabel = (s) => latexToUnicode(s);
 
 /**
  * Inline tutor visualization. Renders a structured spec (parsed from a ```viz
@@ -259,6 +264,29 @@ function Geometry({ spec }) {
   );
 }
 
+// Text with a white halo (paint-order: stroke under fill) so labels stay legible
+// even when lines or other labels sit directly behind them. Anchoring is
+// configurable so we can push a label clear of its anchor point.
+function GeoText({ x, y, children, anchor = "start", size = 12 }) {
+  const txt = geoLabel(children);
+  if (!txt) return null;
+  return (
+    <text
+      x={x}
+      y={y}
+      fontSize={size}
+      fill="#334155"
+      textAnchor={anchor}
+      stroke="#ffffff"
+      strokeWidth="3"
+      paintOrder="stroke"
+      style={{ strokeLinejoin: "round" }}
+    >
+      {txt}
+    </text>
+  );
+}
+
 function GeoElement({ e, sx, sy, scale, idx }) {
   const color = e.color || PALETTE[idx % PALETTE.length];
   const fill = e.fill || color;
@@ -267,16 +295,26 @@ function GeoElement({ e, sx, sy, scale, idx }) {
     return (
       <g>
         {e.kind === "point" && <circle cx={px} cy={py} r="3.5" fill={color} />}
-        {e.label && <text x={px + 6} y={py - 6} fontSize="12" fill="#334155">{e.label}</text>}
+        {e.label && <GeoText x={px + 7} y={py - 7}>{e.label}</GeoText>}
       </g>
     );
   }
   if (e.kind === "segment" || e.kind === "vector") {
     const [x1, y1] = e.from || [0, 0], [x2, y2] = e.to || [0, 0];
-    const mx = (sx(x1) + sx(x2)) / 2, my = (sy(y1) + sy(y2)) / 2;
+    const X1 = sx(x1), Y1 = sy(y1), X2 = sx(x2), Y2 = sy(y2);
+    // Place the label ~70% toward the 'to' end (not the shared midpoint where
+    // several segments crossing a common point would stack), nudged along the
+    // line's normal so it clears the stroke. Alternate the normal side per
+    // element index so two labels near the same spot fall on opposite sides.
+    const t = 0.7;
+    const lx = X1 + (X2 - X1) * t, ly = Y1 + (Y2 - Y1) * t;
+    const dx = X2 - X1, dy = Y2 - Y1, len = Math.hypot(dx, dy) || 1;
+    const side = idx % 2 === 0 ? 1 : -1;
+    const off = 11 * side;
+    const nx = (-dy / len) * off, ny = (dx / len) * off;
     return (
       <g>
-        <line x1={sx(x1)} y1={sy(y1)} x2={sx(x2)} y2={sy(y2)} stroke={color} strokeWidth="2"
+        <line x1={X1} y1={Y1} x2={X2} y2={Y2} stroke={color} strokeWidth="2"
               markerEnd={e.kind === "vector" ? `url(#arrow-${idx})` : undefined} />
         {e.kind === "vector" && (
           <defs>
@@ -285,7 +323,7 @@ function GeoElement({ e, sx, sy, scale, idx }) {
             </marker>
           </defs>
         )}
-        {e.label && <text x={mx + 5} y={my - 5} fontSize="12" fill="#334155">{e.label}</text>}
+        {e.label && <GeoText x={lx + nx} y={ly + ny} anchor="middle">{e.label}</GeoText>}
       </g>
     );
   }
@@ -299,7 +337,7 @@ function GeoElement({ e, sx, sy, scale, idx }) {
           <g key={j}>
             <circle cx={sx(p[0])} cy={sy(p[1])} r="3" fill={color} />
             {e.labels && e.labels[j] && (
-              <text x={sx(p[0]) + 6} y={sy(p[1]) - 6} fontSize="12" fill="#334155">{e.labels[j]}</text>
+              <GeoText x={sx(p[0]) + 7} y={sy(p[1]) - 7}>{e.labels[j]}</GeoText>
             )}
           </g>
         ))}
@@ -312,7 +350,7 @@ function GeoElement({ e, sx, sy, scale, idx }) {
       <g>
         <circle cx={sx(cx)} cy={sy(cy)} r={num(e.r, 1) * scale} fill={`${fill}18`} stroke={color} strokeWidth="2" />
         <circle cx={sx(cx)} cy={sy(cy)} r="2.5" fill={color} />
-        {e.label && <text x={sx(cx) + 6} y={sy(cy) - 6} fontSize="12" fill="#334155">{e.label}</text>}
+        {e.label && <GeoText x={sx(cx) + 7} y={sy(cy) - 7}>{e.label}</GeoText>}
       </g>
     );
   }
@@ -325,10 +363,15 @@ function GeoElement({ e, sx, sy, scale, idx }) {
     const x2 = sx(ax) + r * Math.cos(a2), y2 = sy(ay) + r * Math.sin(a2);
     const large = Math.abs(a2 - a1) > Math.PI ? 1 : 0;
     const sweep = a2 > a1 ? 1 : 0;
+    // Drop the label along the angle bisector, just outside the arc, so it sits
+    // inside the opening rather than on top of the vertex/other labels.
+    const mid = (a1 + a2) / 2;
+    const lr = r + 16;
+    const lx = sx(ax) + lr * Math.cos(mid), ly = sy(ay) + lr * Math.sin(mid);
     return (
       <g>
         <path d={`M ${x1} ${y1} A ${r} ${r} 0 ${large} ${sweep} ${x2} ${y2}`} fill="none" stroke={color} strokeWidth="1.5" />
-        {e.label && <text x={sx(ax) + (e.from?.[0] >= 0 ? 10 : -22)} y={sy(ay) - 8} fontSize="11" fill="#334155">{e.label}</text>}
+        {e.label && <GeoText x={lx} y={ly} anchor="middle" size={11}>{e.label}</GeoText>}
       </g>
     );
   }
@@ -441,12 +484,48 @@ function escapeControlCharsInStrings(src) {
   return out;
 }
 
-// Tolerant spec parser: try strict JSON first, then a repaired pass. Returns the
-// parsed object or null. Exported so RichMessage detects these specs too.
+// Best-effort repair of a TRUNCATED spec (stream cut off mid-object, e.g. the
+// model hit its token budget at `"to":[4,`). We walk the source tracking string
+// state and bracket depth; at every point where a bracket closes we try to make
+// a complete document by appending the still-open closers and parsing it. The
+// most-complete parse wins — so a cut-off geometry still renders its finished
+// elements instead of degrading to "Visualization unavailable". Returns the
+// parsed object, or null if nothing salvageable.
+function repairTruncatedJson(src) {
+  const s = String(src);
+  const stack = [];
+  let inStr = false, esc = false, best = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === "{") stack.push("}");
+    else if (c === "[") stack.push("]");
+    else if (c === "}" || c === "]") {
+      stack.pop();
+      // Close whatever is still open (innermost last-pushed first) and try parse.
+      const closers = stack.slice().reverse().join("");
+      const cand = s.slice(0, i + 1).replace(/,\s*$/, "") + closers;
+      try { best = JSON.parse(cand); } catch { /* keep looking */ }
+    }
+  }
+  return best;
+}
+
+// Tolerant spec parser: try strict JSON first, then a control-char repair, then a
+// truncation repair. Returns the parsed object or null. Exported so RichMessage
+// detects these specs too.
 export function parseVizSpec(code) {
   const raw = String(code ?? "");
   try { return JSON.parse(raw); } catch { /* fall through to repair */ }
-  try { return JSON.parse(escapeControlCharsInStrings(raw)); } catch { return null; }
+  const escaped = escapeControlCharsInStrings(raw);
+  try { return JSON.parse(escaped); } catch { /* fall through to truncation repair */ }
+  return repairTruncatedJson(escaped);
 }
 
 export default function Visualization({ code, spec: specProp }) {

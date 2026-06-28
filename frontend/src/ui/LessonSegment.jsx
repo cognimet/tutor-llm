@@ -1,5 +1,6 @@
 import React from "react";
 import { BookOpen, Lightbulb, Compass } from "lucide-react";
+import MathText from "./mathText.jsx";
 
 /**
  * A borderless, typography-first lesson segment (replaces the old boxy
@@ -53,7 +54,7 @@ export default function LessonSegment({ type = "concept", title, children }) {
         <span className="min-w-0">
           <span className={`block text-sm font-extrabold uppercase tracking-wider ${cfg.text}`}>
             {cfg.label}
-            {title ? <span className="text-slate-700 dark:text-slate-200"> · {title}</span> : null}
+            {title ? <span className="text-slate-700 dark:text-slate-200"> · <MathText text={title} /></span> : null}
           </span>
           <span className="block text-[10px] font-bold text-slate-400">{cfg.subtitle}</span>
         </span>
