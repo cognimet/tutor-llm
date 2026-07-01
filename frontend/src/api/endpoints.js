@@ -1,4 +1,4 @@
-import api from "./client.js";
+import api, { getToken } from "./client.js";
 
 // --- Auth ---
 export const authApi = {
@@ -251,4 +251,40 @@ export const adminUsageApi = {
 // --- Admin: gap analytics ---
 export const adminGapApi = {
   overview: (days = 30) => api.get("/admin/gaps", { params: { days } }).then((r) => r.data),
+};
+
+// --- Analytics & insights (gap analysis + engagement + integrity) ---
+// Student dashboard + engagement/integrity ingest from the in-assessment tracker.
+export const analyticsApi = {
+  me: (days = 30) => api.get("/me/analytics", { params: { days } }).then((r) => r.data),
+  // Best-effort, non-blocking telemetry push. Uses a keepalive fetch so the
+  // request survives a tab closing mid-assessment AND carries the bearer token
+  // (sendBeacon can't set Authorization, so /engagement would 401 and drop it).
+  ingest: (events) => {
+    if (!events || !events.length) return Promise.resolve();
+    const token = getToken();
+    const url = `${api.defaults.baseURL || "/api"}/engagement`;
+    if (typeof fetch === "function") {
+      return fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ events }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+    return api.post("/engagement", { events }).then((r) => r.data).catch(() => {});
+  },
+};
+
+// Parent: child analytics. Admin: system-wide analytics.
+export const parentAnalyticsApi = {
+  analytics: (childId, days = 30) =>
+    api.get(`/parent/children/${childId}/analytics`, { params: { days } }).then((r) => r.data),
+};
+export const adminAnalyticsApi = {
+  overview: (days = 30) => api.get("/admin/analytics", { params: { days } }).then((r) => r.data),
 };

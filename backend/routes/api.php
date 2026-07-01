@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AdminCurriculumController;
 use App\Http\Controllers\Api\AdminGapController;
 use App\Http\Controllers\Api\AdminUsageController;
+use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AssessmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CurriculumController;
@@ -140,6 +141,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tutor/profile', [LearnerProfileController::class, 'show']);
         Route::post('/tutor/telemetry', [TelemetryController::class, 'store']);
 
+        // Personal analytics dashboard + engagement/integrity ingest
+        Route::get('/me/analytics', [AnalyticsController::class, 'me']);
+        Route::post('/engagement', [AnalyticsController::class, 'ingest']);
+
         // Progress snapshot + credit meter
         Route::get('/progress', [ProgressController::class, 'summary']);
         Route::get('/usage', [UsageController::class, 'me']);
@@ -151,6 +156,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/children/{child}/report', [ParentController::class, 'childReport']);
         Route::get('/children/{child}/usage', [UsageController::class, 'child']);
         Route::get('/children/{child}/gaps', [ParentController::class, 'childGaps']);
+        Route::get('/children/{child}/analytics', [AnalyticsController::class, 'child']);
         Route::post('/children', [ParentController::class, 'addChild']);
         Route::post('/children/link', [ParentController::class, 'linkChild']);
     });
@@ -168,6 +174,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // --- Gap analytics (cohort weak spots, students at risk) ---
         Route::get('/gaps', [AdminGapController::class, 'overview']);
+
+        // --- System-wide analytics (segmentation, integrity, completion, exports) ---
+        Route::get('/analytics', [AnalyticsController::class, 'system']);
 
         // --- AI usage & billing (raw tokens + ₹ visible only here) ---
         Route::get('/usage', [AdminUsageController::class, 'overview']);

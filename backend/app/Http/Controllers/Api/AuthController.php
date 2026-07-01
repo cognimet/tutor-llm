@@ -70,7 +70,11 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        return response()->json(['user' => $request->user()]);
+        $user = $request->user();
+        // Drives student-side gating: a student who has a linked parent sees
+        // their insights via the parent dashboard, not their own panel.
+        $user->setAttribute('has_parent', $user->isStudent() ? $user->parents()->exists() : false);
+        return response()->json(['user' => $user]);
     }
 
     public function updateProfile(Request $request)
@@ -120,6 +124,7 @@ class AuthController extends Controller
     protected function respondWithToken(User $user, int $status = 200)
     {
         $token = $user->createToken('api')->plainTextToken;
+        $user->setAttribute('has_parent', $user->isStudent() ? $user->parents()->exists() : false);
 
         return response()->json([
             'user'  => $user,

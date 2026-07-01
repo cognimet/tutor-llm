@@ -1,20 +1,28 @@
 import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { Sparkles } from "lucide-react";
 import { Backdrop, AppHeader, Spinner } from "../../ui/components.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { authApi, curriculumApi, progressApi } from "../../api/endpoints.js";
 import { usePersistedState } from "../../hooks/usePersistedState.js";
+import { useEngagementTracker } from "../../hooks/useEngagementTracker.js";
 import CreditMeter from "../../ui/CreditMeter.jsx";
 import StudentHome from "./StudentHome.jsx";
 import TutorChat from "./TutorChat.jsx";
 import NotebookHub from "./NotebookHub.jsx";
 import GamificationDashboard from "./GamificationDashboard.jsx";
+import UserAnalyticsDashboard from "./UserAnalyticsDashboard.jsx";
 import StudentProfile from "./StudentProfile.jsx";
 
 export default function StudentApp() {
   const { user, logout, patchUser } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  // App-wide tab-switch / focus-loss tracking (no assessment context, no
+  // drop-off). Powers the "every tab switch" engagement signal across all pages.
+  useEngagementTracker({ dropOff: false });
+  // Linked students see insights via their parent's dashboard, not here.
+  const hasParent = !!user?.has_parent;
   // The page is now the URL (/, /chat, /notebooks). The active chat's topic
   // context is still kept per-user so a reload of /chat resumes that topic.
   const [session, setSession] = usePersistedState(`tuto:student:session:${user.id}`, null);
@@ -60,7 +68,17 @@ export default function StudentApp() {
     <div className={isChat ? "h-screen" : "min-h-screen"}>
       <Backdrop />
       {/* Chat has its own single, combined header — skip the global bar there. */}
-      {!isChat && <AppHeader user={user} onLogout={logout} onProfile={() => navigate("/profile")} right={<CreditMeter />} />}
+      {!isChat && <AppHeader user={user} onLogout={logout} onProfile={() => navigate("/profile")} right={
+        <div className="flex items-center gap-2">
+          {!hasParent && (
+            <button onClick={() => navigate("/insights")}
+              className="hidden items-center gap-1.5 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-extrabold text-indigo-600 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 sm:inline-flex">
+              <Sparkles className="h-4 w-4" /> Insights
+            </button>
+          )}
+          <CreditMeter />
+        </div>
+      } />}
       {loading ? (
         <Spinner label="Loading your classroom…" />
       ) : (
@@ -113,6 +131,7 @@ export default function StudentApp() {
               : <Navigate to="/" replace />
           } />
           <Route path="profile" element={<StudentProfile onBack={backHome} />} />
+          <Route path="insights" element={hasParent ? <Navigate to="/" replace /> : <UserAnalyticsDashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       )}

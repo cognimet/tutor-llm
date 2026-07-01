@@ -9,6 +9,7 @@ import CurriculumManager from "./CurriculumManager.jsx";
 import UserDrawer from "./UserDrawer.jsx";
 import CreditsPanel from "./CreditsPanel.jsx";
 import GapAnalytics from "./GapAnalytics.jsx";
+import SystemAnalytics from "./SystemAnalytics.jsx";
 
 // Tab label -> URL path. The active tab is now driven by the URL so a reload
 // stays on the same admin section.
@@ -18,6 +19,7 @@ const ADMIN_TABS = [
   ["curriculum", "/curriculum"],
   ["credits", "/credits"],
   ["gaps", "/gaps"],
+  ["analytics", "/analytics"],
 ];
 
 export default function AdminPanel() {
@@ -48,6 +50,7 @@ export default function AdminPanel() {
           <Route path="users" element={<UsersTab />} />
           <Route path="credits" element={<CreditsPanel />} />
           <Route path="gaps" element={<GapAnalytics />} />
+          <Route path="analytics" element={<SystemAnalytics />} />
           <Route path="curriculum" element={<CurriculumManager />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import CurriculumPicker from "../../ui/CurriculumPicker.jsx";
+import ChildAnalyticsDashboard from "./ChildAnalyticsDashboard.jsx";
 
 export default function ParentDashboard() {
   const { user, logout } = useAuth();
@@ -66,7 +67,12 @@ export default function ParentDashboard() {
   return (
     <div className="min-h-screen">
       <Backdrop />
-      <AppHeader user={user} onLogout={logout} />
+      <AppHeader user={user} onLogout={logout} right={
+        <div className="hidden gap-1 rounded-2xl bg-white/70 p-1 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:ring-white/10 sm:flex">
+          <button onClick={() => navigate("/")} className="rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize text-slate-500 dark:text-slate-400">overview</button>
+          <button onClick={() => navigate("/insights")} className="rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize text-slate-500 dark:text-slate-400">insights</button>
+        </div>
+      } />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <Routes>
           <Route index element={loading ? <Spinner label="Loading your children…" /> : (
@@ -169,6 +175,7 @@ export default function ParentDashboard() {
             </>
           )} />
           <Route path="child/:id" element={<ChildReportRoute />} />
+          <Route path="insights" element={<ChildAnalyticsDashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

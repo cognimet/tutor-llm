@@ -130,6 +130,10 @@ class AssessmentController extends Controller
             'answers'                 => ['required', 'array', 'min:1'],
             'answers.*.question_id'   => ['required', 'exists:assessment_questions,id'],
             'answers.*.selected_index'=> ['required', 'integer', 'min:0'],
+            // Optional behavioural signals (powers time/answer-change analytics).
+            'answers.*.time_spent_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],
+            'answers.*.answer_changes'=> ['nullable', 'integer', 'min:0', 'max:1000'],
+            'answers.*.confidence'    => ['nullable', 'integer', 'min:1', 'max:5'],
         ]);
 
         $user = $request->user();
@@ -149,6 +153,9 @@ class AssessmentController extends Controller
                     'user_id'        => $user->id,
                     'selected_index' => $a['selected_index'],
                     'is_correct'     => $correct,
+                    'time_spent_ms'  => $a['time_spent_ms'] ?? null,
+                    'answer_changes' => $a['answer_changes'] ?? 0,
+                    'confidence'     => $a['confidence'] ?? null,
                 ]);
 
                 $results[] = [
