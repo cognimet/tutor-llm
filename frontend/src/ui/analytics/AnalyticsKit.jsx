@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, RadialBarChart, RadialBar,
   XAxis, YAxis, Tooltip, Legend, CartesianGrid, Cell,
@@ -222,6 +222,141 @@ export function Panel({ title, subtitle, right, children, className = "" }) {
 
 export function Empty({ children }) {
   return <p className="py-8 text-center text-sm font-semibold text-slate-400">{children}</p>;
+}
+
+/* ------------------------------------------------------------- gamification */
+
+const TIER = {
+  Diamond:  { grad: "from-sky-400 to-indigo-500", ring: "ring-sky-300" },
+  Platinum: { grad: "from-slate-300 to-slate-500", ring: "ring-slate-300" },
+  Gold:     { grad: "from-amber-300 to-yellow-500", ring: "ring-amber-300" },
+  Silver:   { grad: "from-slate-200 to-slate-400", ring: "ring-slate-300" },
+  Bronze:   { grad: "from-orange-300 to-amber-700", ring: "ring-orange-300" },
+  Unranked: { grad: "from-slate-200 to-slate-400", ring: "ring-slate-200" },
+};
+
+export function TierBadge({ tier = "Unranked" }) {
+  const t = TIER[tier] || TIER.Unranked;
+  return (
+    <span className={`inline-flex items-center rounded-full bg-gradient-to-r ${t.grad} px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm`}>
+      {tier}
+    </span>
+  );
+}
+
+/** "Where you rank" hero card — rank, tier, percentile, XP. */
+export function RankCard({ me, label = "Your rank" }) {
+  if (!me) return <Empty>No ranking yet — earn XP to join the leaderboard.</Empty>;
+  const t = TIER[me.tier] || TIER.Unranked;
+  return (
+    <div className="flex items-center gap-4">
+      <div className={`grid h-20 w-20 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${t.grad} text-white shadow-lg ring-4 ${t.ring}`}>
+        <span className="text-[10px] font-bold uppercase opacity-80">Rank</span>
+        <span className="-mt-1 text-2xl font-black leading-none">#{me.rank}</span>
+      </div>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <TierBadge tier={me.tier} />
+          <span className="text-xs font-bold text-slate-400">{label}</span>
+        </div>
+        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+          #{me.rank} of {me.total} · Level {me.level} · {me.xp} XP
+        </p>
+        {me.percentile != null && (
+          <p className="text-xs font-bold text-emerald-600">Top {Math.max(1, 100 - me.percentile)}%</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Ordered leaderboard list; highlights the "is_me" row. mode "xp" shows
+ * "Lv N · X XP"; mode "subject" reuses xp=accuracy%, level=questions.
+ */
+export function Leaderboard({ rows = [], showMedals = true, mode = "xp" }) {
+  if (!rows.length) return <Empty>Leaderboard is empty.</Empty>;
+  const medal = (r) => (showMedals && r <= 3 ? ["🥇", "🥈", "🥉"][r - 1] : `#${r}`);
+  const meta = (r) => (mode === "subject" ? `${r.xp}% · ${r.level} Qs` : `Lv ${r.level} · ${r.xp} XP`);
+  return (
+    <ul className="space-y-1.5">
+      {rows.map((r, i) => (
+        <li key={i}
+          className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm ${
+            r.is_me ? "bg-indigo-50 font-extrabold text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300"
+                    : "bg-slate-50 font-semibold text-slate-600 dark:bg-white/5 dark:text-slate-300"}`}>
+          <span className="flex items-center gap-2">
+            <span className="w-8 shrink-0 text-center">{medal(r.rank)}</span>
+            <span className="truncate">{r.name}{r.is_me ? " (you)" : ""}</span>
+          </span>
+          <span className="shrink-0 tabular-nums">{meta(r)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Tabbed leaderboards: Overall + Class (both XP) + Subject (class, by accuracy).
+ * `ranking` is the payload's `ranking` object. Shows a footer with the viewer's
+ * own standing when they're outside the visible top 10.
+ */
+export function LeaderboardTabs({ ranking = {} }) {
+  const hasClass = !!ranking.class;
+  const subjects = ranking.subjects || [];
+  const tabs = [
+    ["overall", "Overall"],
+    ...(hasClass ? [["class", `Class ${ranking.class.grade ?? ""}`.trim()]] : []),
+    ...(subjects.length ? [["subject", "By subject"]] : []),
+  ];
+  const [tab, setTab] = useState("overall");
+  const [subIdx, setSubIdx] = useState(0);
+
+  const MeFooter = ({ me, mode }) => {
+    if (!me || me.rank <= 10) return null;
+    const right = mode === "subject" ? `${me.accuracy}% · ${me.questions} Qs` : `${me.xp} XP`;
+    return (
+      <div className="mt-2 flex items-center justify-between rounded-xl bg-indigo-50 px-3 py-2 text-sm font-extrabold text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300">
+        <span>You · #{me.rank} of {me.total}</span><span className="tabular-nums">{right}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap gap-1 rounded-2xl bg-slate-100 p-1 dark:bg-white/5">
+        {tabs.map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`rounded-xl px-3 py-1.5 text-xs font-extrabold ${tab === k ? "bg-white text-indigo-600 shadow-sm dark:bg-slate-700 dark:text-indigo-300" : "text-slate-500 dark:text-slate-400"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overall" && (<><Leaderboard rows={ranking.top || []} /><MeFooter me={ranking.me} mode="xp" /></>)}
+
+      {tab === "class" && hasClass && (
+        (ranking.class.top || []).length
+          ? <><Leaderboard rows={ranking.class.top} /><MeFooter me={ranking.class.me} mode="xp" /></>
+          : <Empty>No classmates ranked yet.</Empty>
+      )}
+
+      {tab === "subject" && subjects.length > 0 && (
+        <div>
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {subjects.map((s, i) => (
+              <button key={i} onClick={() => setSubIdx(i)}
+                className={`rounded-full px-3 py-1 text-xs font-bold ${subIdx === i ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400"}`}>
+                {s.subject}
+              </button>
+            ))}
+          </div>
+          <Leaderboard rows={subjects[subIdx]?.top || []} mode="subject" />
+          <MeFooter me={subjects[subIdx]?.me} mode="subject" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Download an array-of-objects as CSV (admin exports). */

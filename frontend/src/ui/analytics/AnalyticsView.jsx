@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import {
   Scorecard, Gauge, Band, TrendLine, GapBars, Heatmap, RecoList, SeverityMix, Panel, Empty,
+  RankCard, LeaderboardTabs,
 } from "./AnalyticsKit.jsx";
 
 // Minutes → "2h 15m" / "45m".
@@ -74,6 +75,7 @@ export default function AnalyticsView({ data, audience = "student" }) {
   const integ = data.integrity || {};
   const gaps = data.gap_analysis || {};
   const study = data.study_time || {};
+  const ranking = data.ranking || {};
   const subjects = data.subjects || [];
   const patterns = data.patterns || {};
   const bench = data.benchmark || {};
@@ -95,6 +97,16 @@ export default function AnalyticsView({ data, audience = "student" }) {
           ))}
         </ul>
       </Panel>
+
+      {/* Gamification ranking */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Panel title={isParent ? "Their rank" : "Your rank"} subtitle="Global XP leaderboard standing">
+          <RankCard me={ranking.me} label={isParent ? "Child's rank" : "Your rank"} />
+        </Panel>
+        <Panel title="Leaderboards" subtitle="Overall, class and per-subject standings">
+          <LeaderboardTabs ranking={ranking} />
+        </Panel>
+      </div>
 
       {/* Headline scorecards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">

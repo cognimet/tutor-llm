@@ -4,7 +4,7 @@ import {
   Users, UserCheck, ClipboardCheck, Activity, ShieldCheck, Download,
 } from "lucide-react";
 import {
-  Scorecard, DayToggle, Hero, TrendLine, GapBars, Panel, Empty, Band, downloadCsv,
+  Scorecard, DayToggle, Hero, TrendLine, GapBars, Panel, Empty, Band, Leaderboard, downloadCsv,
 } from "../../ui/analytics/AnalyticsKit.jsx";
 import { adminAnalyticsApi } from "../../api/endpoints.js";
 
@@ -59,6 +59,13 @@ export default function SystemAnalytics() {
         <Scorecard icon={Activity} tint="amber" label="Completion" value={t.completion_rate} suffix="%" />
         <Scorecard icon={Activity} tint="emerald" label="Avg engagement" value={t.avg_engagement} />
         <Scorecard icon={ShieldCheck} tint="rose" label="Avg integrity" value={t.avg_integrity} />
+      </div>
+
+      {/* Gamification leaderboard */}
+      <div className="mt-6">
+        <Panel title="Student leaderboard" subtitle={`Top students by XP · ${data.ranking?.total ?? 0} ranked`}>
+          <Leaderboard rows={data.ranking?.top || []} />
+        </Panel>
       </div>
 
       {/* Segmentation + top gap concepts */}

@@ -75,6 +75,7 @@ class AnalyticsService
             'difficulty'       => $this->difficultyCorrelation($uid, $since),
             'attention'        => $engagement,
             'integrity'        => $integrity,
+            'ranking'          => $this->ranking($uid, $user->grade),
             'recommendations'  => $this->recommendations($perf, $engagement, $integrity, $accuracy),
         ];
     }
@@ -119,6 +120,7 @@ class AnalyticsService
             'integrity_report' => $this->cohortIntegrity($since),
             'completion_trend' => $this->completionTrend($days),
             'engagement_trend' => $this->cohortEngagementTrend($days),
+            'ranking'          => $this->ranking(null),
             'export_rows'      => $this->exportRows($since),
         ];
     }
@@ -371,6 +373,138 @@ class AnalyticsService
             'study_minutes' => ['current' => $curMin, 'previous' => $prevMin,
                 'delta' => $curMin - $prevMin],
         ];
+    }
+
+    /**
+     * Gamification ranking — global XP leaderboard from the gamification
+     * profiles. Returns the top 10 plus, when $uid is given, that student's rank,
+     * percentile and tier. Shared by student, parent and admin views.
+     */
+    private function ranking(?int $uid, ?int $grade = null): array
+    {
+        $overall = $this->xpBoard($uid, null);
+        $class = $grade !== null ? $this->xpBoard($uid, $grade) : null;
+        if ($class !== null) $class['grade'] = $grade;
+
+        return [
+            // Overall keys stay top-level for backward-compatibility.
+            'total'    => $overall['total'],
+            'top'      => $overall['top'],
+            'me'       => $overall['me'],
+            'class'    => $class,
+            'subjects' => ($uid !== null && $grade !== null) ? $this->classSubjectRanking($uid, $grade) : [],
+        ];
+    }
+
+    /** XP leaderboard, optionally scoped to a class (grade). */
+    private function xpBoard(?int $uid, ?int $grade): array
+    {
+        $board = fn () => DB::table('student_gamification_profiles as p')
+            ->join('users as u', 'u.id', '=', 'p.user_id')
+            ->where('u.role', 'student')
+            ->when($grade !== null, fn ($q) => $q->where('u.grade', $grade));
+
+        $total = $board()->count();
+
+        $top = $board()->orderByDesc('p.xp_points')->orderBy('u.name')->limit(10)
+            ->get(['u.id as id', 'u.name as name', 'p.xp_points as xp', 'p.current_level as level'])
+            ->values()
+            ->map(fn ($r, $i) => [
+                'rank'  => $i + 1,
+                'name'  => $r->name,
+                'xp'    => (int) $r->xp,
+                'level' => (int) $r->level,
+                'is_me' => $uid !== null && (int) $r->id === $uid,
+            ])->all();
+
+        $me = null;
+        if ($uid !== null) {
+            $p = DB::table('student_gamification_profiles')->where('user_id', $uid)->first();
+            $xp = (int) ($p->xp_points ?? 0);
+            $rank = $board()->where('p.xp_points', '>', $xp)->count() + 1;
+            $percentile = $total > 0 ? (int) round(($total - $rank) / $total * 100) : null;
+            $me = [
+                'rank'       => $rank,
+                'total'      => $total,
+                'xp'         => $xp,
+                'level'      => (int) ($p->current_level ?? 1),
+                'percentile' => $percentile,
+                'tier'       => $this->tier($percentile),
+            ];
+        }
+
+        return ['total' => $total, 'top' => $top, 'me' => $me];
+    }
+
+    /**
+     * Per-subject leaderboards within the student's own class (grade), ranked by
+     * quiz accuracy. Only subjects the student has attempted are returned.
+     */
+    private function classSubjectRanking(int $uid, int $grade): array
+    {
+        $rows = DB::table('assessment_answers as aa')
+            ->join('users as u', 'u.id', '=', 'aa.user_id')
+            ->where('u.role', 'student')->where('u.grade', $grade)
+            ->join('assessment_questions as q', 'q.id', '=', 'aa.assessment_question_id')
+            ->join('assessments as a', 'a.id', '=', 'q.assessment_id')
+            ->leftJoin('topics as t', 't.id', '=', 'a.topic_id')
+            ->leftJoin('chapters as c', 'c.id', '=', 't.chapter_id')
+            ->leftJoin('subjects as s', 's.id', '=', 'c.subject_id')
+            ->selectRaw("aa.user_id as uid, u.name as name,
+                COALESCE(s.name, a.topic_name, 'General') as subject,
+                COUNT(*) as total, SUM(CASE WHEN aa.is_correct THEN 1 ELSE 0 END) as correct")
+            ->groupByRaw("aa.user_id, u.name, COALESCE(s.name, a.topic_name, 'General')")
+            ->get();
+
+        // subject => [ {uid,name,accuracy,questions} ]
+        $bySubject = [];
+        foreach ($rows as $r) {
+            $bySubject[$r->subject][] = [
+                'uid'       => (int) $r->uid,
+                'name'      => $r->name,
+                'accuracy'  => $r->total > 0 ? (int) round($r->correct / $r->total * 100) : 0,
+                'questions' => (int) $r->total,
+            ];
+        }
+
+        $out = [];
+        foreach ($bySubject as $subject => $list) {
+            // Only surface subjects THIS student has attempted.
+            if (! collect($list)->firstWhere('uid', $uid)) continue;
+
+            usort($list, fn ($a, $b) => $b['accuracy'] <=> $a['accuracy'] ?: $b['questions'] <=> $a['questions']);
+
+            $top = [];
+            foreach (array_slice($list, 0, 10) as $i => $s) {
+                $top[] = ['rank' => $i + 1, 'name' => $s['name'], 'xp' => $s['accuracy'],
+                    'level' => $s['questions'], 'is_me' => $s['uid'] === $uid];
+            }
+            $myIdx = array_search($uid, array_column($list, 'uid'), true);
+            $mine = $list[$myIdx];
+            $out[] = [
+                'subject' => $subject,
+                'top'     => $top,
+                'me'      => ['rank' => $myIdx + 1, 'total' => count($list),
+                    'accuracy' => $mine['accuracy'], 'questions' => $mine['questions']],
+            ];
+        }
+
+        // Most-attempted subjects first, capped for a tidy UI.
+        usort($out, fn ($a, $b) => $b['me']['questions'] <=> $a['me']['questions']);
+        return array_slice($out, 0, 6);
+    }
+
+    /** Percentile → league tier. */
+    private function tier(?int $pct): string
+    {
+        if ($pct === null) return 'Unranked';
+        return match (true) {
+            $pct >= 90 => 'Diamond',
+            $pct >= 75 => 'Platinum',
+            $pct >= 50 => 'Gold',
+            $pct >= 25 => 'Silver',
+            default    => 'Bronze',
+        };
     }
 
     /** Do harder questions correlate with lower accuracy? (difficulty = cohort fail rate per concept) */
