@@ -51,12 +51,20 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        // A student may sign in with either their email or a school-issued
+        // login code. `identifier` is the new field; `email` stays accepted for
+        // backward compatibility with existing clients.
         $data = $request->validate([
-            'email'    => ['required', 'email'],
-            'password' => ['required', 'string'],
+            'identifier' => ['required_without:email', 'string', 'max:200'],
+            'email'      => ['required_without:identifier', 'string', 'max:200'],
+            'password'   => ['required', 'string'],
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $login = $data['identifier'] ?? $data['email'];
+
+        $user = User::where('email', $login)
+            ->orWhere('login_code', $login)
+            ->first();
 
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             throw ValidationException::withMessages(['email' => ['Invalid credentials.']]);

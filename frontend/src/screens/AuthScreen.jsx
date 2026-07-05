@@ -47,7 +47,8 @@ export default function AuthScreen() {
     setBusy(true);
     try {
       if (mode === "login") {
-        await login({ email: form.email, password: form.password });
+        // Students may log in with a school-issued code instead of an email.
+        await login({ identifier: form.email.trim(), password: form.password });
       } else {
         await register({
           name: form.name, email: form.email, password: form.password, role,
@@ -139,8 +140,10 @@ export default function AuthScreen() {
               <Field label="Full name" icon={User} value={form.name} onChange={set("name")} placeholder="Aarav Sharma" autoComplete="name" required />
             )}
 
-            <Field label="Email" icon={Mail} type="email" value={form.email} onChange={set("email")}
-                   placeholder="you@example.com" autoComplete="email" required />
+            <Field label={isRegister ? "Email" : "Email or school code"} icon={Mail}
+                   type={isRegister ? "email" : "text"} value={form.email} onChange={set("email")}
+                   placeholder={isRegister ? "you@example.com" : "you@example.com or ABC-12345"}
+                   autoComplete={isRegister ? "email" : "username"} required />
 
             <Field label="Password" icon={Lock} type={showPwd ? "text" : "password"} value={form.password}
                    onChange={set("password")} placeholder="Enter your password"

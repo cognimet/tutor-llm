@@ -288,3 +288,55 @@ export const parentAnalyticsApi = {
 export const adminAnalyticsApi = {
   overview: (days = 30) => api.get("/admin/analytics", { params: { days } }).then((r) => r.data),
 };
+
+// --- Admin: B2B2C school onboarding ---
+export const adminSchoolApi = {
+  list: () => api.get("/admin/schools").then((r) => r.data.schools),
+  create: (payload) => api.post("/admin/schools", payload).then((r) => r.data.school),
+  createAdmin: (schoolId, payload) =>
+    api.post(`/admin/schools/${schoolId}/admin`, payload).then((r) => r.data),
+};
+
+// --- School admin panel (org management, scoped to own school) ---
+export const schoolApi = {
+  overview: () => api.get("/school/overview").then((r) => r.data),
+  seats: () => api.get("/school/seats").then((r) => r.data),
+  classAnalytics: (classId) => api.get(`/school/classes/${classId}/analytics`).then((r) => r.data),
+  sectionAnalytics: (sectionId) => api.get(`/school/sections/${sectionId}/analytics`).then((r) => r.data),
+  studentReport: (studentId) => api.get(`/school/students/${studentId}/report`).then((r) => r.data),
+  classes: () => api.get("/school/classes").then((r) => r.data.classes),
+  createClass: (payload) => api.post("/school/classes", payload).then((r) => r.data.class),
+  createSection: (classId, payload) =>
+    api.post(`/school/classes/${classId}/sections`, payload).then((r) => r.data.section),
+  deleteSection: (sectionId) => api.delete(`/school/sections/${sectionId}`).then((r) => r.data),
+  teachers: () => api.get("/school/teachers").then((r) => r.data.teachers),
+  createTeacher: (payload) => api.post("/school/teachers", payload).then((r) => r.data.teacher),
+  updateTeacher: (teacherId, payload) =>
+    api.patch(`/school/teachers/${teacherId}`, payload).then((r) => r.data),
+  students: (params) => api.get("/school/students", { params }).then((r) => r.data.students),
+  createStudent: (payload) => api.post("/school/students", payload).then((r) => r.data),
+  importStudents: (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api
+      .post("/school/students/import", fd, { headers: { "Content-Type": "multipart/form-data" } })
+      .then((r) => r.data);
+  },
+};
+
+// --- Teacher panel (read + assign, scoped to assigned sections) ---
+export const teacherApi = {
+  scope: () => api.get("/teacher/scope").then((r) => r.data),
+  overview: () => api.get("/teacher/overview").then((r) => r.data),
+  classAnalytics: (classId) => api.get(`/teacher/classes/${classId}/analytics`).then((r) => r.data),
+  roster: (sectionId) => api.get(`/teacher/sections/${sectionId}/roster`).then((r) => r.data),
+  sectionAnalytics: (sectionId) =>
+    api.get(`/teacher/sections/${sectionId}/analytics`).then((r) => r.data),
+  sectionAssignments: (sectionId) =>
+    api.get(`/teacher/sections/${sectionId}/assignments`).then((r) => r.data.assignments),
+  studentReport: (studentId) => api.get(`/teacher/students/${studentId}/report`).then((r) => r.data),
+  createAssignment: (payload) =>
+    api.post("/teacher/assignments", payload, { timeout: 300000 }).then((r) => r.data),
+  assignmentResults: (assignmentId) =>
+    api.get(`/teacher/assignments/${assignmentId}/results`).then((r) => r.data),
+};

@@ -82,5 +82,9 @@ class DatabaseSeeder extends Seeder
                 'gaps_closed' => rand(0, 2),
             ]);
         }
+
+        // Demo B2B2C school (School + Teacher panels). Idempotent — also runnable
+        // standalone via `php artisan db:seed --class=SchoolDemoSeeder`.
+        $this->call(SchoolDemoSeeder::class);
     }
 }
