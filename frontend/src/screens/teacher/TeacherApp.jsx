@@ -29,7 +29,7 @@ export default function TeacherApp() {
   return (
     <div className="min-h-screen">
       <Backdrop />
-      <AppHeader user={user} onLogout={logout} />
+      <AppHeader user={user} onLogout={logout} onHome={() => { setStudent(null); setSection(null); setCls(null); }} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         {loading ? <Spinner label="Loading your classes…" /> :
           student ? <StudentReport studentId={student} onBack={() => setStudent(null)} /> :

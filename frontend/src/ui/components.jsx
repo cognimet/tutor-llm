@@ -86,12 +86,12 @@ export function Card({ children, className = "" }) {
   return <div className={`rounded-3xl border border-white/60 bg-white/75 shadow-lg shadow-slate-200/40 backdrop-blur-sm dark:border-white/10 dark:bg-slate-800/60 dark:shadow-black/20 ${className}`}>{children}</div>;
 }
 
-export function AppHeader({ user, onLogout, onProfile, right }) {
-  const roleLabel = { admin: "Admin", student: "Student", parent: "Parent" }[user?.role] || "";
+export function AppHeader({ user, onLogout, onProfile, onHome, right }) {
+  const roleLabel = { admin: "Admin", student: "Student", parent: "Parent", teacher: "Teacher", school_admin: "School admin" }[user?.role] || "";
   return (
     <header className="sticky top-0 z-20 border-b border-white/40 bg-white/60 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/60">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
-        <Logo subtitle={roleLabel} />
+        <Logo subtitle={roleLabel} onClick={onHome} />
         <div className="flex items-center gap-3">
           {right}
           <ThemeToggle />

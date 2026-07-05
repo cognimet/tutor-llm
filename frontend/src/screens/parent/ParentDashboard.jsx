@@ -67,7 +67,7 @@ export default function ParentDashboard() {
   return (
     <div className="min-h-screen">
       <Backdrop />
-      <AppHeader user={user} onLogout={logout} right={
+      <AppHeader user={user} onLogout={logout} onHome={() => navigate("/")} right={
         <div className="hidden gap-1 rounded-2xl bg-white/70 p-1 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:ring-white/10 sm:flex">
           <button onClick={() => navigate("/")} className="rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize text-slate-500 dark:text-slate-400">overview</button>
           <button onClick={() => navigate("/insights")} className="rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize text-slate-500 dark:text-slate-400">insights</button>

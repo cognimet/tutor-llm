@@ -34,7 +34,7 @@ export default function AdminPanel() {
   return (
     <div className="min-h-screen">
       <Backdrop />
-      <AppHeader user={user} onLogout={logout} right={
+      <AppHeader user={user} onLogout={logout} onHome={() => navigate("/")} right={
         <div className="hidden gap-1 rounded-2xl bg-white/70 dark:bg-slate-800/60 p-1 ring-1 ring-slate-200 dark:ring-white/10 sm:flex">
           {ADMIN_TABS.map(([label, path]) => {
             const active = path === "/" ? pathname === "/" : pathname.startsWith(path);

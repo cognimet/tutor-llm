@@ -37,7 +37,7 @@ export default function SchoolApp() {
   return (
     <div className="min-h-screen">
       <Backdrop />
-      <AppHeader user={user} onLogout={logout} />
+      <AppHeader user={user} onLogout={logout} onHome={() => { setDetail(null); setTab("overview"); }} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         {detail ? (
           detail.type === "class" ? <ClassView classId={detail.id} name={detail.name} nav={nav} onBack={back} /> :

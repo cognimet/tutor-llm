@@ -68,7 +68,7 @@ export default function StudentApp() {
     <div className={isChat ? "h-screen" : "min-h-screen"}>
       <Backdrop />
       {/* Chat has its own single, combined header — skip the global bar there. */}
-      {!isChat && <AppHeader user={user} onLogout={logout} onProfile={() => navigate("/profile")} right={
+      {!isChat && <AppHeader user={user} onLogout={logout} onProfile={() => navigate("/profile")} onHome={backHome} right={
         <div className="flex items-center gap-2">
           {!hasParent && (
             <button onClick={() => navigate("/insights")}
