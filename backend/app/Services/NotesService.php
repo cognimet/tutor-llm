@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\KnowledgeNode;
 use App\Models\TopicNote;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -189,11 +190,17 @@ class NotesService
             $cards = is_array($ingest['flashcards'] ?? null) ? $ingest['flashcards'] : [];
             $meta['flashcards_count'] = count($cards);
             $meta['chunks_indexed'] = (int) ($ingest['chunks_indexed'] ?? 0);
+
+            // 3) Multimodal diagrams: for image/PDF notes, parse hand-drawn
+            //    diagrams into knowledge_nodes (UVSS + 3 assets) so the tutor can
+            //    reconstruct or show them. Best-effort — never fails the note.
+            $meta['diagrams_count'] = $this->ingestDiagrams($note);
+
             $note->meta = $meta;
             $note->status = 'ready';
             $note->save();
 
-            // 3) Persist flashcards for spaced repetition (due immediately).
+            // 4) Persist flashcards for spaced repetition (due immediately).
             foreach ($cards as $c) {
                 $front = trim((string) ($c['front'] ?? ''));
                 $back = trim((string) ($c['back'] ?? ''));
@@ -212,6 +219,299 @@ class NotesService
             Log::error('note processing failed', ['note' => $note->id, 'error' => $e->getMessage()]);
             $this->fail($note, 'We couldn\'t process this file. Please try a different one.');
         }
+    }
+
+    /**
+     * Re-run ONLY diagram ingestion for an existing note (Diagram Isolation
+     * backfill). Idempotent — diagram + anchor nodes are keyed on deterministic
+     * qdrant_ids (updateOrCreate), so this regenerates the isolated assets and
+     * anchor text without duplicating rows or touching the note's flashcards.
+     * Used by the `diagrams:reingest` command to build isolated cuts for notes
+     * uploaded before the upgrade. Returns the number of diagram nodes.
+     */
+    public function reingestDiagrams(TopicNote $note): int
+    {
+        return $this->ingestDiagrams($note);
+    }
+
+    /**
+     * Fully delete a note and EVERYTHING derived from it, so nothing keeps
+     * surfacing after deletion: the diagram + anchor-text knowledge_nodes, its
+     * flashcards, the rendered diagram assets on the shared volume, its Qdrant
+     * vectors (text chunks / diagrams / anchors / figures), the uploaded file,
+     * and finally the note row. Each step is best-effort so a single failure
+     * never leaves the row half-deleted.
+     */
+    public function deleteNote(TopicNote $note): void
+    {
+        $this->purgeNoteData($note->id, $note->user_id);
+        try { Storage::disk($note->disk)->delete($note->path); } catch (\Throwable) { /* ignore */ }
+        $note->delete();
+    }
+
+    /**
+     * Purge everything keyed on a note id WITHOUT needing the row (so it also
+     * cleans up after a note that was already deleted via the UI, which used to
+     * leave diagram nodes + vectors behind).
+     */
+    public function purgeNoteData(int $noteId, ?int $userId = null): void
+    {
+        try { KnowledgeNode::where('note_id', $noteId)->delete(); } catch (\Throwable) { /* ignore */ }
+        try {
+            \App\Models\Flashcard::where('source_type', 'note')->where('source_id', $noteId)->delete();
+        } catch (\Throwable) { /* ignore */ }
+        try { $this->ai->deleteNoteVectors($noteId, $userId); } catch (\Throwable) { /* ignore */ }
+        try {
+            \Illuminate\Support\Facades\File::deleteDirectory(storage_path('app/diagrams/' . $noteId));
+        } catch (\Throwable) { /* ignore */ }
+        $this->clearNoteChats($noteId, $userId);
+    }
+
+    /**
+     * Clear the chat grounded in a deleted note: a session studying ONLY this
+     * note is deleted outright (its messages cascade via the FK), while a
+     * session that also uses other notes just has this one detached so it keeps
+     * working. Matched by int value so string/int id storage both resolve.
+     */
+    protected function clearNoteChats(int $noteId, ?int $userId = null): void
+    {
+        try {
+            $q = \App\Models\ChatSession::whereNotNull('selected_note_ids');
+            if ($userId) {
+                $q->where('user_id', $userId);
+            }
+            foreach ($q->get() as $session) {
+                $ids = array_map('intval', (array) ($session->selected_note_ids ?? []));
+                if (! in_array($noteId, $ids, true)) {
+                    continue;
+                }
+                $remaining = array_values(array_filter($ids, fn ($x) => $x !== $noteId));
+                if (empty($remaining)) {
+                    $session->delete();                                  // messages cascade
+                } else {
+                    $session->update(['selected_note_ids' => $remaining]);
+                }
+            }
+        } catch (\Throwable) { /* ignore */ }
+    }
+
+    /**
+     * Parse diagrams out of an image/PDF note and persist them as knowledge_nodes
+     * (UVSS schema + confidence + the rendered assets, incl. the isolated cut),
+     * then index them for retrieval. Best-effort and idempotent (keyed on the
+     * deterministic qdrant_id), so re-processing a note overwrites rather than
+     * duplicating. Returns the number of diagram nodes created. Never throws.
+     */
+    protected function ingestDiagrams(TopicNote $note): int
+    {
+        // Only image/PDF uploads can contain hand-drawn diagrams; and the VLM is
+        // the classifier, so skip entirely when the AI service is mocked/keyless.
+        if (! in_array($note->kind, ['image', 'pdf'], true) || $this->ai->isMock()) {
+            return 0;
+        }
+
+        try {
+            // Read the file through Laravel's own disk (resolves the correct
+            // root, incl. Laravel 11's storage/app/private) and hand the bytes to
+            // the AI service as base64 — no shared-volume path assumptions.
+            $bytes = Storage::disk($note->disk)->get($note->path);
+            if ($bytes === null) {
+                Log::warning('diagram ingest: could not read note file', ['note' => $note->id, 'path' => $note->path]);
+                return 0;
+            }
+
+            $res = $this->ai->ingestDiagrams($note->user_id, base64_encode($bytes), $note->id, $note->mime, [
+                'subject_id' => $note->subject_id,
+                'chapter_id' => $note->chapter_id,
+                'topic_id'   => $note->topic_id,
+                'topic'      => $note->topic_name,
+                'is_primary' => $note->is_primary,
+            ]);
+            // The VLM cost of parsing diagrams is metered like any notes work.
+            $this->meter($note, 'notes');
+
+            $descriptors = $res['nodes'] ?? [];
+            if (empty($descriptors)) {
+                return 0;
+            }
+
+            $indexPayload = [];
+            $pageAnchors  = [];   // page => ['diagram' => node, 'text' => surrounding prose]
+            foreach ($descriptors as $d) {
+                $schema = is_array($d['diagram_schema'] ?? null) ? $d['diagram_schema'] : null;
+                $node = KnowledgeNode::updateOrCreate(
+                    ['qdrant_id' => $d['qdrant_id'] ?? (string) \Illuminate\Support\Str::uuid()],
+                    [
+                        'nodeable_type'         => TopicNote::class,
+                        'nodeable_id'           => $note->id,
+                        'type'                  => 'diagram',
+                        'title'                 => $d['title'] ?? 'Diagram',
+                        'content'               => trim((string) ($d['summary'] ?? '')) ?: ($d['title'] ?? 'Diagram'),
+                        'diagram_schema'        => $schema,
+                        'uvss_confidence_score' => (float) ($d['confidence'] ?? 0),
+                        'original_crop_url'     => $d['original_crop_rel'] ?? null,
+                        'cleaned_crop_url'      => $d['cleaned_crop_rel'] ?? null,
+                        'normalized_image_url'  => $d['normalized_image_rel'] ?? null,
+                        'isolated_image_url'    => $d['isolated_image_rel'] ?? null,
+                        'illustrated_image_url' => $d['illustrated_image_rel'] ?? null,
+                        'mask_polygon'          => is_array($d['mask_polygon'] ?? null) ? $d['mask_polygon'] : null,
+                        'ocr_text'              => (string) ($d['ocr_text'] ?? ''),
+                        'labels'                => is_array($d['labels'] ?? null) ? $d['labels'] : [],
+                        'user_id'               => $note->user_id,
+                        'subject_id'            => $note->subject_id,
+                        'chapter_id'            => $note->chapter_id,
+                        'topic_id'              => $note->topic_id,
+                        'topic_name'            => $note->topic_name,
+                        'is_primary'            => $note->is_primary,
+                        'note_id'               => $note->id,
+                        'page'                  => (int) ($d['page'] ?? 1),
+                        'region_index'          => (int) ($d['region_index'] ?? 0),
+                        'status'                => 'ready',
+                    ],
+                );
+
+                $indexPayload[] = [
+                    'node_id'              => $node->id,
+                    'user_id'              => $note->user_id,
+                    'note_id'              => $note->id,
+                    'page'                 => (int) ($d['page'] ?? 1),
+                    'region_index'         => (int) ($d['region_index'] ?? 0),
+                    'title'                => (string) ($d['title'] ?? ''),
+                    'summary'              => (string) ($d['summary'] ?? ''),
+                    'labels'               => is_array($d['labels'] ?? null) ? $d['labels'] : [],
+                    'confidence'           => (float) ($d['confidence'] ?? 0),
+                    'has_schema'           => $schema !== null,
+                    'ocr_text'             => (string) ($d['ocr_text'] ?? ''),
+                    'original_crop_rel'    => $d['original_crop_rel'] ?? null,
+                    'cleaned_crop_rel'     => $d['cleaned_crop_rel'] ?? null,
+                    'normalized_image_rel' => $d['normalized_image_rel'] ?? null,
+                    'isolated_image_rel'   => $d['isolated_image_rel'] ?? null,
+                    'subject_id'           => $note->subject_id,
+                    'chapter_id'           => $note->chapter_id,
+                    'topic_id'             => $note->topic_id,
+                    'topic'                => $note->topic_name,
+                    'is_primary'           => (bool) $note->is_primary,
+                ];
+
+                // The dominant (first-accepted, i.e. largest) diagram on each page
+                // claims that page's surrounding prose as its anchor text (§3.1).
+                $page = (int) ($d['page'] ?? 1);
+                $surrounding = trim((string) ($d['surrounding_text'] ?? ''));
+                if (! isset($pageAnchors[$page]) && $surrounding !== '') {
+                    $pageAnchors[$page] = ['diagram' => $node, 'text' => $surrounding];
+                }
+            }
+
+            // The "Anchor" relationship (§3): persist the OCR'd prose that
+            // physically surrounds each diagram as TEXT nodes pointing at their
+            // diagram, then index them with linked_diagram_id so retrieving the
+            // text automatically surfaces the exact diagram it explains.
+            $anchorPayload = $this->persistAnchorTexts($note, $pageAnchors);
+
+            // Embed the persisted nodes (now that they have ids) for RAG.
+            $this->ai->indexDiagramNodes($indexPayload, $anchorPayload);
+
+            return count($descriptors);
+        } catch (\Throwable $e) {
+            Log::warning('diagram ingest failed', ['note' => $note->id, 'error' => $e->getMessage()]);
+            return 0;
+        }
+    }
+
+    /**
+     * Persist the page-level surrounding prose as `type=text` knowledge_nodes
+     * anchored (parent_diagram_id) to the page's dominant diagram, and build the
+     * Qdrant anchor payload (Diagram Isolation upgrade §3). Idempotent: chunk
+     * ids are deterministic per note+page+chunk. Returns the index payload.
+     *
+     * @param array<int,array{diagram:KnowledgeNode,text:string}> $pageAnchors
+     */
+    protected function persistAnchorTexts(TopicNote $note, array $pageAnchors): array
+    {
+        $payload = [];
+        foreach ($pageAnchors as $page => $info) {
+            $diagram = $info['diagram'];
+            foreach ($this->chunkAnchorText($info['text']) as $i => $chunk) {
+                $anchor = KnowledgeNode::updateOrCreate(
+                    ['qdrant_id' => \Ramsey\Uuid\Uuid::uuid5(
+                        \Ramsey\Uuid\Uuid::NAMESPACE_URL, "anchor:{$note->id}:{$page}:{$i}")->toString()],
+                    [
+                        'nodeable_type'     => TopicNote::class,
+                        'nodeable_id'       => $note->id,
+                        'type'              => 'text',
+                        'title'             => ($diagram->title ?: 'Diagram') . ' — notes (p.' . $page . ')',
+                        'content'           => $chunk,
+                        'parent_diagram_id' => $diagram->id,
+                        'user_id'           => $note->user_id,
+                        'subject_id'        => $note->subject_id,
+                        'chapter_id'        => $note->chapter_id,
+                        'topic_id'          => $note->topic_id,
+                        'topic_name'        => $note->topic_name,
+                        'is_primary'        => $note->is_primary,
+                        'note_id'           => $note->id,
+                        'page'              => $page,
+                        'region_index'      => $i,
+                        'status'            => 'ready',
+                    ],
+                );
+
+                $payload[] = [
+                    'node_id'           => $anchor->id,
+                    'user_id'           => $note->user_id,
+                    'note_id'           => $note->id,
+                    'page'              => $page,
+                    'chunk_index'       => $i,
+                    'linked_diagram_id' => $diagram->id,
+                    'body'              => $chunk,
+                    'subject_id'        => $note->subject_id,
+                    'chapter_id'        => $note->chapter_id,
+                    'topic_id'          => $note->topic_id,
+                    'topic'             => $note->topic_name,
+                    'is_primary'        => (bool) $note->is_primary,
+                ];
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Split the OCR'd surrounding prose into embedding-sized chunks on paragraph
+     * boundaries (~900 chars), preserving the notes' heading/bullet structure.
+     *
+     * @return list<string>
+     */
+    protected function chunkAnchorText(string $text, int $size = 900, int $max = 12): array
+    {
+        $paras = preg_split("/\n{2,}/", trim($text)) ?: [];
+        $chunks = [];
+        $buf = '';
+        foreach ($paras as $p) {
+            $p = trim($p);
+            if ($p === '') continue;
+            if ($buf !== '' && mb_strlen($buf) + mb_strlen($p) + 2 > $size) {
+                $chunks[] = $buf;
+                $buf = $p;
+            } else {
+                $buf = $buf === '' ? $p : "{$buf}\n\n{$p}";
+            }
+            if (count($chunks) >= $max) break;
+        }
+        if ($buf !== '' && count($chunks) < $max) {
+            $chunks[] = $buf;
+        }
+
+        // A single oversized paragraph (no blank lines) still gets hard-wrapped.
+        $out = [];
+        foreach ($chunks as $c) {
+            while (mb_strlen($c) > $size * 1.6 && count($out) < $max) {
+                $out[] = mb_substr($c, 0, $size);
+                $c = mb_substr($c, $size);
+            }
+            if (count($out) < $max) $out[] = $c;
+        }
+
+        return $out;
     }
 
     protected function fail(TopicNote $note, string $message): void

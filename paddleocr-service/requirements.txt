@@ -1,0 +1,10 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+# PaddleOCR + its engine. paddleocr 2.7.x pairs with paddlepaddle 2.6.x.
+# 2.6.2 is the lowest 2.6 build published for linux/py3.10 (2.6.1 has no wheel).
+# numpy pinned <2 for paddlepaddle 2.6 ABI compatibility.
+paddlepaddle==2.6.2
+paddleocr==2.7.3
+opencv-python-headless>=4.9,<5.0
+numpy>=1.26,<2.0

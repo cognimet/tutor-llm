@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from .config import settings
 from .llm import llm
 from .providers import read_image, read_image_genai
-from . import prompts, rag, graph, pdfjobs
+from . import prompts, rag, graph, pdfjobs, diagrams
 from .schemas import (
     ChatTurnRequest, ChatTurnResponse,
     AssessmentGenerateRequest, AssessmentGenerateResponse, Question,
@@ -749,6 +749,160 @@ async def ai_figures(user_id: int, subject_id: int | None = None, topic: str | N
     """Textbook figures relevant to a topic/subject, for the in-chat strip."""
     _auth(authorization)
     return {"figures": await rag.search_figures(user_id, subject_id=subject_id, topic=topic, k=k)}
+
+
+# ── Multimodal diagram ingest: OpenCV → PaddleOCR → Gemini → UVSS ───────
+class DiagramIngestRequest(BaseModel):
+    note_id: int
+    user_id: int
+    # Provide EITHER the raw file bytes (preferred — robust to Laravel's disk
+    # root, e.g. Laravel 11 stores under storage/app/private) OR a path relative
+    # to the shared volume (used by the big-PDF path that can't HTTP-transfer).
+    content_base64: str | None = None
+    rel_path: str | None = None
+    mime: str | None = None
+    subject_id: int | None = None
+    chapter_id: int | None = None
+    topic_id: int | None = None
+    topic: str | None = None
+    is_primary: bool = False
+
+
+def _read_upload(rel_path: str) -> bytes:
+    """Read a file from the shared volume, tolerating Laravel's `private/` disk
+    root (Laravel 11 stores the `local` disk under storage/app/private)."""
+    import os
+    for candidate in (rel_path, os.path.join("private", rel_path)):
+        abs_path = os.path.join(settings.upload_root, candidate)
+        try:
+            with open(abs_path, "rb") as f:
+                return f.read()
+        except OSError:
+            continue
+    raise HTTPException(status_code=404, detail=f"File not found on shared volume: {rel_path}")
+
+
+@app.post("/ai/diagrams/ingest")
+async def diagrams_ingest(req: DiagramIngestRequest, authorization: str | None = Header(None)):
+    """Parse diagrams out of an uploaded note: segment (OpenCV), read labels
+    (PaddleOCR), and extract UVSS (Gemini). Returns storage-ready node
+    descriptors (assets written to the shared volume) for Laravel to persist into
+    knowledge_nodes. Indexing into Qdrant is a second call once the rows have ids
+    (see /ai/diagrams/index). Accepts the file as base64 (preferred) or a shared-
+    volume path."""
+    _auth(authorization)
+    import base64
+    if req.content_base64:
+        raw = base64.b64decode(req.content_base64, validate=False)
+    elif req.rel_path:
+        raw = _read_upload(req.rel_path)
+    else:
+        raise HTTPException(status_code=400, detail="Provide content_base64 or rel_path.")
+    out = await diagrams.ingest(
+        req.note_id, raw, req.mime, subject_id=req.subject_id, chapter_id=req.chapter_id,
+        topic_id=req.topic_id, topic=req.topic, is_primary=req.is_primary,
+    )
+    return out
+
+
+class DiagramIndexNode(BaseModel):
+    node_id: int                   # the knowledge_nodes row id (for linkage)
+    user_id: int
+    note_id: int
+    page: int = 1
+    region_index: int = 0
+    title: str = ""
+    summary: str = ""
+    labels: list[str] = []
+    confidence: float = 0.0
+    has_schema: bool = False
+    ocr_text: str = ""
+    original_crop_rel: str | None = None
+    cleaned_crop_rel: str | None = None
+    normalized_image_rel: str | None = None
+    isolated_image_rel: str | None = None
+    subject_id: int | None = None
+    chapter_id: int | None = None
+    topic_id: int | None = None
+    topic: str | None = None
+    is_primary: bool = False
+
+
+class AnchorTextNode(BaseModel):
+    """One OCR'd prose chunk that physically surrounds a diagram on the page
+    (Diagram Isolation upgrade §3.2). Indexed with linked_diagram_id so the
+    tutor's retrieval of the TEXT automatically surfaces the diagram's id."""
+    node_id: int                   # the knowledge_nodes row id (type=text)
+    user_id: int
+    note_id: int
+    linked_diagram_id: int         # the diagram knowledge_nodes row this explains
+    body: str
+    page: int = 1
+    chunk_index: int = 0
+    subject_id: int | None = None
+    chapter_id: int | None = None
+    topic_id: int | None = None
+    topic: str | None = None
+    is_primary: bool = False
+
+
+class DiagramIndexRequest(BaseModel):
+    nodes: list[DiagramIndexNode] = []
+    anchors: list[AnchorTextNode] = []
+
+
+@app.post("/ai/diagrams/index")
+async def diagrams_index(req: DiagramIndexRequest, authorization: str | None = Header(None)):
+    """Embed persisted diagram nodes (and their anchored surrounding-text
+    chunks) into Qdrant (`documents`) so the tutor retrieves them notes-first.
+    Idempotent; safe to re-run."""
+    _auth(authorization)
+    indexed = 0
+    for n in req.nodes:
+        pid = await rag.index_diagram(
+            user_id=n.user_id, note_id=n.note_id, page=n.page, region_index=n.region_index,
+            title=n.title, summary=n.summary, labels=n.labels, confidence=n.confidence,
+            has_schema=n.has_schema, ocr_text=n.ocr_text,
+            original_rel=n.original_crop_rel, cleaned_rel=n.cleaned_crop_rel,
+            normalized_rel=n.normalized_image_rel, isolated_rel=n.isolated_image_rel,
+            subject_id=n.subject_id,
+            chapter_id=n.chapter_id, topic_id=n.topic_id, topic=n.topic,
+            is_primary=n.is_primary, node_id=n.node_id,
+        )
+        if pid:
+            indexed += 1
+    for a in req.anchors:
+        pid = await rag.index_anchor_text(
+            user_id=a.user_id, note_id=a.note_id, page=a.page, chunk_index=a.chunk_index,
+            linked_diagram_id=a.linked_diagram_id, body=a.body, node_id=a.node_id,
+            subject_id=a.subject_id, chapter_id=a.chapter_id, topic_id=a.topic_id,
+            topic=a.topic, is_primary=a.is_primary,
+        )
+        if pid:
+            indexed += 1
+    return {"indexed": indexed}
+
+
+@app.get("/ai/diagrams")
+async def ai_diagrams(user_id: int, subject_id: int | None = None, topic: str | None = None,
+                      k: int = 8, authorization: str | None = Header(None)):
+    """Diagram nodes relevant to a topic/subject (tutor 'which diagram' context)."""
+    _auth(authorization)
+    return {"diagrams": await rag.search_diagrams(user_id, subject_id=subject_id, topic=topic, k=k)}
+
+
+class DeleteNoteRequest(BaseModel):
+    note_id: int
+    user_id: int | None = None
+
+
+@app.post("/ai/notes/delete")
+async def notes_delete(req: DeleteNoteRequest, authorization: str | None = Header(None)):
+    """Purge all of a deleted note's vectors (text chunks, diagrams, anchors,
+    figures) from Qdrant so it stops surfacing in retrieval. Idempotent."""
+    _auth(authorization)
+    ran = await rag.delete_note_vectors(req.note_id, req.user_id)
+    return {"deleted": bool(ran)}
 
 
 # ── helpers ────────────────────────────────────────────────────────────

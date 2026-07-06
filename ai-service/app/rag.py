@@ -214,6 +214,29 @@ async def index(points: list[dict]) -> int:
         await client.close()
 
 
+async def delete_note_vectors(note_id: int, user_id: int | None = None) -> int:
+    """Remove EVERY vector belonging to one uploaded note — its text chunks,
+    parsed diagrams, anchored surrounding-text and any textbook figures/pages —
+    from the `documents` AND `curriculum` collections, so a deleted note stops
+    surfacing in retrieval. Filtered by the note_id stamped on every point's
+    payload. Best-effort; returns 1 if it ran, 0 when Qdrant isn't configured."""
+    if not settings.qdrant_url:
+        return 0
+    from qdrant_client import models as qm
+    must = [qm.FieldCondition(key="note_id", match=qm.MatchValue(value=int(note_id)))]
+    client = _client()
+    try:
+        for coll in (settings.qdrant_doc_collection, settings.qdrant_collection):
+            try:
+                await client.delete(collection_name=coll,
+                                    points_selector=qm.FilterSelector(filter=qm.Filter(must=must)))
+            except Exception as e:  # noqa: BLE001 — missing collection is fine
+                log.debug("delete_note_vectors: %s on %s: %s", note_id, coll, e)
+        return 1
+    finally:
+        await client.close()
+
+
 async def delete_topic(topic: str) -> None:
     """Remove all chunks for a topic (used before re-indexing it)."""
     if not settings.qdrant_url:
@@ -382,6 +405,146 @@ async def search_figures(user_id: int, subject_id: int | None = None,
     return out
 
 
+def _diagram_pid(note_id: int, page: int, region_index: int) -> str:
+    """Deterministic point id for one parsed diagram, so re-ingesting the same
+    region overwrites (idempotent) instead of duplicating."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"diagram:{note_id}:{page}:{region_index}"))
+
+
+async def index_diagram(user_id: int, note_id: int, page: int, region_index: int,
+                        title: str, summary: str, labels: list[str],
+                        confidence: float, has_schema: bool,
+                        original_rel: str | None = None, cleaned_rel: str | None = None,
+                        normalized_rel: str | None = None, isolated_rel: str | None = None,
+                        ocr_text: str = "",
+                        subject_id: int | None = None, chapter_id: int | None = None,
+                        topic_id: int | None = None, topic: str | None = None,
+                        is_primary: bool = False, node_id: int | None = None) -> str | None:
+    """Embed ONE parsed diagram into the `documents` collection so the tutor
+    retrieves it exactly like the student's own notes (notes-first retrieval).
+
+    Fallback by design (plan §4.4): the vector is built from the VLM *summary* +
+    labels + OCR text, NOT from the UVSS schema — so a diagram is retrievable and
+    teachable even when structured reconstruction failed or scored low. The
+    payload carries `node_id` (the Laravel knowledge_nodes row), `confidence`,
+    `has_schema` and the three asset paths, so the chat layer can decide which
+    representation to render. Idempotent; returns the Qdrant point id."""
+    title = (title or "").strip()
+    summary = (summary or "").strip()
+    labels = labels or []
+    # Body is what gets embedded + handed to the tutor as grounding. Marking it
+    # as a diagram (with its node id) lets the model emit a <diagram_*> tag.
+    tag = f"[Diagram #{node_id}] " if node_id else "[Diagram] "
+    body = (tag + "\n".join(p for p in (title, summary, " ".join(labels)) if p)).strip()
+    if not settings.qdrant_url or not (summary or title or labels or ocr_text):
+        return None
+    from qdrant_client import models as qm
+    await ensure_collection(settings.qdrant_doc_collection)
+    client = _client()
+    pid = _diagram_pid(note_id, page, region_index)
+    try:
+        vector = await embed(f"{topic or ''} {title}: {summary} {' '.join(labels)}".strip())
+        await client.upsert(collection_name=settings.qdrant_doc_collection, points=[
+            qm.PointStruct(id=pid, vector=vector, payload={
+                "kind": "diagram", "user_id": int(user_id), "note_id": int(note_id),
+                "page": int(page), "region_index": int(region_index),
+                "node_id": node_id, "title": title or f"Diagram (p.{page})",
+                "labels": labels, "confidence": float(confidence), "has_schema": bool(has_schema),
+                "original_rel": original_rel, "cleaned_rel": cleaned_rel,
+                "normalized_rel": normalized_rel, "isolated_rel": isolated_rel,
+                "ocr_text": (ocr_text or "")[:1500],
+                "topic": topic, "subject_id": subject_id, "chapter_id": chapter_id,
+                "topic_id": topic_id, "is_primary": bool(is_primary),
+                "body": body[:2000],
+            })])
+        return pid
+    except Exception as e:  # noqa: BLE001
+        log.warning("index_diagram failed (note %s p%s r%s): %s", note_id, page, region_index, e)
+        return None
+    finally:
+        await client.close()
+
+
+def _anchor_pid(note_id: int, page: int, chunk_index: int) -> str:
+    """Deterministic point id for one anchored surrounding-text chunk, so
+    re-ingesting the same page overwrites (idempotent) instead of duplicating."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"anchor:{note_id}:{page}:{chunk_index}"))
+
+
+async def index_anchor_text(user_id: int, note_id: int, page: int, chunk_index: int,
+                            linked_diagram_id: int, body: str,
+                            node_id: int | None = None,
+                            subject_id: int | None = None, chapter_id: int | None = None,
+                            topic_id: int | None = None, topic: str | None = None,
+                            is_primary: bool = False) -> str | None:
+    """Embed ONE chunk of the prose that physically surrounds a diagram on the
+    page (Diagram Isolation upgrade §3.2). It lives in `documents` with
+    kind="document", so the existing notes-first retrieval surfaces it like any
+    of the student's own notes — but its payload carries `linked_diagram_id`,
+    which retrieve() turns into an "[explains diagram #N]" marker the tutor uses
+    to trigger the isolated diagram in the UI. Idempotent."""
+    body = (body or "").strip()
+    if not settings.qdrant_url or not body:
+        return None
+    from qdrant_client import models as qm
+    await ensure_collection(settings.qdrant_doc_collection)
+    client = _client()
+    pid = _anchor_pid(note_id, page, chunk_index)
+    try:
+        vector = await embed(f"{topic or ''}: {body}")
+        await client.upsert(collection_name=settings.qdrant_doc_collection, points=[
+            qm.PointStruct(id=pid, vector=vector, payload={
+                "kind": "document", "user_id": int(user_id), "note_id": int(note_id),
+                "page": int(page), "chunk_index": int(chunk_index),
+                "node_id": node_id, "linked_diagram_id": int(linked_diagram_id),
+                "topic": topic, "subject_id": subject_id, "chapter_id": chapter_id,
+                "topic_id": topic_id, "is_primary": bool(is_primary),
+                "body": body[:2000],
+            })])
+        return pid
+    except Exception as e:  # noqa: BLE001
+        log.warning("index_anchor_text failed (note %s p%s c%s): %s", note_id, page, chunk_index, e)
+        return None
+    finally:
+        await client.close()
+
+
+async def search_diagrams(user_id: int, subject_id: int | None = None,
+                          topic: str | None = None, query: str = "",
+                          k: int = 8) -> list[dict]:
+    """List parsed diagram nodes relevant to a topic/subject, ranked by the topic
+    when given. Returns descriptors (node_id, title, confidence, has_schema,
+    labels, summary) the tutor uses to decide which diagram to show."""
+    if not settings.qdrant_url:
+        return []
+    from qdrant_client import models as qm
+    must = [
+        qm.FieldCondition(key="user_id", match=qm.MatchValue(value=int(user_id))),
+        qm.FieldCondition(key="kind", match=qm.MatchValue(value="diagram")),
+    ]
+    if subject_id:
+        must.append(qm.FieldCondition(key="subject_id", match=qm.MatchValue(value=int(subject_id))))
+    payloads = await _search_payload(
+        settings.qdrant_doc_collection,
+        f"{topic or ''} {query} diagram".strip(), k, must)
+    out: list[dict] = []
+    seen: set = set()
+    for p in payloads:
+        nid = p.get("node_id")
+        key = nid if nid is not None else (p.get("note_id"), p.get("page"), p.get("region_index"))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "node_id": nid, "title": p.get("title"),
+            "confidence": p.get("confidence", 0.0), "has_schema": bool(p.get("has_schema")),
+            "has_isolated": bool(p.get("isolated_rel")),
+            "labels": p.get("labels") or [], "summary": p.get("body"),
+            "note_id": p.get("note_id"), "page": p.get("page"),
+        })
+    return out
+
+
 async def index_event(user_id: int, type: str, topic: str | None, text: str) -> str | None:
     """Embed one tracked user action into the `events` collection for semantic
     recall ("what has this student struggled with?"). Returns the point id."""
@@ -496,7 +659,14 @@ async def retrieve(query: str, topic: str | None = None, student_id: int | None 
             if b and b[:120] not in uniq:
                 uniq[b[:120]] = p
         ordered = sorted(uniq.values(), key=lambda p: 0 if p.get("is_primary") else 1)
-        add([p.get("body", "") for p in ordered[:5]], prefix="[Student's own notes] ")
+        # Anchored chunks (prose that physically surrounds one of the student's
+        # own diagrams) carry the diagram's id in the marker, so the tutor knows
+        # EXACTLY which isolated diagram this text explains (isolation plan §4.1).
+        for p in ordered[:5]:
+            linked = p.get("linked_diagram_id")
+            prefix = (f"[Student's own notes — explains diagram #{int(linked)}] "
+                      if linked else "[Student's own notes] ")
+            add([p.get("body", "")], prefix=prefix)
 
     # 2) vetted curriculum (topic-filtered)
     add(await _search(settings.qdrant_collection,
@@ -577,7 +747,10 @@ def as_context(chunks: list[str]) -> str:
         "\n\nGround your answer in the material below. Items marked "
         "\"[Student's own notes]\" are the student's OWN uploaded notes — treat them as the "
         "PRIMARY source of truth and prefer their wording, examples and emphasis; the rest is "
-        "supporting curriculum. If the material doesn't cover the question, say so briefly and "
+        "supporting curriculum. An item marked \"explains diagram #N\" is the prose that "
+        "physically surrounds diagram #N in the student's notebook: teach from THAT TEXT and "
+        "display the diagram separately per your diagram rules (never re-describe the raw page). "
+        "If the material doesn't cover the question, say so briefly and "
         "teach from first principles:\n"
         f"<material>\n{joined}\n</material>\n"
     )

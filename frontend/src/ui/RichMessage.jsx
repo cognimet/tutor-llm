@@ -7,6 +7,7 @@ import BentoGrid from "./BentoGrid.jsx";
 import VocabPill from "./VocabPill.jsx";
 import LessonProgressiveWrapper from "./LessonProgressiveWrapper.jsx";
 import { FloatingStreakBadge } from "./FloatingStreakBadge.jsx";
+import DiagramNode from "./DiagramNode.jsx";
 
 /**
  * Renders a tutor message, splicing inline visualizations into the Markdown.
@@ -149,10 +150,23 @@ const FLOW_RE = /\[PROGRESSIVE_FLOW\]([\s\S]*?)\[\/PROGRESSIVE_FLOW\]/gi; // ste
 const STREAK_RE = /\[STREAK\b([^\]]*)\]/gi;                      // floating combo badge
 // [VOCAB word="…" def="…"] — inline pills, handled within prose & card bodies.
 const VOCAB_RE = /\[VOCAB\s+word="([^"]*)"\s+def="([^"]*)"\s*\]/gi;
+// <diagram_sketch|original|cleaned|normalized|isolated id="X" /> — a student's
+// own diagram (UVSS reconstruction or a rendered image), resolved by node id
+// via DiagramNode, INLINE in the chat flow.
+const DIAGRAM_RE = /<diagram_(sketch|original|cleaned|normalized|isolated)\s+id\s*=\s*["']?(\d+)["']?\s*\/?>/gi;
+// <ShowIsolatedDiagram id="X" /> — Diagram Isolation upgrade §5.2: NEVER
+// rendered inline. Intercepted and dispatched to React state (onShowDiagram),
+// which tells the study layout to display the perfectly isolated asset in the
+// dedicated, sticky Visual Context Viewer pane beside the chat.
+const SHOW_DIAG_RE = /<ShowIsolatedDiagram\s+id\s*=\s*["']?(\d+)["']?\s*\/?>/gi;
 // Cheap presence check (fast path: most messages have no tags → render unchanged).
-const HAS_TAG = /\[(?:CARD:|QUIZ:|VISUAL_ANCHOR:|BENTO_GRID\]|PROGRESSIVE_FLOW\]|STREAK\b|VOCAB\s)/i;
+// The `<diagram_` / `<Show` PREFIXES (not just complete tag names) are included
+// so that a tag still streaming in — e.g. `<ShowIsolatedDia` at the very start
+// of a reply, where the isolation protocol places it — routes into the
+// interactive parser, whose OPEN_TAG hold-back hides it until it completes.
+const HAS_TAG = /(\[(?:CARD:|QUIZ:|VISUAL_ANCHOR:|BENTO_GRID\]|PROGRESSIVE_FLOW\]|STREAK\b|VOCAB\s))|<diagram_[a-z]*|<Show[A-Za-z]*/i;
 // An opening of a block tag still streaming in (no closing yet) → held back.
-const OPEN_TAG = /\[(?:CARD:|QUIZ:|VISUAL_ANCHOR:|BENTO_GRID\]|PROGRESSIVE_FLOW\]|STREAK\b)/i;
+const OPEN_TAG = /\[(?:CARD:|QUIZ:|VISUAL_ANCHOR:|BENTO_GRID\]|PROGRESSIVE_FLOW\]|STREAK\b)|<diagram_[a-z]*|<Show[A-Za-z]*/i;
 
 // When a stream is truncated (token limit, dropped connection, parse mismatch),
 // it can end mid-tag — leaving an unclosed [CARD]/[QUIZ] that would otherwise
@@ -233,10 +247,15 @@ function parseInteractive(text, streaming = false) {
   while ((m = FLOW_RE.exec(src)) !== null) matches.push({ type: "flow", index: m.index, end: m.index + m[0].length, m });
   STREAK_RE.lastIndex = 0;
   while ((m = STREAK_RE.exec(src)) !== null) matches.push({ type: "streak", index: m.index, end: m.index + m[0].length, m });
+  DIAGRAM_RE.lastIndex = 0;
+  while ((m = DIAGRAM_RE.exec(src)) !== null) matches.push({ type: "diagram", index: m.index, end: m.index + m[0].length, m });
+  SHOW_DIAG_RE.lastIndex = 0;
+  while ((m = SHOW_DIAG_RE.exec(src)) !== null) matches.push({ type: "showdiagram", index: m.index, end: m.index + m[0].length, m });
   matches.sort((a, b) => a.index - b.index);
 
   const blocks = [];
   const anchors = [];
+  const showDiagrams = [];   // isolated-diagram ids for the Visual Context Viewer
   let cursor = 0;
   const pushText = (t) => { if (t && t.trim()) blocks.push({ kind: "text", text: t }); };
 
@@ -264,6 +283,17 @@ function parseInteractive(text, streaming = false) {
       blocks.push({ kind: "flow", cards: parseCards(tag.m[1] || "", []) });
     } else if (tag.type === "streak") {
       blocks.push({ kind: "streak", streak: numAttr(tag.m[1], "streak") ?? 3, xp: numAttr(tag.m[1], "xp") ?? 20 });
+    } else if (tag.type === "diagram") {
+      const [, variant, id] = tag.m;
+      blocks.push({ kind: "diagram", variant, nodeId: parseInt(id, 10) });
+    } else if (tag.type === "showdiagram") {
+      // Stream interception (isolation plan §5.2): the tag is NOT rendered as
+      // an inline <img>. It's collected so the layout can display the isolated
+      // asset in the dedicated viewer; a small chip marks the spot in the
+      // transcript and re-opens the viewer on tap.
+      const nodeId = parseInt(tag.m[1], 10);
+      showDiagrams.push(nodeId);
+      blocks.push({ kind: "showdiagram", nodeId });
     }
     cursor = tag.end;
   }
@@ -281,7 +311,7 @@ function parseInteractive(text, streaming = false) {
     pushText(tail);
   }
 
-  return { blocks, anchors };
+  return { blocks, anchors, showDiagrams };
 }
 
 function PendingBlock() {
@@ -348,16 +378,36 @@ function renderCardNode(card, key) {
   );
 }
 
-export default function RichMessage({ text, streaming = false, className = "", onAnchor, onQuizSuccess, persistScope, messageId, progressLogs = [], onLogUpdate }) {
+// Diagram tags are self-closing; a stray `</diagram_*>` / `</ShowIsolatedDiagram>`
+// the model sometimes adds carries no meaning and must never render as text.
+const DIAGRAM_CLOSE_RE = /<\/(?:diagram_(?:sketch|original|cleaned|normalized|isolated)|ShowIsolatedDiagram)\s*>/gi;
+
+// The transcript-side marker left where a <ShowIsolatedDiagram> tag streamed in:
+// a subtle chip that re-opens the Visual Context Viewer (useful after scrolling
+// or on mobile where the viewer is collapsible).
+function ShowDiagramChip({ nodeId, onShowDiagram }) {
+  return (
+    <button
+      onClick={() => onShowDiagram?.(nodeId)}
+      title="Show this diagram in the visual viewer"
+      className="my-2 inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-extrabold text-indigo-600 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300"
+    >
+      <span aria-hidden>🖼️</span> Diagram shown in the visual viewer
+    </button>
+  );
+}
+
+export default function RichMessage({ text, streaming = false, className = "", onAnchor, onShowDiagram, onQuizSuccess, persistScope, messageId, progressLogs = [], onLogUpdate }) {
   // On a finished render, auto-close any unclosed block tags so a truncated
-  // stream never leaves a stuck "Building your card…" placeholder.
+  // stream never leaves a stuck "Building your card…" placeholder. Always strip
+  // stray diagram closing tags (they're self-closing by contract).
   const safeText = useMemo(
-    () => (streaming ? String(text || "") : sanitizeLessonStream(text)),
+    () => (streaming ? String(text || "") : sanitizeLessonStream(text)).replace(DIAGRAM_CLOSE_RE, ""),
     [text, streaming],
   );
   const hasTags = HAS_TAG.test(safeText);
-  const { blocks, anchors } = useMemo(
-    () => (hasTags ? parseInteractive(safeText, streaming) : { blocks: null, anchors: [] }),
+  const { blocks, anchors, showDiagrams } = useMemo(
+    () => (hasTags ? parseInteractive(safeText, streaming) : { blocks: null, anchors: [], showDiagrams: [] }),
     [safeText, hasTags, streaming],
   );
 
@@ -367,6 +417,17 @@ export default function RichMessage({ text, streaming = false, className = "", o
     if (onAnchor && anchors.length) onAnchor(anchors[anchors.length - 1]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchorsKey]);
+
+  // Stream interception (isolation plan §5.2): as soon as a complete
+  // <ShowIsolatedDiagram id/> tag arrives, dispatch the id to the study layout
+  // so the sticky Visual Context Viewer displays the isolated asset.
+  const showKey = useMemo(() => (showDiagrams || []).join(","), [showDiagrams]);
+  useEffect(() => {
+    if (onShowDiagram && showDiagrams && showDiagrams.length) {
+      onShowDiagram(showDiagrams[showDiagrams.length - 1]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showKey]);
 
   // Fast path: no interactive tags → original rendering, unchanged.
   if (!hasTags) {
@@ -407,13 +468,18 @@ export default function RichMessage({ text, streaming = false, className = "", o
       }
       case "streak":
         return <FloatingStreakBadge key={i} streakValue={b.streak} xpGained={b.xp} />;
+      case "diagram":
+        return <DiagramNode key={i} id={b.nodeId} variant={b.variant} />;
+      case "showdiagram":
+        return <ShowDiagramChip key={i} nodeId={b.nodeId} onShowDiagram={onShowDiagram} />;
       default: return null;
     }
   };
 
   // The "Learning Path": when a lesson has several interactive blocks, thread
-  // them onto a glowing vertical timeline with a node per step.
-  const interactiveCount = blocks.filter((b) => b.kind !== "text" && b.kind !== "pending").length;
+  // them onto a glowing vertical timeline with a node per step. The
+  // showdiagram chip is a marker, not a step — it never counts as a node.
+  const interactiveCount = blocks.filter((b) => b.kind !== "text" && b.kind !== "pending" && b.kind !== "showdiagram").length;
   if (interactiveCount >= 2) {
     return (
       <div className={className}>
@@ -421,7 +487,7 @@ export default function RichMessage({ text, streaming = false, className = "", o
           <span className="learning-timeline-line absolute bottom-4 left-[6px] top-5 w-0.5 rounded-full" aria-hidden />
           <div className="space-y-1">
             {blocks.map((b, i) => {
-              const isNode = b.kind !== "text" && b.kind !== "pending";
+              const isNode = b.kind !== "text" && b.kind !== "pending" && b.kind !== "showdiagram";
               return (
                 <div key={i} className="relative pl-7">
                   {isNode && <span className="timeline-glow-node absolute left-0 top-[1.4rem] h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" aria-hidden />}

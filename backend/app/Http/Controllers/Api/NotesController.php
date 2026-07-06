@@ -329,10 +329,10 @@ class NotesController extends Controller
     {
         $this->authorizeNote($request, $note);
 
-        try { Storage::disk($note->disk)->delete($note->path); } catch (\Throwable) { /* ignore */ }
-        $request->user()->flashcards()
-            ->where('source_type', 'note')->where('source_id', $note->id)->delete();
-        $note->delete();
+        // Full cleanup: diagram + anchor nodes, flashcards, rendered assets,
+        // Qdrant vectors, the file, and the row — so nothing keeps surfacing in
+        // the tutor's retrieval after the note is deleted.
+        $this->notes->deleteNote($note);
 
         return response()->json(['deleted' => true]);
     }

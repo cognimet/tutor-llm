@@ -147,6 +147,20 @@ export const figuresApi = {
   status: (noteId) => api.get(`/tutor/textbooks/${noteId}/status`).then((r) => r.data),
 };
 
+// --- Student: multimodal diagram nodes (UVSS schema + rendered assets) ---
+export const nodesApi = {
+  // The UVSS payload + metadata for the interactive ReconstructedDiagram.
+  schema: (id) => api.get(`/tutor/nodes/${id}/schema`).then((r) => r.data),
+  // Auth-gated image variants (original | cleaned | normalized | isolated) →
+  // object URL. Caller must revoke the URL on unmount. `isolated` is the
+  // polygon-masked cut (Diagram Isolation upgrade); the server falls back to
+  // the cleaned/original crop when no isolated asset exists.
+  image: (id, variant = "original") =>
+    api
+      .get(`/tutor/nodes/${id}/image/${variant}`, { responseType: "blob" })
+      .then((r) => URL.createObjectURL(r.data)),
+};
+
 // --- Student: learner profile / "current stage" + behavioural telemetry ---
 export const profileApi = {
   get: () => api.get("/tutor/profile").then((r) => r.data.profile),

@@ -19,3 +19,8 @@ pypdf==5.1.0
 PyMuPDF>=1.24,<1.26
 python-docx==1.1.2
 openpyxl==3.1.5
+# OpenCV + numpy for diagram segmentation, contour-based region proposals, and
+# the cleaned/normalized asset generation in the multimodal ingest pipeline.
+# headless = no GUI/X11 system deps, safe in the slim container.
+opencv-python-headless>=4.9,<5.0
+numpy>=1.26,<3.0
