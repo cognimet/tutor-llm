@@ -122,6 +122,9 @@ services:
       # can serve them.
       UPLOAD_ROOT: /app/storage/app
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key}
+      # Dockerized PaddleOCR microservice for diagram label OCR (optional —
+      # the pipeline falls back to tesseract / the VLM when it's unset/down).
+      PADDLE_OCR_URL: ${PADDLE_OCR_URL:-http://paddleocr:8002}
     volumes:
       - fastembed_cache:/models
       # Same named volume the backend uses, mounted at the same path (UPLOAD_ROOT).
@@ -137,6 +140,20 @@ services:
         condition: service_started
       neo4j:
         condition: service_healthy
+
+  # Dockerized PaddleOCR for diagram label OCR (multimodal ingest pipeline).
+  # Heavy paddlepaddle deps live here, isolated from the AI service image. The
+  # AI service calls it at PADDLE_OCR_URL and degrades gracefully if it's down,
+  # so it's intentionally NOT a hard dependency of ai-service.
+  paddleocr:
+    build: ./paddleocr-service
+    # PaddlePaddle ships no arm64 Linux wheels on PyPI, so pin this image to
+    # amd64 (native on Intel; emulated via QEMU on Apple Silicon). Slower OCR
+    # under emulation, but it's optional + off the hot path.
+    platform: linux/amd64
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
 
   backend:
     build: ./backend

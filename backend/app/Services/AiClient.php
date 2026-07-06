@@ -291,6 +291,81 @@ class AiClient
         return is_array($data['figures'] ?? null) ? $data['figures'] : [];
     }
 
+    /* ----------------------- Multimodal diagram ingest --------------------- */
+
+    /**
+     * Parse diagrams out of an uploaded note (image/PDF): the AI service segments
+     * with OpenCV, OCRs labels with PaddleOCR, and extracts UVSS with Gemini,
+     * writing the three assets to the shared volume. Returns
+     * ['nodes'=>[descriptor,...], 'pages'=>int]; usage is captured for metering.
+     *
+     * The file is sent as base64 (Laravel reads it via its own disk, so this is
+     * robust to the disk root — Laravel 11 stores uploads under storage/app/private,
+     * which the AI service can't reach by a bare relative path).
+     */
+    public function ingestDiagrams(int $userId, string $contentBase64, int $noteId, ?string $mime = null, array $scope = []): array
+    {
+        $data = $this->post('/ai/diagrams/ingest', array_filter([
+            'note_id' => $noteId, 'content_base64' => $contentBase64, 'user_id' => $userId, 'mime' => $mime,
+            'subject_id' => $scope['subject_id'] ?? null,
+            'chapter_id' => $scope['chapter_id'] ?? null,
+            'topic_id' => $scope['topic_id'] ?? null,
+            'topic' => $scope['topic'] ?? null,
+            'is_primary' => $scope['is_primary'] ?? null,
+        ], fn ($v) => $v !== null));
+        $this->captureUsage($data);
+        return [
+            'nodes' => is_array($data['nodes'] ?? null) ? $data['nodes'] : [],
+            'pages' => (int) ($data['pages'] ?? 0),
+        ];
+    }
+
+    /**
+     * Embed persisted diagram nodes into Qdrant (notes-first retrieval). Pass the
+     * descriptors returned by {@see ingestDiagrams()} augmented with their saved
+     * knowledge_nodes `node_id`. $anchors are the OCR'd TEXT nodes physically
+     * surrounding each diagram (Diagram Isolation upgrade §3.2) — indexed with a
+     * `linked_diagram_id` payload so retrieving the text surfaces the exact
+     * diagram it explains. Returns the count indexed.
+     */
+    public function indexDiagramNodes(array $nodes, array $anchors = []): int
+    {
+        if (empty($nodes) && empty($anchors)) {
+            return 0;
+        }
+        $data = $this->post('/ai/diagrams/index', [
+            'nodes'   => array_values($nodes),
+            'anchors' => array_values($anchors),
+        ]);
+        return (int) ($data['indexed'] ?? 0);
+    }
+
+    /**
+     * Purge a deleted note's vectors (text chunks, diagrams, anchors, figures)
+     * from Qdrant so it stops surfacing in retrieval. Best-effort; returns true
+     * when the AI service ran the delete.
+     */
+    public function deleteNoteVectors(int $noteId, ?int $userId = null): bool
+    {
+        try {
+            $data = $this->post('/ai/notes/delete', array_filter([
+                'note_id' => $noteId, 'user_id' => $userId,
+            ], fn ($v) => $v !== null));
+            return (bool) ($data['deleted'] ?? false);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /** Diagram nodes relevant to a topic/subject (tutor "which diagram" context). */
+    public function diagrams(int $userId, ?int $subjectId = null, ?string $topic = null, int $k = 8): array
+    {
+        $data = $this->get('/ai/diagrams', array_filter([
+            'user_id' => $userId, 'subject_id' => $subjectId, 'topic' => $topic, 'k' => $k,
+        ], fn ($v) => $v !== null));
+        return is_array($data['diagrams'] ?? null) ? $data['diagrams'] : [];
+    }
+
     /* ----------------------- RAG / curriculum indexing --------------------- */
 
     /** Ensure the vector collection exists. */

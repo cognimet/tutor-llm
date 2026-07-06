@@ -64,6 +64,20 @@ class Settings(BaseSettings):
     google_cloud_project: str | None = None
     google_cloud_location: str | None = None
     gemini_vision_model: str | None = None   # VLM model for reading images
+    # Gemini IMAGE model for the "idealised render" (redraws a student's isolated
+    # hand-drawing into a clean, labelled textbook illustration). Overridable via
+    # GEMINI_IMAGE_MODEL if Google renames the image model.
+    gemini_image_model: str = "gemini-2.5-flash-image"
+    # Force the image-reading backend: 'gemini' | 'openai' | None (auto).
+    # Auto prefers Gemini whenever a Google/Gemini key is configured, since the
+    # small OpenRouter free vision models can't emit valid structured UVSS.
+    vision_backend: str | None = None
+    # Max output tokens for a vision call. Must be VERY generous: Gemini 2.5 is a
+    # thinking model whose reasoning tokens share this budget, and a full UVSS
+    # reconstruction (many SVG stroke_path strings + labels + hotspots) is large.
+    # A low cap let thinking eat the budget and truncated the JSON mid-object, so
+    # no sketch was produced. This must fit BOTH the thinking AND the full JSON.
+    vision_max_tokens: int = 32768
 
     # ── OpenAI ─────────────────────────────────────────────────────────
     openai_api_key: str | None = None
@@ -112,6 +126,38 @@ class Settings(BaseSettings):
     # Polite pause (seconds) between per-page VLM calls so a free-tier model
     # isn't hammered into rate limits during an 800-page ingest.
     pdf_page_pause: float = 1.2
+
+    # ── Multimodal diagram ingest (OpenCV → PaddleOCR → Gemini → UVSS) ──
+    # Dockerized PaddleOCR microservice for label OCR (blank = OCR disabled,
+    # the pipeline falls back to tesseract / the VLM's own text reading).
+    paddle_ocr_url: str | None = None        # e.g. http://paddleocr:8002
+    paddle_ocr_lang: str = "en"
+    # Most diagrams to parse out of a single uploaded note (guards cost/time).
+    diagram_max_regions: int = 6
+    # Below this VLM-reported confidence we DROP the UVSS schema and keep the
+    # node as an image-only fallback (plan §4.4); still fully retrievable. Kept
+    # deliberately low: hand-drawn figures rarely score high, and the Visual
+    # Context Viewer offers a "Your drawing" toggle, so a simplified rebuilt
+    # sketch at moderate confidence is preferable to no reconstruction at all.
+    diagram_min_confidence: float = 0.4
+    # Smallest region (fraction of page area) accepted as a diagram candidate.
+    diagram_min_area_frac: float = 0.015
+    # Polygon isolation (Diagram Isolation upgrade): trace the diagram's true
+    # contour (VLM segmentation → OpenCV fallback), render the transparent
+    # `…_isolated.png` asset and OCR the page-minus-diagram remainder into the
+    # anchor text. Disable to fall back to rectangular crops only.
+    diagram_isolation_enabled: bool = True
+    # Idealised render: after isolation, use a Gemini IMAGE model to redraw the
+    # diagram as a clean, labelled textbook illustration (the plan's "normalized
+    # render"). This is a generative image call (extra credits per diagram), so
+    # it's gated — set false to skip and rely on the UVSS vector sketch only.
+    diagram_illustrate_enabled: bool = True
+    # UVSS interactive reconstruction. OFF by default: the interactive vector
+    # sketch requires a large (16k+ token) structured VLM call per diagram, and
+    # the illustration render is the preferred output. Leave off to save tokens
+    # (only a cheap classify/label call runs); set true to also build the
+    # interactive stroke-by-stroke sketch.
+    diagram_reconstruct_enabled: bool = False
 
     # ------------------------------------------------------------------
     def key_for(self, provider: str) -> str | None:
@@ -182,9 +228,23 @@ class Settings(BaseSettings):
 
     @property
     def vision_provider(self) -> str:
-        """Which backend reads images: 'gemini' (google-genai SDK) when
-        AI_PROVIDER=google, else 'openai' (OpenAI-compatible / OpenRouter)."""
-        return "gemini" if self.resolved_provider == "google" else "openai"
+        """Which backend reads images: 'gemini' (google-genai SDK) or 'openai'
+        (OpenAI-compatible / OpenRouter).
+
+        Prefer the Gemini VLM (gemini-2.5-flash) for vision whenever a Google/
+        Gemini key or ADC is configured — it reads handwriting AND emits valid
+        structured UVSS far better than the small free OpenRouter vision models,
+        which is exactly what diagram reconstruction needs. We deliberately do
+        NOT treat AI_MODEL_VISION as an opt-out here, because docker-compose ships
+        a non-empty default for it; to force the OpenAI-compatible VLM even with a
+        Google key present, set VISION_BACKEND=openai."""
+        if (self.vision_backend or "").lower() == "openai":
+            return "openai"
+        if (self.vision_backend or "").lower() == "gemini":
+            return "gemini"
+        if self.resolved_provider == "google" or self.google_configured:
+            return "gemini"
+        return "openai"
 
     @property
     def google_vision_model(self) -> str:

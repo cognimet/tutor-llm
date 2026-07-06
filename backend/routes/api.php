@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\LearningPlanController;
 use App\Http\Controllers\Api\FigureController;
 use App\Http\Controllers\Api\MistakeController;
 use App\Http\Controllers\Api\GamificationController;
+use App\Http\Controllers\Api\NodeController;
 use App\Http\Controllers\Api\NotesController;
 use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\PlannerController;
@@ -116,6 +117,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tutor/figures/{noteId}/{page}/image', [FigureController::class, 'image'])
             ->whereNumber('noteId')->whereNumber('page');
         Route::get('/tutor/textbooks/{note}/status', [FigureController::class, 'status']);
+
+        // Multimodal diagrams parsed from the student's notes — the chat stream
+        // emits <diagram_sketch|original|cleaned id="X" />; the SPA resolves the
+        // UVSS schema or the rendered image variant here (owner-gated).
+        Route::get('/tutor/nodes/{node}/schema', [NodeController::class, 'schema']);
+        Route::get('/tutor/nodes/{node}/image/{variant}', [NodeController::class, 'image'])
+            ->whereIn('variant', ['original', 'cleaned', 'normalized', 'isolated', 'illustrated']);
 
         // Day/Week/Month/Exam planner (notes + gaps + mastery + exam countdown)
         Route::get('/tutor/planner', [PlannerController::class, 'index']);

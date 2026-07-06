@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>AI Tutor — Illustration-Highlight Prototype (token-light)</title>
+<style>
+  :root{
+    --bg:#0b1016; --panel:#111b25; --panel2:#0e161e; --line:#20303d;
+    --text:#e8edf1; --muted:#8ea0ad; --accent:#17b892; --accent2:#2ee0b0;
+    --amber:#f0a63c; --chip:#16232f; --font:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  .topbar{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .brand .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#3aa0ff);display:grid;place-items:center;font-size:15px}
+  .sub{color:var(--muted);font-size:12px;font-weight:500}
+  .pill{font-size:12px;padding:5px 11px;border-radius:20px;border:1px solid var(--line);color:var(--muted)}
+  .pill.ok{color:var(--accent2);border-color:#1f5548;background:#0f2a24;margin-left:auto}
+
+  .layout{flex:1;display:flex;min-height:0}
+  /* LEFT viewer */
+  .viewer{width:372px;flex:none;border-right:1px solid var(--line);background:var(--panel2);display:flex;flex-direction:column;padding:16px}
+  .viewer h3{margin:0;font-size:12px;letter-spacing:.08em;color:var(--accent2);text-transform:uppercase}
+  .viewer .cap{font-size:12px;color:var(--muted);margin:2px 0 12px}
+
+  /* illustration + highlight overlay */
+  .illus{position:relative;border-radius:12px;overflow:hidden;background:#fbfbf7;border:1px solid var(--line)}
+  .illus img,.illus svg.base{display:block;width:100%;height:auto}
+  .spot{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .4s;
+    background:radial-gradient(circle var(--r,64px) at var(--x,50%) var(--y,50%), rgba(11,16,22,0) 0, rgba(11,16,22,0) 70%, rgba(11,16,22,.62) 100%)}
+  .illus.on .spot{opacity:1}
+  .ring{position:absolute;width:74px;height:74px;border:2.5px solid var(--accent2);border-radius:50%;
+    transform:translate(-50%,-50%) scale(.6);left:50%;top:50%;opacity:0;transition:.4s;box-shadow:0 0 14px rgba(46,224,176,.7)}
+  .illus.on .ring{opacity:1;transform:translate(-50%,-50%) scale(1);animation:pulse 1.8s ease-out infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(46,224,176,.55)}100%{box-shadow:0 0 0 16px rgba(46,224,176,0)}}
+  .callout{position:absolute;transform:translate(-50%,-140%);left:50%;top:50%;background:var(--accent);color:#04120d;
+    font-weight:700;font-size:12px;padding:3px 9px;border-radius:7px;white-space:nowrap;opacity:0;transition:.4s}
+  .illus.on .callout{opacity:1}
+
+  .nowshow{margin-top:12px;font-size:12px;color:var(--muted)}
+  .nowshow b{color:var(--accent2)}
+  .chips{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:11.5px;padding:4px 9px;border-radius:8px;background:var(--chip);border:1px solid var(--line);color:var(--text);cursor:pointer;transition:.15s}
+  .chip:hover{border-color:var(--accent);color:var(--accent2)}
+  .foot{margin-top:auto;font-size:11px;color:#5f7280;line-height:1.5;padding-top:14px}
+  .foot b{color:#8ea0ad}
+
+  /* RIGHT chat */
+  .chat{flex:1;display:flex;flex-direction:column;min-width:0}
+  .messages{flex:1;overflow-y:auto;padding:26px 30px;display:flex;flex-direction:column;gap:20px}
+  .msg{max-width:720px}
+  .msg.user{align-self:flex-end;background:var(--accent);color:#04120d;padding:11px 16px;border-radius:14px 14px 4px 14px;font-weight:600}
+  .msg.bot{align-self:flex-start;display:flex;gap:12px}
+  .avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);flex:none;display:grid;place-items:center;font-size:15px}
+  .bubble{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;flex:1;min-width:0}
+  .learn{border-left:3px solid var(--accent);padding-left:12px}
+  .learn .tag{font-size:11px;letter-spacing:.06em;color:var(--accent2);font-weight:700;text-transform:uppercase}
+  .learn .note{margin-top:6px;line-height:1.55}
+  .learn .note b{color:#fff}
+  .learn .fact{color:var(--muted);margin-top:5px;display:block}
+  .viztip{margin-top:12px;font-size:12.5px;color:var(--accent2);display:flex;align-items:center;gap:7px}
+  .grounded{font-size:12px;color:var(--muted);margin-top:8px}
+  .grounded b{color:var(--accent2)}
+  details.spec{margin-top:10px;font-size:12px}
+  details.spec summary{cursor:pointer;color:var(--muted)}
+  details.spec pre{background:#080d12;border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:11.5px;line-height:1.5;margin:8px 0 0;color:#bcd}
+  .kk{color:#7fd4ff}.ks{color:#9be29b}.tok{color:#f0a63c}
+
+  .composer{border-top:1px solid var(--line);padding:14px 20px;background:var(--panel2)}
+  .prompts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .prompts button{font-size:12.5px;padding:7px 12px;border-radius:9px;background:var(--chip);border:1px solid var(--line);color:var(--text);cursor:pointer}
+  .prompts button:hover{border-color:var(--accent);color:var(--accent2)}
+  .inputrow{display:flex;gap:10px}
+  .inputrow input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--text);font-size:14px;outline:none}
+  .inputrow input:focus{border-color:var(--accent)}
+  .inputrow button{width:46px;border:none;border-radius:12px;background:var(--accent);color:#04120d;font-size:18px;cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="dot">🔬</span>
+      <div>The Human Eye<div class="sub">Science · The Human Eye and the Colourful World · grounded in your note</div></div>
+    </div>
+    <span class="pill ok">● Notes-grounded</span>
+    <span class="pill">Study Hub</span>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT VIEWER : the ORIGINAL illustration + a highlight overlay -->
+    <aside class="viewer">
+      <h3>Visual viewer</h3>
+      <div class="cap">Your textbook illustration — the part you ask about lights up. No new diagram is generated.</div>
+
+      <div class="illus" id="illus">
+        <!-- === REPLACE THIS with your note image ===
+             <img id="noteImg" src="URL_OF_YOUR_ILLUSTRATION.png" alt="Anatomy of the Human Eye"/>
+             Then just adjust the % coords in HOTSPOTS below to match it.
+             Placeholder sketch is used so the demo runs standalone: -->
+        <svg class="base" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" aria-label="Hand-drawn eye illustration (placeholder)">
+          <rect width="400" height="300" fill="#fbfbf7"/>
+          <g fill="none" stroke="#1c1c1c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="212" cy="150" r="112"/>
+            <path d="M108 96 Q66 150 108 204"/>                 <!-- cornea -->
+            <path d="M120 108 Q150 150 120 192"/>               <!-- iris front chamber -->
+            <ellipse cx="140" cy="150" rx="15" ry="34"/>        <!-- lens -->
+            <path d="M118 150 h5" stroke-width="7"/>            <!-- pupil -->
+            <path d="M300 66 A112 112 0 0 1 300 234" stroke-width="2.5"/> <!-- retina -->
+            <path d="M322 150 q30 -2 46 -16 M322 150 q30 2 46 16"/> <!-- optic nerve -->
+            <circle cx="300" cy="182" r="4" fill="#1c1c1c"/>    <!-- blind spot -->
+          </g>
+          <g fill="#c23b3b" stroke="#c23b3b" stroke-width="1">  <!-- blood vessels -->
+            <path d="M296 150 q-22 -10 -46 -6 M296 152 q-20 8 -44 16 M300 150 q-6 -30 -2 -54" fill="none"/>
+          </g>
+          <g font-family="'Comic Sans MS',cursive" font-size="11" fill="#1c1c1c">
+            <text x="18" y="150">Cornea</text>
+            <text x="150" y="30">Ciliary Muscle</text>
+            <text x="250" y="255">Eye lens</text>
+            <text x="60" y="225">Pupil</text>
+            <text x="235" y="30">Vitreous</text>
+            <text x="300" y="46">Sclera</text>
+            <text x="330" y="118">Retina</text>
+          </g>
+        </svg>
+        <!-- overlay layers (positioned by JS, token-free) -->
+        <div class="spot"></div>
+        <div class="ring"></div>
+        <div class="callout"></div>
+      </div>
+
+      <div class="nowshow" id="nowshow">Ask about a part to spotlight it →</div>
+      <div class="chips" id="chips"></div>
+      <div class="foot">Token-light pattern: the model returns only <b>{focus_part}</b> and the app spotlights that
+        region on the illustration you <b>already have</b> — instead of drawing a fresh SVG each time.</div>
+    </aside>
+
+    <!-- RIGHT CHAT -->
+    <section class="chat">
+      <div class="messages" id="messages"></div>
+      <div class="composer">
+        <div class="prompts" id="prompts"></div>
+        <div class="inputrow">
+          <input id="input" placeholder="Ask anything about The Human Eye…" autocomplete="off"/>
+          <button id="send">➤</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+<script>
+/* ============================================================
+   HOTSPOTS + NOTES
+   x,y are % positions on the illustration image.
+   In production these come from your diagram-rebuild step
+   (you already know where each label sits). Adjust to fit
+   your real note image — that's the ONLY thing to re-map.
+============================================================ */
+const KNOWLEDGE = {
+  cornea:{label:"Cornea", x:24, y:50, r:60,
+    note:"A thin transparent membrane covering the surface of the eyeball, through which light enters the eye.",
+    fact:"It's the eye's first lens and bends (refracts) most of the incoming light toward the retina."},
+  pupil:{label:"Pupil", x:30, y:50, r:46,
+    note:"The central opening in the iris that lets light pass through to the lens.",
+    fact:"Its size changes (about 2–8 mm) to control how much light gets in."},
+  "eye lens":{label:"Eye lens", x:35, y:50, r:56,
+    note:"A flexible transparent structure behind the pupil that fine-tunes focus.",
+    fact:"Muscles change its shape to focus on near vs far objects — called accommodation."},
+  iris:{label:"Iris", x:30, y:63, r:52,
+    note:"The coloured ring that controls how much light enters by resizing the pupil.",
+    fact:"Bright light → pupil constricts; dim light → pupil dilates."},
+  "ciliary muscle":{label:"Ciliary Muscle", x:40, y:22, r:56,
+    note:"The muscle ring that holds and reshapes the lens.",
+    fact:"It contracts or relaxes to change the lens curvature for focusing."},
+  "aqueous humour":{label:"Aqueous Humour", x:26, y:40, r:58,
+    note:"The watery fluid in the front chamber of the eye.",
+    fact:"It keeps the front of the eye shaped and nourishes the cornea and lens."},
+  "vitreous humour":{label:"Vitreous Humour", x:53, y:50, r:90,
+    note:"The jelly-like fluid filling the main chamber of the eyeball.",
+    fact:"It maintains the round shape of the eye and lets light pass to the retina."},
+  sclera:{label:"Sclera", x:62, y:20, r:64,
+    note:"The tough white outer coat of the eyeball.",
+    fact:"It protects the inner parts and gives the eye its shape."},
+  choroid:{label:"Choroid", x:70, y:30, r:62,
+    note:"The dark middle layer between the sclera and retina.",
+    fact:"It supplies blood and absorbs stray light to keep the image sharp."},
+  retina:{label:"Retina", x:75, y:50, r:64,
+    note:"The light-sensitive back wall where a real, inverted image forms.",
+    fact:"Rods and cones turn the image into nerve signals for the brain."},
+  "retinal blood vessels":{label:"Retinal Blood Vessels", x:74, y:38, r:56,
+    note:"The vessels spread across the retina.",
+    fact:"They supply oxygen and nutrients to the retinal cells."},
+  "blind spot":{label:"Blind Spot", x:75, y:61, r:44,
+    note:"The point where the optic nerve leaves the eye.",
+    fact:"There are no light receptors here, so nothing is seen at this spot."},
+  "optic nerve":{label:"Optic nerve", x:88, y:50, r:56,
+    note:"The nerve that connects the eye to the brain.",
+    fact:"It carries the visual signals from the retina to the brain."}
+};
+const ALIASES = { "lens":"eye lens", "blind nerve":"optic nerve", "nerve":"optic nerve", "vitreous":"vitreous humour", "aqueous":"aqueous humour" };
+const PARTS = Object.keys(KNOWLEDGE);
+
+/* ---------- INTENT -> tiny spec (this is all the model returns) ---------- */
+function buildSpec(text){
+  const t=text.toLowerCase();
+  let part = PARTS.find(p=>t.includes(p));
+  if(!part){ for(const a in ALIASES){ if(t.includes(a)){ part=ALIASES[a]; break; } } }
+  return part ? { focus_part: part } : { focus_part: null };
+}
+
+/* ---------- highlight the existing illustration (no SVG generation) ---------- */
+const illus=document.getElementById('illus');
+const spot=illus.querySelector('.spot');
+const ring=illus.querySelector('.ring');
+const callout=illus.querySelector('.callout');
+const nowshow=document.getElementById('nowshow');
+function focusPart(part){
+  const k=KNOWLEDGE[part]; if(!k) return;
+  illus.classList.add('on');
+  spot.style.setProperty('--x',k.x+'%'); spot.style.setProperty('--y',k.y+'%'); spot.style.setProperty('--r',(k.r||60)+'px');
+  ring.style.left=k.x+'%'; ring.style.top=k.y+'%';
+  callout.style.left=k.x+'%'; callout.style.top=k.y+'%'; callout.textContent=k.label;
+  nowshow.innerHTML=`Now spotlighting: <b>${k.label}</b>`;
+}
+
+/* ---------- chat ---------- */
+const messages=document.getElementById('messages');
+const scrollDown=()=>messages.scrollTop=messages.scrollHeight;
+
+function specJSON(spec){
+  const pretty=JSON.stringify(spec)
+    .replace(/"(\w[\w ]*)":/g,'<span class="kk">"$1"</span>:')
+    .replace(/:"(.*?)"/g,':<span class="ks">"$1"</span>');
+  return `<details class="spec"><summary>▸ what the model emits (the whole payload)</summary><pre>${pretty}
+<span class="tok">// ≈ 8 tokens — no diagram in the response. The frontend does the drawing.</span></pre></details>`;
+}
+function addUser(text){const d=document.createElement('div');d.className='msg user';d.textContent=text;messages.appendChild(d);scrollDown();}
+function addBot(spec){
+  const k=spec.focus_part?KNOWLEDGE[spec.focus_part]:null;
+  const body = k
+    ? `<div class="learn"><div class="tag">📖 Let's learn · ${k.label}</div>
+         <div class="note">${k.note}<span class="fact">${k.fact}</span></div></div>
+       <div class="viztip">👈 ${k.label} is highlighted on your illustration</div>
+       <div class="grounded">Grounded in your note: <b>“${k.note}”</b></div>`
+    : `<div class="note">I can spotlight any labelled part — try the cornea, lens, iris, retina, sclera, choroid, blind spot or optic nerve.</div>`;
+  const d=document.createElement('div');d.className='msg bot';
+  d.innerHTML=`<div class="avatar">🦉</div><div class="bubble">${body}${specJSON(spec)}</div>`;
+  messages.appendChild(d);
+  if(k) focusPart(spec.focus_part);
+  scrollDown();
+}
+
+function ask(text){ if(!text.trim())return; addUser(text); const s=buildSpec(text); setTimeout(()=>addBot(s),240); }
+
+/* prompts + chips */
+const PROMPTS=["Explain Cornea with visualization","Explain the Retina","How does the Iris control light?","Show me the Eye lens"];
+const pc=document.getElementById('prompts');
+PROMPTS.forEach(p=>{const b=document.createElement('button');b.textContent=p;b.onclick=()=>ask(p);pc.appendChild(b);});
+const chipc=document.getElementById('chips');
+PARTS.forEach(p=>{const c=document.createElement('span');c.className='chip';c.textContent=KNOWLEDGE[p].label;c.onclick=()=>ask("Explain "+p);chipc.appendChild(c);});
+
+const input=document.getElementById('input');
+document.getElementById('send').onclick=()=>{ask(input.value);input.value='';};
+input.addEventListener('keydown',e=>{if(e.key==='Enter'){ask(input.value);input.value='';}});
+
+/* seed with the screenshot example */
+ask("Explain Cornea with visualization");
+</script>
+</body>
+</html>

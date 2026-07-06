@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ChatSession;
+use App\Models\KnowledgeNode;
 use App\Models\StudyPlan;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -53,7 +54,7 @@ class TutorService
      */
     public function explain(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = '', ?int $subjectId = null, ?string $tutorVibe = null): string
     {
-        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary, $tutorVibe);
+        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary, $tutorVibe, $subjectId);
 
         // Pass the topic + student + subject so the AI service grounds the reply
         // in NOTES-FIRST, graph-aware RAG (the student's own notes — incl.
@@ -73,7 +74,7 @@ class TutorService
      */
     public function explainStream(User $student, string $topic, string $chapter, string $subject, array $history, string $message, callable $onDelta, string $mode = 'teach', string $notesContext = '', string $summary = '', ?int $subjectId = null, ?string $tutorVibe = null): string
     {
-        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary, $tutorVibe);
+        [$system, $user] = $this->buildExplainPrompt($student, $topic, $chapter, $subject, $history, $message, $mode, $notesContext, $summary, $tutorVibe, $subjectId);
 
         $usage = [];
         $reply = $this->ai->stream($system, $user, $onDelta, $topic, $student->id, $subjectId, $usage);
@@ -199,7 +200,7 @@ class TutorService
      * Shared prompt builder for the tutor chat (text + streaming).
      * @return array{0:string,1:string}  [system, user]
      */
-    protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = '', ?string $tutorVibe = null): array
+    protected function buildExplainPrompt(User $student, string $topic, string $chapter, string $subject, array $history, string $message, string $mode = 'teach', string $notesContext = '', string $summary = '', ?string $tutorVibe = null, ?int $subjectId = null): array
     {
         if (trim($notesContext) === '') {
             // OFFICIAL SYLLABUS DIRECT STUDY. No personal notes are attached, so the
@@ -261,6 +262,12 @@ class TutorService
         // directive's own escape hatch.)
         $visualBlock = $this->visualCardsDirective(trim($notesContext) !== '');
 
+        // The student's own parsed diagrams for this topic/subject, computed once:
+        // diagramDirective() catalogues them for the model, and visualGuide() uses
+        // their presence to suppress redundant generated ```viz charts when the
+        // student already uploaded the very diagram they're asking to visualize.
+        $diagrams = $this->availableDiagrams($student, $subjectId, $topic);
+
         $system = $this->tutorPersona($student)
             . $this->gamifiedPersona($student)
             . $this->resolveVibeDirective($tutorVibe)   // companion archetype overlay (adventure/comic)
@@ -277,7 +284,8 @@ class TutorService
             . "Keep it concise and encouraging.\n"
             . $notesBlock
             . $visualBlock
-            . $this->visualGuide();
+            . $this->visualGuide(! empty($diagrams))
+            . $this->diagramDirective($diagrams);
 
         $convo = '';
         foreach ($history as $m) {
@@ -511,10 +519,16 @@ VIZCARDS;
      * Instructs the tutor how to emit an inline visualization. The frontend
      * renders a fenced ```viz block (RichMessage → Visualization) from a JSON
      * spec — no HTML/JS, so the model can only describe a chart, never run code.
+     *
+     * When the student has diagrams parsed from their own uploaded notes
+     * ($hasStudentDiagrams), a VISUAL PRIORITY rule is appended: a "visualize
+     * this" request that one of those diagrams already depicts must be answered
+     * by opening THAT diagram in the Visual Context Viewer, never by generating
+     * a redundant, less detailed ```viz copy of it in the chat.
      */
-    protected function visualGuide(): string
+    protected function visualGuide(bool $hasStudentDiagrams = false): string
     {
-        return <<<'GUIDE'
+        $guide = <<<'GUIDE'
 Visualizations: when the student asks to "visualize / plot / graph / draw / show" something, OR when a concept is genuinely clearer shown than told (the shape of a function, a geometric figure, comparing data, or a process/cycle), include ONE visualization. Always keep a short text explanation alongside it — never reply with only a chart. Do not force a visualization when prose is clearly enough.
 
 Emit it as a fenced code block whose language tag is exactly `viz` (three backticks then `viz`) — NEVER tag it `json` or leave it untagged — containing ONLY valid minified JSON (double quotes, no comments, no trailing commas). Choose the type that fits:
@@ -545,6 +559,109 @@ Mermaid rules — follow exactly so it renders: give every node a unique id with
 
 Prefer function/geometry for maths, charts for data, and diagrams for processes/sequences. Keep numbers realistic and the domain sensible. At most one visualization per reply unless the student asks for more.
 GUIDE;
+
+        if ($hasStudentDiagrams) {
+            $guide .= <<<'PRIORITY'
+
+
+VISUAL PRIORITY — THE STUDENT'S OWN DIAGRAM ALWAYS BEATS A GENERATED ONE: this student has real diagrams parsed from their uploaded notes, catalogued under [STUDENT'S OWN DIAGRAMS] below. BEFORE emitting any ```viz block, check that catalogue. If what the student wants visualized is already depicted by one of those diagrams, do NOT generate a new viz — it would be a redundant, less detailed copy of an asset they already have. Instead open their own diagram in the Visual Context Viewer (`<ShowIsolatedDiagram id="N" />` on the very first line, per the diagram rules below) and point at it in prose ("Your own diagram is open in the visual viewer beside this chat — find the Right Ventricle label…"). Only fall back to a generated ```viz when NO catalogued diagram covers the request, or the student EXPLICITLY asks for a new, different or simplified drawing beyond what their notes contain.
+PRIORITY;
+        }
+
+        return $guide;
+    }
+
+    /* ----------- Multimodal diagrams from the student's own notes ---------- */
+
+    /**
+     * Diagram knowledge_nodes parsed from THIS student's uploaded notes that are
+     * relevant to the current topic/subject — the catalogue the tutor may render.
+     * Topic-scoped first, then subject-wide; highest extraction confidence first.
+     *
+     * @return array<int,array{id:int,title:string,confidence:float,reconstructable:bool}>
+     */
+    protected function availableDiagrams(User $student, ?int $subjectId, string $topic): array
+    {
+        try {
+            $rows = KnowledgeNode::query()
+                ->where('user_id', $student->id)
+                ->where('type', 'diagram')
+                ->where('status', 'ready')
+                ->where(function ($q) use ($subjectId, $topic) {
+                    $q->where('topic_name', $topic);
+                    if ($subjectId) {
+                        $q->orWhere('subject_id', $subjectId);
+                    }
+                })
+                ->withCount('anchoredTexts')
+                ->orderByDesc('uvss_confidence_score')
+                ->limit(6)
+                ->get(['id', 'title', 'uvss_confidence_score', 'diagram_schema', 'isolated_image_url']);
+        } catch (\Throwable) {
+            return []; // table missing (pre-migration) or DB hiccup — degrade silently
+        }
+
+        return $rows->map(fn (KnowledgeNode $n) => [
+            'id'              => $n->id,
+            'title'           => (string) ($n->title ?: 'Diagram'),
+            'confidence'      => (float) $n->uvss_confidence_score,
+            'reconstructable' => is_array($n->diagram_schema) && ! empty($n->diagram_schema['elements'])
+                                 && (float) $n->uvss_confidence_score > 0.85,
+            'isolated'        => ! empty($n->isolated_image_url),
+            'anchored'        => (int) ($n->anchored_texts_count ?? 0) > 0,
+        ])->all();
+    }
+
+    /**
+     * The Diagram Decision Rules (Multimodal RAG plan §5 + Diagram Isolation
+     * upgrade §4.2). Tells the tutor which representation of a student's own
+     * diagram to render, lists the exact node ids it may reference, and — the
+     * isolation upgrade — enforces the DECOUPLED teaching protocol: the
+     * explanation comes strictly from the student's note TEXT while the
+     * perfectly isolated diagram is displayed separately in the Visual Context
+     * Viewer via `<ShowIsolatedDiagram id="X" />`. Returns '' when the student
+     * has no diagrams, so the rules only appear when they can actually be used.
+     */
+    protected function diagramDirective(array $diagrams): string
+    {
+        if (empty($diagrams)) {
+            return '';
+        }
+
+        $lines = [];
+        foreach ($diagrams as $d) {
+            $pct = (int) round($d['confidence'] * 100);
+            $traits = [];
+            $traits[] = $d['isolated']
+                ? 'isolated visual available'
+                : 'no isolated cut (viewer falls back to the cleaned crop)';
+            $traits[] = $d['reconstructable']
+                ? 'reconstructable (high-confidence UVSS — sketch available)'
+                : 'image-only (low confidence)';
+            if (! empty($d['anchored'])) {
+                $traits[] = 'anchored note text linked';
+            }
+            $kind = implode(', ', $traits);
+            $lines[] = "- id={$d['id']} — \"{$d['title']}\" (confidence {$pct}%, {$kind})";
+        }
+        $catalogue = implode("\n", $lines);
+
+        return <<<DIAGRAM
+
+
+[STUDENT'S OWN DIAGRAMS — ISOLATED VISUAL + TEXT-GROUNDED TEACHING]
+This student has hand-drawn diagrams that were perfectly ISOLATED (background paragraphs removed) from their uploaded notes. You may reference ONLY these ids (never invent an id):
+{$catalogue}
+
+DECOUPLED TEACHING PROTOCOL — the diagram is SHOWN separately; the teaching comes from the TEXT:
+- Rule 0 — Trigger the Visual Context Viewer: when you are explaining a concept that one of these diagrams depicts — especially when the grounding material is marked "explains diagram #N" — output the tag `<ShowIsolatedDiagram id="N" />` ALONE on the VERY FIRST line of your reply, before any prose. The app renders the isolated diagram in a dedicated, sticky viewer pane BESIDE the chat (never inline), so the student can study it continuously while reading you. Do not mention, quote or describe the tag itself.
+- Rule 1 — A "visualize this" request is satisfied by the viewer, NEVER by a generated chart: when the student asks to "visualize / show / draw / illustrate / explain with a visualization" a concept that one of these diagrams depicts, their own diagram IS the visualization. Output `<ShowIsolatedDiagram id="N" />` (Rule 0) and refer to it in prose ("your diagram is shown in the visual viewer") — do NOT also emit a ```viz block (chart/geometry/mermaid), which would be a redundant, less detailed duplicate of what they uploaded. Generate a ```viz only when none of these diagrams covers the request, or the student explicitly asks for a NEW or simplified drawing beyond their notes.
+- Rule 2 — Teach strictly FROM THE STUDENT'S NOTE TEXT: base every step of the explanation on the note text provided in your context (items marked "[Student's own notes …]"). Prefer their wording ("As your notes state, the trachea is supported by cartilaginous rings…"). DO NOT invent external explanations, and DO NOT re-describe or transcribe the raw notebook page — the viewer already shows the drawing cleanly.
+- Rule 3 — Point at the viewer while the text teaches: connect prose to picture explicitly ("Look at the diagram beside this chat — find the Larynx label; your notes say the air passes through it next…").
+- Rule 4 — Inline representations, ONLY on explicit request: `<diagram_sketch id="X" />` for a stroke-by-stroke reconstruction walkthrough; `<diagram_original id="X" />` when they ask "what did I draw exactly?"; `<diagram_cleaned id="X" />` for a contrast-cleaned copy; original + sketch together to compare their drawing to the ideal. These render inline in the chat flow.
+
+Emit at most ONE `<ShowIsolatedDiagram>` per reply (the first line only), keep a full text explanation with it — never reply with only a tag — and if no diagram is relevant, don't force one.
+DIAGRAM;
     }
 
     /* ---------------- 2. Mini-assessment generation ------------------ */

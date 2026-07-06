@@ -23,6 +23,7 @@ import NextStep from "../../ui/NextStep.jsx";
 import ScreenTimeTracker from "../../ui/ScreenTimeTracker.jsx";
 import NotesChecklist from "../../ui/NotesChecklist.jsx";
 import FigureStrip from "../../ui/FigureStrip.jsx";
+import VisualContextViewer from "../../ui/VisualContextViewer.jsx";
 import { flashcardsApi, mistakesApi } from "../../api/endpoints.js";
 
 const STARTERS = (t) => [
@@ -561,6 +562,15 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
   const [studyTab, setStudyTab] = useState(null);    // open Study hub at this tab (null = closed)
   const [bigAssess, setBigAssess] = useState(false); // big (exam-scope) assessment
   const [attached, setAttached] = useState([]);      // notes riding with the next message [{id,title}]
+  // Suggestion strips (quick study actions + follow-up chips) stay hidden until
+  // the student clicks into the input box; they retreat when focus leaves the
+  // composer block, so the canvas stays clean while reading.
+  const [composerFocused, setComposerFocused] = useState(false);
+  // Visual Context Viewer (Diagram Isolation upgrade §5): the knowledge-node id
+  // the tutor asked the UI to display via <ShowIsolatedDiagram id/>. Renders in
+  // a sticky pane BESIDE the chat (desktop) / pinned card above it (mobile) —
+  // decoupled from the streaming text.
+  const [activeDiagram, setActiveDiagram] = useState(null);
   const [inspectorOpen, setInspectorOpen] = useState(false); // note-inspector dropdown in the header
   const [activeNotes, setActiveNotes] = useState([]); // detailed records of the session's grounded notes
   const [activeNotesLoading, setActiveNotesLoading] = useState(false);
@@ -715,6 +725,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
     loadSessions();
     loadGuide();
     setAttached([]); // don't carry attachments across topics
+    setActiveDiagram(null); // the visual viewer belongs to one topic's diagrams
     return () => { alive = false; abortRef.current?.abort(); stopSpeaking(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.topic_id, ctx.topic_name]);
@@ -1055,6 +1066,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
     abortRef.current?.abort();
     stopSpeaking();
     setStreaming(false);
+    setActiveDiagram(null);
     setBooting(true);
     try {
       const s = await tutorApi.show(id);
@@ -1078,6 +1090,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
     abortRef.current?.abort();
     stopSpeaking();
     setStreaming(false);
+    setActiveDiagram(null);
     setBooting(true);
     try {
       const s = await tutorApi.start({
@@ -1208,6 +1221,22 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
     <div className="flex h-screen flex-col">
       <div className="flex min-h-0 flex-1 overflow-hidden">
 
+        {/* LEFT: the Visual Context Viewer (Diagram Isolation upgrade §5.1).
+            Opens when the tutor stream emits <ShowIsolatedDiagram id/>: the
+            perfectly isolated diagram sits sticky here while the explanation
+            streams in the chat — decoupled panes, never merged inline. */}
+        <aside
+          className="hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-out lg:block"
+          style={{ width: activeDiagram ? "23rem" : "0rem" }}
+          aria-hidden={!activeDiagram}
+        >
+          {activeDiagram && (
+            <div className="h-full w-[23rem] border-r border-slate-200/60 bg-white/55 p-3 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/50">
+              <VisualContextViewer nodeId={activeDiagram} onClose={() => setActiveDiagram(null)} />
+            </div>
+          )}
+        </aside>
+
         {/* Chat canvas — the hero. Full-bleed, content centered to a reading column. */}
         <main className="relative flex min-w-0 flex-1 flex-col">
           {/* Slim header */}
@@ -1326,6 +1355,13 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
           )}
 
           <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
+            {/* Mobile/tablet: the Visual Context Viewer pins as a collapsible
+                sticky card above the stream (the split-pane lives on lg+). */}
+            {activeDiagram && (
+              <div className="sticky top-2 z-20 px-3 pt-2 lg:hidden">
+                <VisualContextViewer nodeId={activeDiagram} compact onClose={() => setActiveDiagram(null)} />
+              </div>
+            )}
             {!booting && <FigureStrip ctx={ctx} />}
             {booting ? (
               <div className="flex h-full items-center justify-center gap-3 text-slate-400">
@@ -1393,6 +1429,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
                             messageId={i}
                             progressLogs={sessionProgressLogs}
                             onLogUpdate={(log) => setSessionProgressLogs((prev) => [...prev, log])}
+                            onShowDiagram={setActiveDiagram}
                             onQuizSuccess={handleQuizSuccess} />
                         )}
                         {m.stopped && (
@@ -1437,33 +1474,35 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
           </div>
 
           {/* Composer block — same reading column as the messages */}
-          <div className="relative px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
-            {/* Jump-to-latest floats just above the composer chrome (anchored to
-                this block so it never overlaps the quick-study / follow-up bars). */}
-            {!atBottom && (
-              <button onClick={jumpToLatest} title="Jump to latest"
-                className="absolute -top-11 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white dark:bg-slate-800 px-3 py-2 text-xs font-extrabold text-slate-500 shadow-lg ring-1 ring-slate-200 dark:ring-white/10 transition-colors hover:text-indigo-600">
-                {hasNew ? <span className={`h-2 w-2 rounded-full ${t.dot} animate-pulse`} /> : <ArrowDown className="h-4 w-4" />}
-                {hasNew ? "New reply" : "Latest"}
-              </button>
-            )}
-            <div className="mx-auto w-full max-w-3xl xl:max-w-4xl 2xl:max-w-5xl">
-            {/* 1-tap quick actions (summary, flashcards, formulas, quiz) drawn from active notes or official syllabus. */}
-            <QuickStudyOptionsBar hasNotes={hasNotes} onTrigger={handleTriggerOption} />
-            {/* One guiding nudge + contextual follow-ups, on a single scrollable
-                strip so the composer stays close to the conversation. */}
-            {(!showStarters || showFollowups) && (
-              <div className="no-scrollbar mb-2.5 flex items-center gap-2 overflow-x-auto pb-0.5">
-                {!showStarters && (
-                  <NextStep state={nextState} handlers={nextHandlers} className="shrink-0" />
+          <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-4">
+            <div
+              className="mx-auto w-full max-w-3xl xl:max-w-4xl 2xl:max-w-5xl"
+              onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setComposerFocused(false); }}
+            >
+            {/* Suggestion strips render only while the composer is in use (the
+                textarea sets composerFocused). mousedown is prevented inside the
+                strips so tapping a chip never blurs the textarea — the strips
+                stay mounted and the chip's click always lands. */}
+            {composerFocused && (
+              <div onMouseDown={(e) => e.preventDefault()}>
+                {/* 1-tap quick actions (summary, flashcards, formulas, quiz) drawn from active notes or official syllabus. */}
+                <QuickStudyOptionsBar hasNotes={hasNotes} onTrigger={handleTriggerOption} />
+                {/* One guiding nudge + contextual follow-ups, on a single scrollable
+                    strip so the composer stays close to the conversation. */}
+                {(!showStarters || showFollowups) && (
+                  <div className="no-scrollbar mb-2.5 flex items-center gap-2 overflow-x-auto pb-0.5">
+                    {!showStarters && (
+                      <NextStep state={nextState} handlers={nextHandlers} className="shrink-0" />
+                    )}
+                    {/* Follow-up suggestion chips — hidden in study-with-notes sessions. */}
+                    {showFollowups && !hasNotes && FOLLOWUPS.map((s) => (
+                      <button key={s.label} onClick={() => send(s.label)}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-colors hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm">
+                        <span>{s.icon}</span> {s.label}
+                      </button>
+                    ))}
+                  </div>
                 )}
-                {/* Follow-up suggestion chips — hidden in study-with-notes sessions. */}
-                {showFollowups && !hasNotes && FOLLOWUPS.map((s) => (
-                  <button key={s.label} onClick={() => send(s.label)}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 px-3 py-1.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 transition-colors hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm">
-                    <span>{s.icon}</span> {s.label}
-                  </button>
-                ))}
               </div>
             )}
 
@@ -1537,6 +1576,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
                 )}
               </div>
               <textarea ref={taRef} rows={1} value={input}
+                onFocus={() => setComposerFocused(true)}
                 onChange={(e) => { setInput(e.target.value); autoGrow(e.target); }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); return; }

@@ -513,17 +513,91 @@ async def read_image_genai(image_b64: str, mime: str | None, instruction: str) -
         from google.genai import types
         client = genai.Client()
         img = types.Part.from_bytes(data=_b64.b64decode(image_b64), mime_type=mime or "image/jpeg")
-        resp = await client.aio.models.generate_content(
-            model=model, contents=[instruction, img],
-            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=1800))
+
+        # Gemini 2.5 is a THINKING model: reasoning tokens count against
+        # max_output_tokens, so on a large structured reply (a full UVSS diagram)
+        # thinking can eat the budget and truncate the JSON before it closes —
+        # which is exactly why reconstruction returned an unparseable half-object.
+        # Disable thinking so the entire budget goes to the answer. Some models
+        # reject ThinkingConfig, so fall back to a plain config on error.
+        base_kw = dict(temperature=0.2, max_output_tokens=settings.vision_max_tokens)
+
+        async def _gen(disable_thinking: bool):
+            kw = dict(base_kw)
+            if disable_thinking:
+                kw["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+            return await client.aio.models.generate_content(
+                model=model, contents=[instruction, img],
+                config=types.GenerateContentConfig(**kw))
+
+        try:
+            resp = await _gen(disable_thinking=True)
+        except Exception as te:  # noqa: BLE001 — model/SDK without ThinkingConfig
+            log.warning("gemini thinking-disable not supported (%s); retrying with default "
+                        "thinking — large budget still lets the full JSON complete", te)
+            resp = await _gen(disable_thinking=False)
+
         um = getattr(resp, "usage_metadata", None)
         p = int(getattr(um, "prompt_token_count", 0) or 0)
         c = int(getattr(um, "candidates_token_count", 0) or 0)
+        th = int(getattr(um, "thoughts_token_count", 0) or 0)   # Gemini 2.5 thinking tokens
+        # Surface thinking-token consumption + truncation so a truncated UVSS is
+        # diagnosable (thinking eating the budget is the classic cause).
+        fr = None
+        try:
+            fr = str(getattr(resp.candidates[0], "finish_reason", "") or "")
+        except Exception:  # noqa: BLE001
+            pass
+        if th or (fr and "MAX_TOKENS" in fr):
+            log.info("gemini vision tokens: prompt=%s output=%s thinking=%s finish=%s max=%s",
+                     p, c, th, fr, settings.vision_max_tokens)
         return (resp.text or ""), Usage(model=model, prompt_tokens=p, completion_tokens=c,
                                         total_tokens=int(getattr(um, "total_token_count", 0) or (p + c)))
     except Exception as e:  # noqa: BLE001
         log.warning("gemini vision read failed: %s", e)
         return "", Usage(model="none")
+
+
+async def generate_image_genai(image_b64: str | None, mime: str | None,
+                               instruction: str) -> tuple[bytes, Usage]:
+    """Generate an image with a Gemini IMAGE model (e.g. gemini-2.5-flash-image)
+    via the google-genai SDK. Optionally conditions on an input image (image +
+    text -> image), which is how we turn a student's isolated hand-drawing into a
+    clean, labelled textbook illustration ('idealised render'). Returns the PNG
+    bytes (b'' on any failure, so the caller falls back to the vector sketch)."""
+    import base64 as _b64
+    model = settings.gemini_image_model
+    try:
+        from google import genai
+        from google.genai import types
+        client = genai.Client()
+        parts: list = [instruction]
+        if image_b64:
+            parts.append(types.Part.from_bytes(data=_b64.b64decode(image_b64),
+                                               mime_type=mime or "image/png"))
+        resp = await client.aio.models.generate_content(
+            model=model, contents=parts,
+            config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"]))
+        um = getattr(resp, "usage_metadata", None)
+        usage = Usage(model=model,
+                      prompt_tokens=int(getattr(um, "prompt_token_count", 0) or 0),
+                      completion_tokens=int(getattr(um, "candidates_token_count", 0) or 0),
+                      total_tokens=int(getattr(um, "total_token_count", 0) or 0))
+        # Pull the first inline image part out of the response.
+        for cand in (getattr(resp, "candidates", None) or []):
+            content = getattr(cand, "content", None)
+            for part in (getattr(content, "parts", None) or []):
+                inline = getattr(part, "inline_data", None)
+                data = getattr(inline, "data", None) if inline else None
+                if data:
+                    # SDK returns raw bytes (already base64-decoded).
+                    return (data if isinstance(data, (bytes, bytearray))
+                            else _b64.b64decode(data)), usage
+        log.warning("gemini image gen returned no image part (model=%s)", model)
+        return b"", usage
+    except Exception as e:  # noqa: BLE001
+        log.warning("gemini image gen failed: %s", e)
+        return b"", Usage(model="none")
 
 
 async def read_image(image_b64: str, mime: str | None, instruction: str) -> tuple[str, Usage]:
@@ -544,7 +618,7 @@ async def read_image(image_b64: str, mime: str | None, instruction: str) -> tupl
             {"type": "image_url", "image_url": {"url": data_url}},
         ]}],
         "temperature": 0.2,
-        "max_tokens": 1800,
+        "max_tokens": settings.vision_max_tokens,
     }
     data = await _post_with_retry(f"{base}/chat/completions", payload,
                                   {"Authorization": f"Bearer {key}"}, settings.llm_timeout)
