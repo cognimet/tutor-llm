@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { CheckCircle2, XCircle, ChevronRight } from "lucide-react";
 import { confettiBurst } from "./confetti.js";
 import { tutorApi } from "../api/endpoints.js";
+import MathText from "./mathText.jsx";
 
 // Value-grounded grading: the answer STRING wins over the numeric index, so a
 // wrong/off-by-one `correct` from the model can't mark a wrong option right.
@@ -125,9 +126,11 @@ export default function ProgressGate({
         </span>
       </div>
 
-      <p className="mb-4 text-sm font-extrabold leading-relaxed text-slate-800 dark:text-slate-100">
-        {question}
-      </p>
+      <MathText
+        as="p"
+        text={question}
+        className="mb-4 text-sm font-extrabold leading-relaxed text-slate-800 dark:text-slate-100"
+      />
 
       <div className="grid gap-2.5">
         {options.map((opt, idx) => {
@@ -153,7 +156,7 @@ export default function ProgressGate({
               onClick={() => handleSelect(idx)}
               className={`flex items-center justify-between gap-3 rounded-xl border p-3.5 text-left text-xs font-bold transition-all active:scale-[0.99] disabled:cursor-default ${optStyle}`}
             >
-              <span>{opt}</span>
+              <MathText text={opt} />
               {badge}
             </button>
           );

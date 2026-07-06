@@ -8,7 +8,7 @@ import { ThemeToggle } from "../ui/components.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 const ROLES = [
-  { id: "student", label: "Student", icon: GraduationCap, desc: "Learn with your AI tutor" },
+  { id: "student", label: "Student", icon: GraduationCap, desc: "Learn with your friendly tutor" },
   { id: "parent", label: "Parent", icon: Users, desc: "Track your child's progress" },
 ];
 
@@ -19,8 +19,8 @@ const DEMOS = [
 ];
 
 const FEATURES = [
-  { icon: MessageSquare, title: "Topic-wise AI tutor chat" },
-  { icon: Target, title: "Mini-assessment + gap detection" },
+  { icon: MessageSquare, title: "Topic-by-topic tutor chat" },
+  { icon: Target, title: "Quick quizzes + Focus Areas" },
   { icon: TrendingUp, title: "Personalised plan & progress" },
 ];
 
@@ -47,7 +47,8 @@ export default function AuthScreen() {
     setBusy(true);
     try {
       if (mode === "login") {
-        await login({ email: form.email, password: form.password });
+        // Students may log in with a school-issued code instead of an email.
+        await login({ identifier: form.email.trim(), password: form.password });
       } else {
         await register({
           name: form.name, email: form.email, password: form.password, role,
@@ -79,7 +80,7 @@ export default function AuthScreen() {
             <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg text-white shadow-lg shadow-indigo-500/30">🦉</span>
             <div className="leading-tight">
               <p className="font-display text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">Tuto<span className="text-indigo-500">.ai</span></p>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">AI Tutor</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Your Study Buddy</p>
             </div>
           </div>
 
@@ -139,8 +140,10 @@ export default function AuthScreen() {
               <Field label="Full name" icon={User} value={form.name} onChange={set("name")} placeholder="Aarav Sharma" autoComplete="name" required />
             )}
 
-            <Field label="Email" icon={Mail} type="email" value={form.email} onChange={set("email")}
-                   placeholder="you@example.com" autoComplete="email" required />
+            <Field label={isRegister ? "Email" : "Email or school code"} icon={Mail}
+                   type={isRegister ? "email" : "text"} value={form.email} onChange={set("email")}
+                   placeholder={isRegister ? "you@example.com" : "you@example.com or ABC-12345"}
+                   autoComplete={isRegister ? "email" : "username"} required />
 
             <Field label="Password" icon={Lock} type={showPwd ? "text" : "password"} value={form.password}
                    onChange={set("password")} placeholder="Enter your password"
@@ -237,7 +240,7 @@ function BrandPanel() {
         <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white/15 text-xl ring-1 ring-white/25 backdrop-blur">🦉</span>
         <div className="leading-tight">
           <p className="font-display text-lg font-extrabold tracking-tight">Tuto<span className="text-indigo-200">.ai</span></p>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60">AI Tutor</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60">Your Study Buddy</p>
         </div>
       </div>
 
@@ -247,7 +250,7 @@ function BrandPanel() {
           <Sparkles className="h-3.5 w-3.5" /> Built for the Indian syllabus
         </span>
         <h2 className="mt-6 font-display text-[2.9rem] font-extrabold leading-[1.05] tracking-tight">
-          Your personal AI tutor that <span className="text-indigo-200">actually gets you</span>
+          Your personal study buddy that <span className="text-indigo-200">actually gets you</span>
         </h2>
         <p className="mt-4 text-[15px] leading-relaxed text-white/70">
           Ask any doubt, take a quick check, and get a focused plan for exactly what you misunderstand.

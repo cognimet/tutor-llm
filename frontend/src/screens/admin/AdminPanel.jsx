@@ -9,6 +9,7 @@ import CurriculumManager from "./CurriculumManager.jsx";
 import UserDrawer from "./UserDrawer.jsx";
 import CreditsPanel from "./CreditsPanel.jsx";
 import GapAnalytics from "./GapAnalytics.jsx";
+import SystemAnalytics from "./SystemAnalytics.jsx";
 
 // Tab label -> URL path. The active tab is now driven by the URL so a reload
 // stays on the same admin section.
@@ -18,6 +19,7 @@ const ADMIN_TABS = [
   ["curriculum", "/curriculum"],
   ["credits", "/credits"],
   ["gaps", "/gaps"],
+  ["analytics", "/analytics"],
 ];
 
 export default function AdminPanel() {
@@ -32,7 +34,7 @@ export default function AdminPanel() {
   return (
     <div className="min-h-screen">
       <Backdrop />
-      <AppHeader user={user} onLogout={logout} right={
+      <AppHeader user={user} onLogout={logout} onHome={() => navigate("/")} right={
         <div className="hidden gap-1 rounded-2xl bg-white/70 dark:bg-slate-800/60 p-1 ring-1 ring-slate-200 dark:ring-white/10 sm:flex">
           {ADMIN_TABS.map(([label, path]) => {
             const active = path === "/" ? pathname === "/" : pathname.startsWith(path);
@@ -48,6 +50,7 @@ export default function AdminPanel() {
           <Route path="users" element={<UsersTab />} />
           <Route path="credits" element={<CreditsPanel />} />
           <Route path="gaps" element={<GapAnalytics />} />
+          <Route path="analytics" element={<SystemAnalytics />} />
           <Route path="curriculum" element={<CurriculumManager />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

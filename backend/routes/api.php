@@ -4,7 +4,9 @@ use App\Http\Controllers\Api\AdminContentController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AdminCurriculumController;
 use App\Http\Controllers\Api\AdminGapController;
+use App\Http\Controllers\Api\AdminSchoolController;
 use App\Http\Controllers\Api\AdminUsageController;
+use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AssessmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CurriculumController;
@@ -20,6 +22,8 @@ use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\PlannerController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\ReminderController;
+use App\Http\Controllers\Api\SchoolController;
+use App\Http\Controllers\Api\TeacherController;
 use App\Http\Controllers\Api\TelemetryController;
 use App\Http\Controllers\Api\TutorController;
 use App\Http\Controllers\Api\UsageController;
@@ -38,6 +42,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- Account (all roles) ---
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/me', [AuthController::class, 'updateProfile']);
+    Route::post('/me/avatar', [AuthController::class, 'uploadAvatar']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // --- Curriculum (read for any authed user) ---
@@ -147,6 +152,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tutor/profile', [LearnerProfileController::class, 'show']);
         Route::post('/tutor/telemetry', [TelemetryController::class, 'store']);
 
+        // Personal analytics dashboard + engagement/integrity ingest
+        Route::get('/me/analytics', [AnalyticsController::class, 'me']);
+        Route::post('/engagement', [AnalyticsController::class, 'ingest']);
+
         // Progress snapshot + credit meter
         Route::get('/progress', [ProgressController::class, 'summary']);
         Route::get('/usage', [UsageController::class, 'me']);
@@ -158,7 +167,44 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/children/{child}/report', [ParentController::class, 'childReport']);
         Route::get('/children/{child}/usage', [UsageController::class, 'child']);
         Route::get('/children/{child}/gaps', [ParentController::class, 'childGaps']);
+        Route::get('/children/{child}/analytics', [AnalyticsController::class, 'child']);
+        Route::post('/children', [ParentController::class, 'addChild']);
         Route::post('/children/link', [ParentController::class, 'linkChild']);
+    });
+
+    // --- Teacher panel (read + assign, scoped to assigned sections) ---
+    Route::middleware('role:teacher')->prefix('teacher')->group(function () {
+        Route::get('/scope', [TeacherController::class, 'myScope']);
+        Route::get('/overview', [TeacherController::class, 'overview']);
+        Route::get('/classes/{class}/analytics', [TeacherController::class, 'classAnalytics']);
+        Route::get('/sections/{section}/roster', [TeacherController::class, 'roster']);
+        Route::get('/sections/{section}/analytics', [TeacherController::class, 'sectionAnalytics']);
+        Route::get('/sections/{section}/assignments', [TeacherController::class, 'assignments']);
+        Route::get('/students/{student}/report', [TeacherController::class, 'studentReport']);
+        Route::post('/assignments', [TeacherController::class, 'createAssignment']);
+        Route::get('/assignments/{assignment}/results', [TeacherController::class, 'assignmentResults']);
+    });
+
+    // --- School-admin panel (org management, scoped to own school) ---
+    Route::middleware('role:school_admin')->prefix('school')->group(function () {
+        Route::get('/overview', [SchoolController::class, 'overview']);
+        Route::get('/seats', [SchoolController::class, 'seats']);
+        Route::get('/classes/{class}/analytics', [SchoolController::class, 'classAnalytics']);
+        Route::get('/sections/{section}/analytics', [SchoolController::class, 'sectionAnalytics']);
+        Route::get('/students/{student}/report', [SchoolController::class, 'studentReport']);
+
+        Route::get('/classes', [SchoolController::class, 'classes']);
+        Route::post('/classes', [SchoolController::class, 'storeClass']);
+        Route::post('/classes/{class}/sections', [SchoolController::class, 'storeSection']);
+        Route::delete('/sections/{section}', [SchoolController::class, 'destroySection']);
+
+        Route::get('/teachers', [SchoolController::class, 'teachers']);
+        Route::post('/teachers', [SchoolController::class, 'storeTeacher']);
+        Route::patch('/teachers/{teacher}', [SchoolController::class, 'updateTeacher']);
+
+        Route::get('/students', [SchoolController::class, 'students']);
+        Route::post('/students', [SchoolController::class, 'storeStudent']);
+        Route::post('/students/import', [SchoolController::class, 'importStudents']);
     });
 
     // --- Admin features ---
@@ -172,8 +218,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/users/{user}/active', [AdminController::class, 'setActive']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
 
+        // --- Schools (B2B2C onboarding: platform creates a school + its first admin) ---
+        Route::get('/schools', [AdminSchoolController::class, 'index']);
+        Route::post('/schools', [AdminSchoolController::class, 'store']);
+        Route::post('/schools/{school}/admin', [AdminSchoolController::class, 'storeAdmin']);
+
         // --- Gap analytics (cohort weak spots, students at risk) ---
         Route::get('/gaps', [AdminGapController::class, 'overview']);
+
+        // --- System-wide analytics (segmentation, integrity, completion, exports) ---
+        Route::get('/analytics', [AnalyticsController::class, 'system']);
 
         // --- AI usage & billing (raw tokens + ₹ visible only here) ---
         Route::get('/usage', [AdminUsageController::class, 'overview']);

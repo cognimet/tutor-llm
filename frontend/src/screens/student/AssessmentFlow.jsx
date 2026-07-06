@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { X, ArrowRight, Sparkles, Target, Loader2, BookOpen } from "lucide-react";
 import { assessmentApi } from "../../api/endpoints.js";
+import { useEngagementTracker } from "../../hooks/useEngagementTracker.js";
 
 // Stages: loading -> quiz -> result. After the result, the student is pointed
 // to the Study hub's "What to work on" (real, actionable next steps) instead of
@@ -20,6 +21,26 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
   // second submit fire while one is in flight.
   const generatedRef = useRef(false);
   const submittingRef = useRef(false);
+  // Per-question answer-change counts + first-seen time, for behaviour analytics.
+  const changesRef = useRef({});      // questionId -> changes before submit
+  const seenAtRef = useRef({});       // questionId -> first interaction timestamp
+
+  // Engagement + integrity tracker (focus loss, answer changes, drop-off).
+  const tracker = useEngagementTracker({ assessmentId: assessment?.id, chatSessionId: sessionId });
+
+  // Announce the assessment start once the quiz is on screen.
+  useEffect(() => { if (stage === "quiz") tracker.start(); }, [stage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onSelect = (qid, oi) => {
+    if (busy) return;
+    const prev = answers[qid];
+    if (prev != null && prev !== oi) {
+      changesRef.current[qid] = (changesRef.current[qid] || 0) + 1;
+      tracker.answerChange(qid, prev, oi);
+    }
+    if (seenAtRef.current[qid] == null) seenAtRef.current[qid] = Date.now();
+    setAnswers((a) => ({ ...a, [qid]: oi }));
+  };
 
   const loadQuiz = async () => {
     setStage("loading");
@@ -30,7 +51,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
         scope, ...(count ? { count } : {}),
       });
       if (!a || !Array.isArray(a.questions) || a.questions.length === 0) {
-        throw new Error("The AI returned an empty quiz. Please try again.");
+        throw new Error("We couldn't build your quiz just now. Please try again.");
       }
       setAssessment(a); setStage("quiz");
     } catch (err) {
@@ -69,7 +90,14 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
     setBusy(true);
     setError("");
     try {
-      const payload = assessment.questions.map((q) => ({ question_id: q.id, selected_index: answers[q.id] ?? -1 }));
+      const now = Date.now();
+      const payload = assessment.questions.map((q) => ({
+        question_id: q.id,
+        selected_index: answers[q.id] ?? -1,
+        answer_changes: changesRef.current[q.id] || 0,
+        time_spent_ms: seenAtRef.current[q.id] ? now - seenAtRef.current[q.id] : null,
+      }));
+      tracker.submit();
       const res = await assessmentApi.submit(assessment.id, payload);
       setResult(res); setStage("result");
     } catch (err) {
@@ -145,7 +173,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
                       const sel = answers[q.id] === oi;
                       return (
                         <button key={oi} disabled={busy}
-                          onClick={() => { if (busy) return; setAnswers((a) => ({ ...a, [q.id]: oi })); }}
+                          onClick={() => onSelect(q.id, oi)}
                           className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60 ${sel ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300"}`}>
                           <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${sel ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"}`}>{"ABCD"[oi]}</span>
                           {opt}
@@ -165,7 +193,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
                 <p className="font-display text-5xl font-extrabold">{result.score}/{result.total}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-4 text-sm text-slate-600 dark:text-slate-300">
-                <p className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-100"><Sparkles className="h-4 w-4 text-indigo-500" /> What the AI noticed</p>
+                <p className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-100"><Sparkles className="h-4 w-4 text-indigo-500" /> What we noticed</p>
                 <p className="mt-1">{result.summary}</p>
               </div>
               {result.gaps?.length > 0 && (

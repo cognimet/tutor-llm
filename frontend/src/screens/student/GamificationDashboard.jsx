@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Star, Zap, Trophy, BookOpen, Gamepad2, Cookie, Heart, Shield, Loader2 } from "lucide-react";
-import { gamificationApi } from "../../api/endpoints.js";
+import { ArrowLeft, Star, Zap, Trophy, BookOpen, Gamepad2, Cookie, Heart, Shield, Loader2, Medal } from "lucide-react";
+import { gamificationApi, analyticsApi } from "../../api/endpoints.js";
+import { LeaderboardTabs } from "../../ui/analytics/AnalyticsKit.jsx";
 import { BadgeRow } from "../../ui/Gamification.jsx";
 import TrophyCabinet, { TROPHY_CATALOGUE } from "../../ui/TrophyCabinet.jsx";
 import StreakFlame from "../../ui/StreakFlame.jsx";
@@ -16,12 +17,15 @@ import useGameSound from "../../ui/useGameSound.js";
  */
 export default function GamificationDashboard({ user, onBack, onOpenNotes }) {
   const [data, setData] = useState(null);
+  const [ranking, setRanking] = useState(null);   // leaderboard standing (me)
   const [error, setError] = useState("");
 
   const load = () =>
     gamificationApi.profile().then(setData).catch(() => setError("Couldn't load your rewards yet."));
 
   useEffect(() => { load(); }, []);
+  // Leaderboard (top + own standing) rides along from the analytics engine.
+  useEffect(() => { analyticsApi.me().then((a) => setRanking(a?.ranking || null)).catch(() => {}); }, []);
 
   if (error) {
     return <Shell onBack={onBack}><p className="p-10 text-center text-sm font-bold text-slate-400">{error}</p></Shell>;
@@ -34,7 +38,7 @@ export default function GamificationDashboard({ user, onBack, onOpenNotes }) {
     <Shell onBack={onBack}>
       {data.engine_mode === "junior"
         ? <JuniorDashboard user={user} data={data} onReload={load} onOpenNotes={onOpenNotes} />
-        : <SeniorDashboard user={user} data={data} onOpenNotes={onOpenNotes} />}
+        : <SeniorDashboard user={user} data={data} ranking={ranking} onOpenNotes={onOpenNotes} />}
     </Shell>
   );
 }
@@ -52,7 +56,7 @@ function Shell({ children, onBack }) {
 
 /* ============================================================ SENIOR (5–10) */
 
-function SeniorDashboard({ user, data, onOpenNotes }) {
+function SeniorDashboard({ user, data, ranking, onOpenNotes }) {
   const sound = useGameSound();
   const pct = Math.min(100, Math.round(data.progress_percent || 0));
 
@@ -78,6 +82,7 @@ function SeniorDashboard({ user, data, onOpenNotes }) {
           </div>
           <div className="flex items-center gap-4">
             <StreakFlame streakDays={data.streak?.days || 0} />
+            <Stat label={ranking?.me ? `Rank · ${ranking.me.tier}` : "Rank"} value={ranking?.me ? `#${ranking.me.rank}` : "—"} icon={Medal} />
             <Stat label="Trophies" value={data.trophies_count} icon={Trophy} />
             <Stat label="Badges" value={data.badges_count} icon={Star} />
           </div>
@@ -90,6 +95,16 @@ function SeniorDashboard({ user, data, onOpenNotes }) {
         <ActionTile onClick={() => { sound("pop"); onOpenNotes?.(); }} tint="from-indigo-500 to-violet-500"
           icon={BookOpen} title="Study & Quests" sub="Notes, plans and chapter quests" />
         <ShieldTile data={data} />
+      </div>
+
+      {/* Leaderboard */}
+      <div className="rounded-3xl border border-white/60 bg-white/70 p-6 shadow-sm dark:border-white/10 dark:bg-slate-800/70">
+        <div className="mb-3 flex items-center gap-2">
+          <Medal className="h-5 w-5 text-amber-500" />
+          <h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Leaderboard</h3>
+          {ranking?.total ? <span className="text-xs font-bold text-slate-400">· {ranking.total} students</span> : null}
+        </div>
+        <LeaderboardTabs ranking={ranking || {}} />
       </div>
 
       <TrophyCabinet trophies={data.trophies || []} catalogue={TROPHY_CATALOGUE}

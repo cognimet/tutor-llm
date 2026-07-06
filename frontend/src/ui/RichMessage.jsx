@@ -56,15 +56,28 @@ function rescueBareViz(md) {
   const out = [];
   let buf = [];
   const flushMd = () => { if (buf.length) { out.push({ kind: "md", text: buf.join("\n") }); buf = []; } };
-  for (const line of lines) {
+  const pushViz = (code) => {
+    while (buf.length && LONE_MARKER.test(buf[buf.length - 1])) buf.pop(); // drop a `viz` marker above it
+    flushMd();
+    out.push({ kind: "viz", code });
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const t = line.trim();
-    if (t.length > 1 && (t[0] === "{" || t[0] === "[") && looksLikeVizSpec(t)) {
-      while (buf.length && LONE_MARKER.test(buf[buf.length - 1])) buf.pop(); // drop a `viz` marker above it
-      flushMd();
-      out.push({ kind: "viz", code: t });
-    } else {
-      buf.push(line);
+    if (t.length > 1 && (t[0] === "{" || t[0] === "[")) {
+      // Single-line minified spec on its own line.
+      if (looksLikeVizSpec(t)) { pushViz(t); continue; }
+      // Pretty-printed / multi-line spec: accumulate following lines until the
+      // braces balance into a recognised viz spec (so it renders as a diagram
+      // instead of leaking raw JSON into the prose).
+      let acc = line, j = i, found = false;
+      for (; j < lines.length && acc.length < 12000; j++) {
+        if (j > i) acc += "\n" + lines[j];
+        if (looksLikeVizSpec(acc.trim())) { found = true; break; }
+      }
+      if (found) { pushViz(acc.trim()); i = j; continue; }
     }
+    buf.push(line);
   }
   flushMd();
   return out;
@@ -270,8 +283,17 @@ function parseInteractive(text, streaming = false) {
       });
     } else if (tag.type === "quiz") {
       const [, id, correct, ans, question, optionsText, explanation] = tag.m;
-      const options = (optionsText || "").trim().split("\n").map((l) => l.replace(/^[-*]\s*/, "").trim()).filter(Boolean);
-      blocks.push({ kind: "quiz", id, question: (question || "").trim(), options, correct: parseInt(correct, 10) || 0, correctText: (ans || "").trim(), explanation: (explanation || "").trim() });
+      const rawOptions = (optionsText || "").trim().split("\n").map((l) => l.replace(/^[-*]\s*/, "").trim()).filter(Boolean);
+      // Drop the synthetic "(still loading…)" placeholder that sanitizeLessonStream
+      // injects for a truncated quiz — never let it become a clickable, wrong answer.
+      const options = rawOptions.filter((o) => !/^\(?\s*still loading/i.test(o));
+      if (options.length < 2) {
+        // A quiz with no real options (the stream was cut off mid-question) would
+        // otherwise render as a broken gate. Show a quiet, non-interactive notice.
+        blocks.push({ kind: "quiz-pending" });
+      } else {
+        blocks.push({ kind: "quiz", id, question: (question || "").trim(), options, correct: parseInt(correct, 10) || 0, correctText: (ans || "").trim(), explanation: (explanation || "").trim() });
+      }
     } else if (tag.type === "anchor") {
       const [, page, fig, txt] = tag.m;
       anchors.push({ page: page ? parseInt(page, 10) : undefined, figureId: fig || undefined, highlightText: txt || undefined });
@@ -318,6 +340,16 @@ function PendingBlock() {
   return (
     <div className="my-3 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500 dark:border-white/10 dark:bg-slate-800/60">
       <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-emerald-400" /> Building your card…
+    </div>
+  );
+}
+
+// A quiz whose options never finished streaming. Non-interactive on purpose, so
+// nothing here can be tapped and graded as "wrong".
+function QuizUnavailable() {
+  return (
+    <div className="my-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+      This question didn't finish loading. Ask the tutor to continue and it'll show up.
     </div>
   );
 }
@@ -443,6 +475,7 @@ export default function RichMessage({ text, streaming = false, className = "", o
     switch (b.kind) {
       case "text": return <TextBlock key={i} text={b.text} streaming={streaming && i === lastTextIdx} />;
       case "pending": return <PendingBlock key={i} />;
+      case "quiz-pending": return <QuizUnavailable key={i} />;
       case "card": return renderCardNode(b, i);
       case "quiz": {
         const gateId = `gate:${messageId}:${gateHash(b.question, b.options)}`;

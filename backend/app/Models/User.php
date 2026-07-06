@@ -12,9 +12,11 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
-        'name', 'email', 'password', 'role',
+        'name', 'email', 'mobile', 'password', 'role',
         'level_id', 'board', 'grade', 'stream', 'language', 'avatar', 'is_active',
         'xp_points', 'level', 'current_streak', 'last_active_date',
+        // B2B2C org membership + school-issued login code.
+        'school_id', 'section_id', 'login_code',
     ];
 
     protected $appends = ['curriculum_path'];
@@ -36,9 +38,11 @@ class User extends Authenticatable
     }
 
     /* Role helpers */
-    public function isAdmin(): bool   { return $this->role === 'admin'; }
-    public function isStudent(): bool { return $this->role === 'student'; }
-    public function isParent(): bool  { return $this->role === 'parent'; }
+    public function isAdmin(): bool       { return $this->role === 'admin'; }
+    public function isStudent(): bool     { return $this->role === 'student'; }
+    public function isParent(): bool      { return $this->role === 'parent'; }
+    public function isTeacher(): bool     { return $this->role === 'teacher'; }
+    public function isSchoolAdmin(): bool { return $this->role === 'school_admin'; }
 
     /* Relationships */
     public function children()
@@ -53,12 +57,60 @@ class User extends Authenticatable
             ->withPivot('relationship')->withTimestamps();
     }
 
+    /* --- B2B2C org relationships --- */
+    public function school()  { return $this->belongsTo(School::class); }
+    public function section() { return $this->belongsTo(Section::class); }
+
+    // Teacher → the classes / sections / subjects they are assigned to teach.
+    public function taughtClasses()
+    {
+        return $this->belongsToMany(SchoolClass::class, 'teacher_class', 'teacher_id', 'school_class_id')->withTimestamps();
+    }
+
+    public function taughtSections()
+    {
+        return $this->belongsToMany(Section::class, 'teacher_section', 'teacher_id', 'section_id')->withTimestamps();
+    }
+
+    public function taughtSubjects()
+    {
+        return $this->belongsToMany(Subject::class, 'teacher_subject', 'teacher_id', 'subject_id')->withTimestamps();
+    }
+
+    /**
+     * Tenant-isolation gate. Can THIS user view the given student's data?
+     *  - school_admin: any student in their school.
+     *  - teacher:      only students in a section they teach.
+     * Parents use the separate parent_student link (see ParentController), so
+     * this deliberately returns false for parents.
+     */
+    public function canAccessStudent(User $student): bool
+    {
+        if (! $student->isStudent()) {
+            return false;
+        }
+        if ($this->isSchoolAdmin()) {
+            return $this->school_id !== null && $student->school_id === $this->school_id;
+        }
+        if ($this->isTeacher()) {
+            return $student->section_id !== null
+                && $this->taughtSections()->whereKey($student->section_id)->exists();
+        }
+        return false;
+    }
+
     public function level() { return $this->belongsTo(Level::class); }
 
     /** "School · CBSE · Class 10 · Science" — denormalised for the UI + API payloads. */
     public function getCurriculumPathAttribute(): ?string
     {
-        $level = $this->relationLoaded('level') ? $this->level : ($this->level_id ? $this->level()->with('track.stage')->first() : null);
+        // NOTE: read the loaded relation via getRelation(), NOT $this->level —
+        // the `level` relationship name collides with the `level` integer column
+        // (gamification level), and Eloquent's getAttribute() returns the column,
+        // so $this->level would be an int once the relation is eager-loaded.
+        $level = $this->relationLoaded('level')
+            ? $this->getRelation('level')
+            : ($this->level_id ? $this->level()->with('track.stage')->first() : null);
         if (! $level) return null;
 
         $path = $level->pathLabel();
