@@ -35,7 +35,7 @@ export default function CreditMeter({ className = "" }) {
         ${out ? "border-rose-200 bg-rose-50 text-rose-700"
               : low ? "border-amber-200 bg-amber-50 text-amber-700"
                     : "border-slate-200 dark:border-white/10 bg-white/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300"} ${className}`}
-      title={`Daily AI credits — resets at midnight. Plan: ${usage.plan.name}`}
+      title={`Daily learning energy — resets at midnight. Plan: ${usage.plan.name}`}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

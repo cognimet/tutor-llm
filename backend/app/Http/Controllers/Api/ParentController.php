@@ -143,6 +143,45 @@ class ParentController extends Controller
         ]);
     }
 
+    // Create a brand-new student account and link it to this parent. Lets a
+    // parent onboard a child who doesn't have their own account yet — the child
+    // then signs in with the email + password set here.
+    public function addChild(Request $request)
+    {
+        $data = $request->validate([
+            'name'         => ['required', 'string', 'max:120'],
+            'email'        => ['required', 'email', 'unique:users,email'],
+            'password'     => ['required', 'string', 'min:6'],
+            'level_id'     => ['nullable', 'exists:levels,id'],
+            'board'        => ['nullable', 'string'],
+            'grade'        => ['nullable', 'integer', 'min:1', 'max:12'],
+            'stream'       => ['nullable', 'string', 'max:40'],
+            'language'     => ['nullable', 'string'],
+            'relationship' => ['nullable', 'string', 'max:40'],
+        ]);
+
+        $child = User::create([
+            'name'     => $data['name'],
+            'email'    => $data['email'],
+            'password' => $data['password'], // 'hashed' cast on the model
+            'role'     => 'student',
+            'level_id' => $data['level_id'] ?? null,
+            'board'    => $data['board'] ?? null,
+            'grade'    => $data['grade'] ?? null,
+            'stream'   => $data['stream'] ?? null,
+            'language' => $data['language'] ?? 'en',
+        ]);
+
+        $request->user()->children()->syncWithoutDetaching([
+            $child->id => ['relationship' => $data['relationship'] ?? 'guardian'],
+        ]);
+
+        return response()->json([
+            'message' => 'Student account created and linked.',
+            'child'   => $child->only(['id', 'name', 'email', 'board', 'grade']),
+        ], 201);
+    }
+
     // Link a child by email (parent self-service).
     public function linkChild(Request $request)
     {

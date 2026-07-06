@@ -24,6 +24,9 @@ class AdminController extends Controller
                 'students'        => User::where('role', 'student')->count(),
                 'parents'         => User::where('role', 'parent')->count(),
                 'admins'          => User::where('role', 'admin')->count(),
+                'teachers'        => User::where('role', 'teacher')->count(),
+                'school_admins'   => User::where('role', 'school_admin')->count(),
+                'schools'         => \App\Models\School::count(),
                 'subjects'        => Subject::count(),
                 'chat_sessions'   => ChatSession::count(),
                 'assessments'     => Assessment::count(),
@@ -107,7 +110,7 @@ class AdminController extends Controller
         $data = $request->validate([
             'name'      => ['sometimes', 'string', 'max:120'],
             'email'     => ['sometimes', 'email', 'max:200', Rule::unique('users')->ignore($user->id)],
-            'role'      => ['sometimes', Rule::in(['admin', 'student', 'parent'])],
+            'role'      => ['sometimes', Rule::in(['admin', 'student', 'parent', 'teacher', 'school_admin'])],
             'level_id'  => ['sometimes', 'nullable', 'exists:levels,id'],
             'board'     => ['sometimes', 'nullable', 'string'],
             'grade'     => ['sometimes', 'nullable', 'integer', 'min:1', 'max:12'],

@@ -5,54 +5,142 @@ import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-do
 import { parentApi, usageApi } from "../../api/endpoints.js";
 import {
   Brain, Target, Flame, ListChecks, ArrowLeft, UserPlus, ChevronRight,
-  Zap, AlertTriangle, CheckCircle2,
+  Zap, AlertTriangle, CheckCircle2, Link2, Eye, EyeOff,
 } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts";
+import CurriculumPicker from "../../ui/CurriculumPicker.jsx";
+import ChildAnalyticsDashboard from "./ChildAnalyticsDashboard.jsx";
 
 export default function ParentDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [linking, setLinking] = useState(false);
+  const [panel, setPanel] = useState(null); // "add" | "link" | null
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  // Add-student (create a new account) form state.
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [curr, setCurr] = useState(null);
+  const [showPwd, setShowPwd] = useState(false);
 
   const load = async () => { setChildren(await parentApi.children()); };
 
   useEffect(() => { (async () => { try { await load(); } finally { setLoading(false); } })(); }, []);
 
+  const openPanel = (p) => { setMsg(""); setPanel((cur) => (cur === p ? null : p)); };
+
+  const apiError = (err, fallback) =>
+    err.response?.data?.message
+    || Object.values(err.response?.data?.errors || {})[0]?.[0]
+    || fallback;
+
   const link = async (e) => {
     e.preventDefault(); setMsg("");
-    try { await parentApi.linkChild(email); setEmail(""); setLinking(false); await load(); }
-    catch (err) { setMsg(err.response?.data?.message || "Could not link that account."); }
+    setBusy(true);
+    try { await parentApi.linkChild(email); setEmail(""); setPanel(null); await load(); }
+    catch (err) { setMsg(apiError(err, "Could not link that account.")); }
+    finally { setBusy(false); }
+  };
+
+  const addStudent = async (e) => {
+    e.preventDefault(); setMsg("");
+    if (!form.name.trim() || !form.email.trim() || form.password.length < 6) {
+      setMsg("Enter a name, email, and a password of at least 6 characters.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await parentApi.addChild({
+        name: form.name.trim(), email: form.email.trim(), password: form.password,
+        ...(curr ? { level_id: curr.level_id, stream: curr.stream, board: curr.board, grade: curr.grade } : {}),
+      });
+      setForm({ name: "", email: "", password: "" });
+      setCurr(null); setPanel(null);
+      await load();
+    } catch (err) { setMsg(apiError(err, "Could not create that student account.")); }
+    finally { setBusy(false); }
   };
 
   return (
     <div className="min-h-screen">
       <Backdrop />
-      <AppHeader user={user} onLogout={logout} />
+      <AppHeader user={user} onLogout={logout} onHome={() => navigate("/")} right={
+        <div className="hidden gap-1 rounded-2xl bg-white/70 p-1 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:ring-white/10 sm:flex">
+          <button onClick={() => navigate("/")} className="rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize text-slate-500 dark:text-slate-400">overview</button>
+          <button onClick={() => navigate("/insights")} className="rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize text-slate-500 dark:text-slate-400">insights</button>
+        </div>
+      } />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <Routes>
           <Route index element={loading ? <Spinner label="Loading your children…" /> : (
             <>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h1 className="text-3xl font-extrabold tracking-tight">Family dashboard</h1>
                 <p className="text-slate-500 dark:text-slate-400">Track how your children are learning.</p>
               </div>
-              <Button variant="soft" onClick={() => setLinking((v) => !v)}><UserPlus className="h-4 w-4" /> Link child</Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={() => openPanel("add")}><UserPlus className="h-4 w-4" /> Add student</Button>
+                <Button variant="soft" onClick={() => openPanel("link")}><Link2 className="h-4 w-4" /> Link existing</Button>
+              </div>
             </div>
 
-            {linking && (
+            {/* Create a brand-new student account for a child without one yet. */}
+            {panel === "add" && (
               <Card className="mt-5 p-5">
-                <form onSubmit={link} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Add a new student</p>
+                <p className="mt-1 text-sm text-slate-400">Creates a student account linked to you. Your child signs in with the email and password you set here.</p>
+                <form onSubmit={addStudent} className="mt-4 space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Name</span>
+                      <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} type="text" placeholder="Aarav Sharma" autoComplete="off"
+                        className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Email</span>
+                      <input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} type="email" placeholder="child@example.com" autoComplete="off"
+                        className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Password</span>
+                      <div className="relative">
+                        <input value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} type={showPwd ? "text" : "password"} placeholder="At least 6 characters" autoComplete="new-password"
+                          className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3.5 py-2.5 pr-10 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200" />
+                        <button type="button" onClick={() => setShowPwd((v) => !v)} title={showPwd ? "Hide password" : "Show password"}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                          {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                  <div>
+                    <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Class &amp; board <span className="font-semibold normal-case text-slate-400">(optional — they can set this on first sign-in)</span></span>
+                    <CurriculumPicker value={curr?.level_id} onChange={setCurr} />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button type="submit" disabled={busy}>{busy ? "Creating…" : "Create student"}</Button>
+                    <button type="button" onClick={() => { setPanel(null); setMsg(""); }} className="text-sm font-extrabold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">Cancel</button>
+                  </div>
+                </form>
+                {msg && <p className="mt-2 text-sm font-semibold text-rose-600">{msg}</p>}
+              </Card>
+            )}
+
+            {/* Link an existing student account by their email. */}
+            {panel === "link" && (
+              <Card className="mt-5 p-5">
+                <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Link an existing student</p>
+                <form onSubmit={link} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
                   <label className="flex-1">
                     <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Student email</span>
                     <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="child@example.com"
                       className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-200" />
                   </label>
-                  <Button type="submit">Link account</Button>
+                  <Button type="submit" disabled={busy}>{busy ? "Linking…" : "Link account"}</Button>
                 </form>
                 {msg && <p className="mt-2 text-sm font-semibold text-rose-600">{msg}</p>}
               </Card>
@@ -80,13 +168,14 @@ export default function ParentDashboard() {
               ))}
               {children.length === 0 && (
                 <Card className="p-10 text-center text-slate-400 sm:col-span-2">
-                  No children linked yet. Use “Link child” with your child’s student email.
+                  No children yet. Use “Add student” to create an account for your child, or “Link existing” if they already have one.
                 </Card>
               )}
             </div>
             </>
           )} />
           <Route path="child/:id" element={<ChildReportRoute />} />
+          <Route path="insights" element={<ChildAnalyticsDashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

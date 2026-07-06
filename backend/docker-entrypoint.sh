@@ -120,6 +120,11 @@ else
   fi
 fi
 
+# Public storage symlink so uploaded files (e.g. profile avatars under
+# storage/app/public) are served at /storage/*. Idempotent; --force replaces a
+# stale link left in the image.
+php artisan storage:link --force >/dev/null 2>&1 || true
+
 # Background queue worker for async post-turn processing. Restarts itself if it
 # exits (e.g. after --max-time) so it survives the container's lifetime.
 echo "🧵 Starting queue worker (QUEUE_CONNECTION=${QUEUE_CONNECTION:-database})…"

@@ -51,12 +51,20 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        // A student may sign in with either their email or a school-issued
+        // login code. `identifier` is the new field; `email` stays accepted for
+        // backward compatibility with existing clients.
         $data = $request->validate([
-            'email'    => ['required', 'email'],
-            'password' => ['required', 'string'],
+            'identifier' => ['required_without:email', 'string', 'max:200'],
+            'email'      => ['required_without:identifier', 'string', 'max:200'],
+            'password'   => ['required', 'string'],
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $login = $data['identifier'] ?? $data['email'];
+
+        $user = User::where('email', $login)
+            ->orWhere('login_code', $login)
+            ->first();
 
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             throw ValidationException::withMessages(['email' => ['Invalid credentials.']]);
@@ -70,7 +78,11 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        return response()->json(['user' => $request->user()]);
+        $user = $request->user();
+        // Drives student-side gating: a student who has a linked parent sees
+        // their insights via the parent dashboard, not their own panel.
+        $user->setAttribute('has_parent', $user->isStudent() ? $user->parents()->exists() : false);
+        return response()->json(['user' => $user]);
     }
 
     public function updateProfile(Request $request)
@@ -78,14 +90,35 @@ class AuthController extends Controller
         $user = $request->user();
         $data = $request->validate([
             'name'     => ['sometimes', 'string', 'max:120'],
+            // Email is editable from the profile page; stay unique but ignore self.
+            'email'    => ['sometimes', 'email', Rule::unique('users', 'email')->ignore($user->id)],
+            // Mobile is free-form and NOT unique (families share a number).
+            'mobile'   => ['sometimes', 'nullable', 'string', 'max:20'],
             'level_id' => ['sometimes', 'nullable', 'exists:levels,id'],
             'board'    => ['sometimes', 'nullable', 'string'],
             'grade'    => ['sometimes', 'nullable', 'integer', 'min:1', 'max:12'],
             'stream'   => ['sometimes', 'nullable', 'string', 'max:40'],
             'language' => ['sometimes', 'nullable', 'string'],
+            // Either a preset key ("preset:fox") or an uploaded image URL.
             'avatar'   => ['sometimes', 'nullable', 'string'],
         ]);
         $user->update($data);
+
+        return response()->json(['user' => $user->fresh()->load('level.track.stage')]);
+    }
+
+    // Upload a profile picture. Stores to the public disk and saves the URL on
+    // the user. Presets need no upload — the client sets `avatar` to a "preset:*"
+    // key through updateProfile() above.
+    public function uploadAvatar(Request $request)
+    {
+        $request->validate([
+            'image' => ['required', 'image', 'mimes:jpeg,jpg,png,webp', 'max:4096'],
+        ]);
+
+        $user = $request->user();
+        $path = $request->file('image')->store('avatars', 'public');
+        $user->update(['avatar' => \Illuminate\Support\Facades\Storage::disk('public')->url($path)]);
 
         return response()->json(['user' => $user->fresh()->load('level.track.stage')]);
     }
@@ -99,6 +132,7 @@ class AuthController extends Controller
     protected function respondWithToken(User $user, int $status = 200)
     {
         $token = $user->createToken('api')->plainTextToken;
+        $user->setAttribute('has_parent', $user->isStudent() ? $user->parents()->exists() : false);
 
         return response()->json([
             'user'  => $user,
