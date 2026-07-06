@@ -11,6 +11,7 @@ own text reading when PADDLE_OCR_URL is unset or this container is down.
 """
 import base64
 import logging
+import threading
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -20,6 +21,11 @@ log = logging.getLogger("paddleocr")
 app = FastAPI(title="PaddleOCR Service", version="1.0.0")
 
 _ENGINES: dict[str, object] = {}
+# Paddle's native predictor is not thread-safe, and concurrent first requests
+# used to race the lazy model download (two threads constructing PaddleOCR at
+# once corrupted /root/.paddleocr and SIGABRT'd the process). FastAPI runs sync
+# endpoints on a threadpool, so init AND inference must be serialized.
+_OCR_LOCK = threading.Lock()
 
 
 def _engine(lang: str):
@@ -56,7 +62,8 @@ def ocr(req: OcrRequest):
         return {"text": "", "lines": [], "error": f"decode failed: {e}"}
 
     try:
-        result = _engine(req.lang).ocr(img, cls=True)
+        with _OCR_LOCK:
+            result = _engine(req.lang).ocr(img, cls=True)
     except Exception as e:  # noqa: BLE001
         log.warning("ocr failed: %s", e)
         return {"text": "", "lines": [], "error": str(e)}
