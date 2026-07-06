@@ -19,6 +19,34 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Bake the English det/rec/cls models into the image. Downloading them lazily
+# at request time raced concurrent first requests (corrupted models, SIGABRT)
+# and repeated after every container restart since /root/.paddleocr isn't a
+# volume. Pure stdlib (no paddle import — paddle's native code aborts under
+# build-time QEMU), mirroring paddleocr's maybe_download() layout: files
+# renamed to inference.* flat inside each model dir.
+RUN python - <<'EOF'
+import io, pathlib, tarfile, urllib.request
+
+MODELS = {
+    "det/en/en_PP-OCRv3_det_infer": "https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_det_infer.tar",
+    "rec/en/en_PP-OCRv4_rec_infer": "https://paddleocr.bj.bcebos.com/PP-OCRv4/english/en_PP-OCRv4_rec_infer.tar",
+    "cls/ch_ppocr_mobile_v2.0_cls_infer": "https://paddleocr.bj.bcebos.com/dygraph_v2.0/ch/ch_ppocr_mobile_v2.0_cls_infer.tar",
+}
+SUFFIXES = (".pdiparams", ".pdiparams.info", ".pdmodel")
+for rel, url in MODELS.items():
+    dest = pathlib.Path("/root/.paddleocr/whl") / rel
+    dest.mkdir(parents=True, exist_ok=True)
+    data = urllib.request.urlopen(url).read()
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        for member in tar.getmembers():
+            for suffix in SUFFIXES:
+                if member.name.endswith(suffix):
+                    (dest / f"inference{suffix}").write_bytes(tar.extractfile(member).read())
+    assert (dest / "inference.pdiparams").exists(), f"model bake failed: {rel}"
+print("models baked:", *MODELS)
+EOF
+
 COPY app.py .
 
 EXPOSE 8002
