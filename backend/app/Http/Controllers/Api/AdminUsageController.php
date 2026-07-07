@@ -140,4 +140,50 @@ class AdminUsageController extends Controller
 
         return response()->json(ModelRate::create($data), 201);
     }
+
+    /* --------------------------- Margin guard --------------------------- */
+
+    /**
+     * GET /api/admin/billing/margin?days=30
+     * Revenue vs COGS by plan, plus any user whose real COGS exceeds their
+     * plan price (early warning that a cap is too loose or a user is abusing).
+     */
+    public function margin(Request $request)
+    {
+        $days = min(90, max(1, (int) $request->query('days', 30)));
+        $since = now()->subDays($days);
+
+        // Cost per plan over the window (join ledger → users → plans).
+        $byPlan = TokenLedger::where('token_ledger.created_at', '>=', $since)
+            ->join('users', 'users.id', '=', 'token_ledger.user_id')
+            ->leftJoin('plans', 'plans.id', '=', 'users.plan_id')
+            ->selectRaw("COALESCE(plans.key,'free') as plan_key,
+                COUNT(DISTINCT users.id) as users,
+                COUNT(*) as calls,
+                ROUND(SUM(token_ledger.cost_inr)::numeric, 2) as cogs_inr")
+            ->groupBy('plan_key')->orderByDesc('cogs_inr')->get();
+
+        // Anomalies: a user whose real COGS exceeds the MOST their plan could
+        // ever cost — i.e. GREATEST(price, monthly_cap × cost_per_credit). If
+        // caps are enforced this list is empty; a hit means abuse or a cap bug.
+        // Trusted config constant, formatted as a numeric literal (avoids PG
+        // inferring the bound float as an integer in the multiplication).
+        $cpc = number_format((float) config('billing.margin.cost_per_credit_inr', 0.15), 4, '.', '');
+        $offenders = TokenLedger::where('token_ledger.created_at', '>=', $since)
+            ->join('users', 'users.id', '=', 'token_ledger.user_id')
+            ->leftJoin('plans', 'plans.id', '=', 'users.plan_id')
+            ->selectRaw("users.id, users.name, users.email, COALESCE(plans.key,'free') as plan_key,
+                COALESCE(plans.price_inr,0) as price_inr,
+                ROUND(SUM(token_ledger.cost_inr)::numeric, 2) as cogs_inr")
+            ->groupBy('users.id', 'users.name', 'users.email', 'plan_key', 'plans.price_inr')
+            ->havingRaw("SUM(token_ledger.cost_inr) > GREATEST(COALESCE(MAX(plans.price_inr),0)::numeric, COALESCE(MAX(plans.monthly_credit_limit),300) * {$cpc})")
+            ->orderByDesc('cogs_inr')->limit(50)->get();
+
+        return response()->json([
+            'period_days' => $days,
+            'by_plan' => $byPlan,
+            'negative_margin_users' => $offenders,
+            'cost_per_credit_inr' => config('billing.margin.cost_per_credit_inr'),
+        ]);
+    }
 }

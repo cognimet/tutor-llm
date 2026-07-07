@@ -220,7 +220,18 @@ export const progressApi = {
 // --- AI usage / credits (students see credits, never raw tokens) ---
 export const usageApi = {
   me: () => api.get("/usage").then((r) => r.data),
+  detail: () => api.get("/usage/detail").then((r) => r.data),
   child: (childId) => api.get(`/parent/children/${childId}/usage`).then((r) => r.data),
+};
+
+// --- Billing / subscriptions (any buyer) ---
+export const billingApi = {
+  plans: () => api.get("/billing/plans").then((r) => r.data),
+  subscription: () => api.get("/billing/subscription").then((r) => r.data),
+  checkout: (plan_key, provider) => api.post("/billing/checkout", { plan_key, provider }).then((r) => r.data),
+  razorpayVerify: (payload) => api.post("/billing/razorpay/verify", payload).then((r) => r.data),
+  paypalCapture: (order_id) => api.post("/billing/paypal/capture", { order_id }).then((r) => r.data),
+  cancel: () => api.post("/billing/cancel").then((r) => r.data),
 };
 
 // --- Parent ---

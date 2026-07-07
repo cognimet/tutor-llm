@@ -114,6 +114,65 @@ function Overview({ nav }) {
         </div>
       </Card>
 
+      {/* Plan & usage — the school's subscription, seats and AI consumption */}
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <Activity className="h-4 w-4 text-indigo-500" /> Plan &amp; usage
+          </p>
+          <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-extrabold text-indigo-600">
+            {data.school?.plan?.name ? `${data.school.plan.name} plan` : "No plan assigned"}
+          </span>
+        </div>
+
+        {/* Seats used against the plan's seat limit */}
+        {data.school?.seat_limit != null && (() => {
+          const used = data.school.seats_used ?? 0, lim = data.school.seat_limit;
+          const pct = lim > 0 ? Math.min(100, Math.round((used / lim) * 100)) : 0;
+          const tone = pct >= 90 ? "bg-rose-400" : pct >= 70 ? "bg-amber-400" : "bg-indigo-400";
+          return (
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-bold text-slate-700 dark:text-slate-200">Seats</span>
+                <span className="text-slate-400">{used} of {lim} used · {lim - used} free</span>
+              </div>
+              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+                <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Aggregated plan credits — school-wide usage vs plan allowance (30d) */}
+        {data.ai_usage && data.school?.plan?.monthly_credit_limit > 0 && (() => {
+          const perStudent = data.school.plan.monthly_credit_limit;
+          const allowance = (data.school.seats_used ?? 0) * perStudent;
+          const used = data.ai_usage.credits;
+          const pct = allowance > 0 ? Math.min(100, Math.round((used / allowance) * 100)) : 0;
+          const tone = pct >= 90 ? "bg-rose-400" : pct >= 70 ? "bg-amber-400" : "bg-indigo-400";
+          return (
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-bold text-slate-700 dark:text-slate-200">Plan credits · last {data.ai_usage.days} days</span>
+                <span className="text-slate-400">{used.toLocaleString()} / {allowance.toLocaleString()}</span>
+              </div>
+              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+                <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">{perStudent} credits/student · {data.school.seats_used ?? 0} active seats</p>
+            </div>
+          );
+        })()}
+
+        {data.ai_usage && (
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <Mini label="Active students" value={`${data.ai_usage.active_users}/${c.students ?? 0}`} />
+            <Mini label={`AI actions · ${data.ai_usage.days}d`} value={data.ai_usage.calls} />
+            <Mini label="Credits used" value={data.ai_usage.credits} />
+          </div>
+        )}
+      </Card>
+
       {/* Class performance — class-wise rollup with sections nested inside */}
       <Card className="p-5">
         <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">

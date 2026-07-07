@@ -57,6 +57,18 @@ class User extends Authenticatable
             ->withPivot('relationship')->withTimestamps();
     }
 
+    /* --- Billing --- */
+    public function subscriptions() { return $this->hasMany(Subscription::class); }
+
+    /** The user's currently entitling subscription, if any (latest wins). */
+    public function activeSubscription(): ?Subscription
+    {
+        return $this->subscriptions()
+            ->whereIn('status', Subscription::ENTITLED)
+            ->latest('id')->get()
+            ->first(fn (Subscription $s) => $s->isEntitled());
+    }
+
     /* --- B2B2C org relationships --- */
     public function school()  { return $this->belongsTo(School::class); }
     public function section() { return $this->belongsTo(Section::class); }

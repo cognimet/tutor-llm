@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react";
-import { Search, ChevronRight, ArrowLeft, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X, NotebookPen, Trophy, Compass, Check, Rocket } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import { Search, ChevronRight, ArrowLeft, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X, NotebookPen, Trophy, Compass, Check, Rocket, Zap } from "lucide-react";
 import { Card, Button } from "../../ui/components.jsx";
+import { usageApi } from "../../api/endpoints.js";
 import { tint } from "../../ui/tints.js";
 import CurriculumPicker from "../../ui/CurriculumPicker.jsx";
 
@@ -134,6 +135,9 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
           <Stat icon={Flame} tintName="rose" label="Day streak" value={`${p.streak_days} days`} />
         </div>
       )}
+
+      {/* AI usage insight — daily/monthly credits + top activity */}
+      <StudentUsageCard />
 
       {/* 3. Side-by-side dual pathway gateway */}
       {subjects.length > 0 && (
@@ -400,4 +404,50 @@ function Stat({ icon: Icon, tintName, label, value }) {
 
 function sev(s) {
   return { high: "bg-rose-50 text-rose-600", medium: "bg-amber-50 text-amber-600", low: "bg-emerald-50 text-emerald-600" }[s] || "bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300";
+}
+
+/* Compact "your AI usage" insight — self-contained (fetches its own data). */
+function StudentUsageCard() {
+  const [u, setU] = useState(null);
+  useEffect(() => {
+    usageApi.detail().then(setU).catch(() => setU(null));
+    const onRefresh = () => usageApi.detail().then(setU).catch(() => {});
+    window.addEventListener("usage:refresh", onRefresh);
+    return () => window.removeEventListener("usage:refresh", onRefresh);
+  }, []);
+  if (!u) return null;
+
+  const d = u.summary?.daily || {}, m = u.summary?.monthly || {};
+  const top = (u.by_action || [])[0];
+  const bar = (used, limit) => {
+    const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+    const tone = pct >= 90 ? "bg-rose-400" : pct >= 70 ? "bg-amber-400" : "bg-indigo-400";
+    return (
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+      </div>
+    );
+  };
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between">
+        <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <Zap className="h-4 w-4 text-indigo-500" /> Your AI usage
+        </p>
+        <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-extrabold text-indigo-600">{u.summary?.plan?.name}</span>
+      </div>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div>
+          <div className="flex justify-between text-sm"><span className="font-bold text-slate-700 dark:text-slate-200">Today</span><span className="text-slate-400">{Math.round(d.remaining)} of {d.limit} left</span></div>
+          <div className="mt-1.5">{bar(d.used, d.limit)}</div>
+        </div>
+        <div>
+          <div className="flex justify-between text-sm"><span className="font-bold text-slate-700 dark:text-slate-200">This month</span><span className="text-slate-400">{Math.round(m.remaining)} of {m.limit} left</span></div>
+          <div className="mt-1.5">{bar(m.used, m.limit)}</div>
+        </div>
+      </div>
+      {top && <p className="mt-3 text-xs text-slate-400">Most used: <span className="font-bold text-slate-500 dark:text-slate-300">{top.label}</span> · {top.credits} credits in 30 days</p>}
+    </Card>
+  );
 }

@@ -20,7 +20,9 @@ class ParentController extends Controller
     {
         $parent = $request->user();
 
-        $children = $parent->children()->get()->map(function (User $child) {
+        $meter = app(\App\Services\TokenMeter::class);
+
+        $children = $parent->children()->get()->map(function (User $child) use ($meter) {
             $summary = $this->progress->summary($child);
             return [
                 'id'       => $child->id,
@@ -30,6 +32,7 @@ class ParentController extends Controller
                 'grade'    => $child->grade,
                 'curriculum_path' => $child->curriculum_path,
                 'progress' => $summary,
+                'usage'    => $meter->summary($child),   // plan + daily/monthly credits
             ];
         });
 

@@ -29,6 +29,17 @@ env_put AI_SERVICE_TIMEOUT "${AI_SERVICE_TIMEOUT:-180}"
 env_put FRONTEND_URL   "${FRONTEND_URL:-http://localhost:5173}"
 # Async post-turn processing (signals/graph/summary/decay) runs on the queue.
 env_put QUEUE_CONNECTION "${QUEUE_CONNECTION:-database}"
+# Billing / payments — `php artisan serve` strips env, so persist to .env.
+env_put BILLING_PROVIDER   "${BILLING_PROVIDER:-manual}"
+env_put BILLING_INR_PER_USD "${BILLING_INR_PER_USD:-83}"
+env_put RAZORPAY_KEY_ID    "${RAZORPAY_KEY_ID:-}"
+env_put RAZORPAY_KEY_SECRET "${RAZORPAY_KEY_SECRET:-}"
+env_put RAZORPAY_WEBHOOK_SECRET "${RAZORPAY_WEBHOOK_SECRET:-}"
+env_put PAYPAL_CLIENT_ID   "${PAYPAL_CLIENT_ID:-}"
+env_put PAYPAL_CLIENT_SECRET "${PAYPAL_CLIENT_SECRET:-}"
+env_put PAYPAL_MODE        "${PAYPAL_MODE:-sandbox}"
+env_put PAYPAL_WEBHOOK_ID  "${PAYPAL_WEBHOOK_ID:-}"
+env_put PAYPAL_CURRENCY    "${PAYPAL_CURRENCY:-USD}"
 
 # Block until the Python AI service is accepting connections, so the first-boot
 # `rag:index` doesn't race ahead of it and silently skip embedding (compose only

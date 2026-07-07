@@ -7,60 +7,66 @@ use App\Models\Plan;
 use Illuminate\Database\Seeder;
 
 /**
- * Default plans + model rates. Weights are a product lever: chat stays cheap
- * so the free tier feels generous; expensive actions (assessment generation,
- * notes ingestion) gate toward paid plans.
+ * Plans + model rates — priced to never lose money on Gemini.
+ *
+ * Credit economics (see config/billing.php):
+ *   - 1 credit ≈ ₹0.15 worst-case Gemini cost (chat, the most expensive action,
+ *     with headroom). Weights are set so NO action is cheaper-per-credit than
+ *     chat, so a credit can never cost more than that anchor.
+ *   - Every paid plan's monthly cap is derived as price × 0.30 ÷ ₹0.15, i.e.
+ *     COGS ≤ 30 % of revenue at 100 % utilisation → ≥ 70 % worst-case margin.
+ *   - Free is routed to zero-cost inference (tier=free) and hard-capped, so it
+ *     is a bounded acquisition cost, never a runaway loss.
  */
 class PlanSeeder extends Seeder
 {
     public function run(): void
     {
+        // Re-weighted to real cost: chat is the anchor (1); nothing is cheaper
+        // per credit. notes=2 for vision headroom.
         $weights = [
             'chat'       => 1,
-            'assess_gen' => 3,
+            'assess_gen' => 1,
             'grade'      => 1,
             'gap'        => 1,
             'plan'       => 1,
-            'notes'      => 5,
-            'snap'       => 2,   // snap-a-doubt OCR (local tesseract, cheap)
+            'notes'      => 2,
+            'snap'       => 1,
         ];
 
-        // Generous limits so an exam-crunch student (incl. vision note-reading,
-        // which costs more) isn't cut off mid-revision. Tune down later if needed.
-        Plan::updateOrCreate(['key' => 'free'], [
-            'name' => 'Free',
-            'price_inr' => 0,
-            'daily_credit_limit' => 120,
-            'monthly_credit_limit' => 2500,
-            'per_action_weights' => $weights,
-            'is_active' => true,
-        ]);
+        $base = ['per_action_weights' => $weights, 'is_active' => true];
 
-        Plan::updateOrCreate(['key' => 'plus'], [
-            'name' => 'Plus',
-            'price_inr' => 499,
-            'daily_credit_limit' => 400,
-            'monthly_credit_limit' => 8000,
-            'per_action_weights' => $weights,
-            'is_active' => true,
-        ]);
+        // key => [name, price, period, tier, daily, monthly, public, family_seats, sort]
+        $plans = [
+            ['free',          'Free',            0,    'month', 'free', 30,  300,  true,  null, 0],
+            ['plus',          'Plus',            499,  'month', 'paid', 150, 1000, true,  null, 1],
+            ['plus_annual',   'Plus (annual)',   3999, 'year',  'paid', 150, 1000, true,  null, 2],
+            ['family',        'Family',          899,  'month', 'paid', 200, 1800, true,  5,    3],
+            ['family_annual', 'Family (annual)', 8999, 'year',  'paid', 200, 1800, true,  5,    4],
+            // School = per-seat/year, sold (not self-serve). Cap is per student.
+            ['school',        'School',          999,  'year',  'paid', 40,  165,  false, null, 5],
+        ];
 
-        Plan::updateOrCreate(['key' => 'family'], [
-            'name' => 'Family',
-            'price_inr' => 899,
-            'daily_credit_limit' => 400,
-            'monthly_credit_limit' => 8000,
-            'per_action_weights' => $weights,
-            'is_active' => true,
-        ]);
+        foreach ($plans as [$key, $name, $price, $period, $tier, $daily, $monthly, $public, $seats, $sort]) {
+            Plan::updateOrCreate(['key' => $key], $base + [
+                'name' => $name,
+                'price_inr' => $price,
+                'billing_period' => $period,
+                'tier' => $tier,
+                'daily_credit_limit' => $daily,
+                'monthly_credit_limit' => $monthly,
+                'is_public' => $public,
+                'family_seats' => $seats,
+                'sort_order' => $sort,
+            ]);
+        }
 
-        // Indicative pricing in INR per 1K tokens for the default model of each
-        // supported provider (Gemini / OpenAI / Anthropic) — admin-editable, so
-        // cost accounting works whichever provider the AI service is running.
+        // Indicative ₹/1K-token rates for cost accounting (admin-editable).
         $rates = [
-            'gemini-2.5-flash'  => ['in' => 0.026, 'out' => 0.105],
-            'gpt-4o-mini'       => ['in' => 0.013, 'out' => 0.052],
-            'claude-sonnet-4-5' => ['in' => 0.260, 'out' => 1.300],
+            'gemini-2.5-flash'      => ['in' => 0.026, 'out' => 0.105],
+            'gemini-2.5-flash-lite' => ['in' => 0.010, 'out' => 0.040],
+            'gpt-4o-mini'           => ['in' => 0.013, 'out' => 0.052],
+            'claude-sonnet-4-5'     => ['in' => 0.260, 'out' => 1.300],
         ];
         foreach ($rates as $model => $r) {
             ModelRate::updateOrCreate(

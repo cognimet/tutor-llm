@@ -13,6 +13,7 @@ import NotebookHub from "./NotebookHub.jsx";
 import GamificationDashboard from "./GamificationDashboard.jsx";
 import UserAnalyticsDashboard from "./UserAnalyticsDashboard.jsx";
 import StudentProfile from "./StudentProfile.jsx";
+import PlansScreen from "../billing/PlansScreen.jsx";
 
 export default function StudentApp() {
   const { user, logout, patchUser } = useAuth();
@@ -76,7 +77,7 @@ export default function StudentApp() {
               <Sparkles className="h-4 w-4" /> Insights
             </button>
           )}
-          <CreditMeter />
+          <CreditMeter onUpgrade={() => navigate("/plans")} />
         </div>
       } />}
       {loading ? (
@@ -131,6 +132,7 @@ export default function StudentApp() {
               : <Navigate to="/" replace />
           } />
           <Route path="profile" element={<StudentProfile onBack={backHome} />} />
+          <Route path="plans" element={<PlansScreen onBack={backHome} />} />
           <Route path="insights" element={hasParent ? <Navigate to="/" replace /> : <UserAnalyticsDashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

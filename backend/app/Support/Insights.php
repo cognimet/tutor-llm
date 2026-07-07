@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\ConceptMastery;
 use App\Models\KnowledgeGap;
 use App\Models\ProgressSnapshot;
+use App\Models\TokenLedger;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -120,8 +121,9 @@ class Insights
         $mastery    = self::masteryByUser($ids);
         $gaps       = self::gapAggByUser($ids);
         $topConcept = self::topConceptByUser($ids);
+        $usage      = self::usageByUser($ids);
 
-        $rows = $students->map(function ($s) use ($mastery, $gaps, $topConcept) {
+        $rows = $students->map(function ($s) use ($mastery, $gaps, $topConcept, $usage) {
             $g = $gaps[$s->id] ?? null;
             $m = (int) ($mastery[$s->id] ?? 0);
             $high = (int) ($g->high ?? 0);
@@ -134,6 +136,7 @@ class Insights
                 'last_active' => $s->last_active_date ? Carbon::parse($s->last_active_date)->diffForHumans() : 'never',
                 'active_7d' => $s->last_active_date && Carbon::parse($s->last_active_date)->gte(Carbon::today()->subDays(7)),
                 'streak' => (int) $s->current_streak,
+                'credits_30d' => (int) round((float) ($usage[$s->id]->credits ?? 0)),
                 'at_risk' => self::isAtRisk($m, $high),
             ];
         });
@@ -162,6 +165,7 @@ class Insights
             'topic_mastery' => self::topicMastery($ids),
             'focus'         => $focus ? ['concept' => $focus->concept, 'count' => (int) $focus->c] : null,
             'mastery_trend' => self::masteryTrend($ids),
+            'ai_usage'      => self::usageTotals($ids),
             'students'      => $rows->sortByDesc('mastery')->values(),
             'at_risk'       => $rows->where('at_risk', true)->sortBy('mastery')->values(),
             'top_performers'=> $withData->sortByDesc('mastery')->take(5)->map(fn ($r) => [
@@ -192,6 +196,32 @@ class Insights
                 'at_risk'     => $g->filter(fn ($s) => self::isAtRisk((int) ($mastery[$s->id] ?? 0), (int) (($gaps[$s->id]->high ?? 0))))->count(),
             ];
         })->sortByDesc('avg_mastery')->values();
+    }
+
+    /** AI credits + calls per student over N days: user_id => {credits, calls}. */
+    public static function usageByUser(Collection $ids, int $days = 30): Collection
+    {
+        if ($ids->isEmpty()) return collect();
+        return TokenLedger::whereIn('user_id', $ids)
+            ->where('created_at', '>=', Carbon::now()->subDays($days))
+            ->selectRaw('user_id, SUM(credits_charged) as credits, COUNT(*) as calls')
+            ->groupBy('user_id')->get()->keyBy('user_id');
+    }
+
+    /** Cohort AI-usage totals over N days: {credits, calls, active_users}. */
+    public static function usageTotals(Collection $ids, int $days = 30): array
+    {
+        if ($ids->isEmpty()) return ['credits' => 0, 'calls' => 0, 'active_users' => 0, 'days' => $days];
+        $r = TokenLedger::whereIn('user_id', $ids)
+            ->where('created_at', '>=', Carbon::now()->subDays($days))
+            ->selectRaw('SUM(credits_charged) as credits, COUNT(*) as calls, COUNT(DISTINCT user_id) as active_users')
+            ->first();
+        return [
+            'credits' => (int) round((float) ($r->credits ?? 0)),
+            'calls' => (int) ($r->calls ?? 0),
+            'active_users' => (int) ($r->active_users ?? 0),
+            'days' => $days,
+        ];
     }
 
     /** Is a student "at risk"? Low mastery OR any high-severity open gap. */

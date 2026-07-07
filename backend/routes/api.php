@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\AdminUsageController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AssessmentController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\CurriculumController;
 use App\Http\Controllers\Api\FlashcardController;
 use App\Http\Controllers\Api\LearnerProfileController;
@@ -37,6 +38,7 @@ use Illuminate\Support\Facades\Route;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::get('/curriculum/options', [CurriculumController::class, 'options']); // for the signup selector
+Route::post('/billing/webhook/{provider}', [BillingController::class, 'webhook']); // razorpay|paypal callback (signature-verified)
 
 Route::middleware('auth:sanctum')->group(function () {
     // --- Account (all roles) ---
@@ -44,6 +46,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/me', [AuthController::class, 'updateProfile']);
     Route::post('/me/avatar', [AuthController::class, 'uploadAvatar']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // --- Self-serve billing (any buyer: student, parent, school admin) ---
+    Route::get('/billing/plans', [BillingController::class, 'plans']);
+    Route::get('/billing/subscription', [BillingController::class, 'subscription']);
+    Route::post('/billing/checkout', [BillingController::class, 'checkout']);
+    Route::post('/billing/razorpay/verify', [BillingController::class, 'razorpayVerify']);
+    Route::post('/billing/paypal/capture', [BillingController::class, 'paypalCapture']);
+    Route::post('/billing/cancel', [BillingController::class, 'cancel']);
 
     // --- Curriculum (read for any authed user) ---
     Route::get('/curriculum', [CurriculumController::class, 'index']);
@@ -159,6 +169,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Progress snapshot + credit meter
         Route::get('/progress', [ProgressController::class, 'summary']);
         Route::get('/usage', [UsageController::class, 'me']);
+        Route::get('/usage/detail', [UsageController::class, 'detail']);
     });
 
     // --- Parent features ---
@@ -238,6 +249,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/plans/{plan}', [AdminUsageController::class, 'updatePlan']);
         Route::get('/model-rates', [AdminUsageController::class, 'modelRates']);
         Route::post('/model-rates', [AdminUsageController::class, 'storeModelRate']);
+        Route::get('/billing/margin', [AdminUsageController::class, 'margin']);
 
         // --- Curriculum content (RAG knowledge base) ---
         Route::get('/topics/{topic}/content', [AdminContentController::class, 'index']);

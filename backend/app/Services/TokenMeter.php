@@ -24,13 +24,43 @@ use Illuminate\Support\Facades\DB;
  */
 class TokenMeter
 {
-    /** Resolve the user's plan (null plan_id => the 'free' plan). */
+    /**
+     * Resolve the plan that currently entitles this user, in priority order:
+     *   1. the user's own active subscription
+     *   2. a parent's active *family* subscription (covers linked children)
+     *   3. the user's school plan (schools.plan_id)
+     *   4. the denormalised users.plan_id fallback
+     *   5. Free
+     */
     public function planFor(User $user): Plan
     {
+        // 1. own active subscription
+        if ($sub = $user->activeSubscription()) {
+            return $sub->plan;
+        }
+
+        // 2. family: a parent's active family plan covers their linked children
+        if ($user->role === 'student') {
+            foreach ($user->parents as $parent) {
+                $psub = $parent->activeSubscription();
+                if ($psub && $psub->plan->isFamily()) {
+                    return $psub->plan;
+                }
+            }
+        }
+
+        // 3. school plan
+        if ($user->school_id && $user->school && $user->school->plan_id
+            && ($schoolPlan = Plan::find($user->school->plan_id))) {
+            return $schoolPlan;
+        }
+
+        // 4. explicit user plan
         if ($user->plan_id && ($plan = Plan::find($user->plan_id))) {
             return $plan;
         }
 
+        // 5. free
         return Plan::where('key', 'free')->firstOrFail();
     }
 

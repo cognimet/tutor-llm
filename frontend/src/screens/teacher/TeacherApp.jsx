@@ -313,6 +313,20 @@ function SectionAnalytics({ a, onStudent, hideAssignments }) {
         <Stat icon={Activity} label="Active this week" value={`${k.active_7d ?? 0} / ${k.students ?? 0}`} />
       </div>
 
+      {/* AI usage — how much the class is actually using the tutor (engagement) */}
+      {a.ai_usage && (
+        <Card className="p-5">
+          <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <Activity className="h-4 w-4 text-indigo-500" /> AI tutor usage · last {a.ai_usage.days} days
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            <UsageMini label="Active students" value={`${a.ai_usage.active_users}/${a.kpis?.students ?? 0}`} />
+            <UsageMini label="AI actions" value={a.ai_usage.calls} />
+            <UsageMini label="Credits used" value={a.ai_usage.credits} />
+          </div>
+        </Card>
+      )}
+
       {/* Recommended focus — the single most impactful thing to reteach */}
       {a.focus && (
         <Card className="flex items-center gap-3 border-l-4 border-indigo-400 p-4">
@@ -419,6 +433,7 @@ function SectionAnalytics({ a, onStudent, hideAssignments }) {
             <div key={s.id} onClick={onStudent ? () => onStudent(s.id) : undefined} className={`flex items-center gap-3 rounded-xl border border-slate-100 dark:border-white/10 px-3 py-2 ${clk}`}>
               <span className="min-w-0 flex-1 truncate text-sm font-extrabold text-slate-700 dark:text-slate-200">{s.name}</span>
               <span className="hidden text-xs text-slate-400 sm:inline">{s.open_gaps} gaps</span>
+              {"credits_30d" in s && <span className="hidden text-xs text-indigo-400 sm:inline">⚡{s.credits_30d}</span>}
               <span className="hidden text-xs text-slate-400 sm:inline">🔥 {s.streak}</span>
               <span className="w-16 text-right text-xs text-slate-400">{s.active_7d ? "active" : s.last_active}</span>
               <div className="hidden h-2 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10 sm:block">
@@ -711,6 +726,9 @@ const L = ({ label, children }) => (
 const Stat = ({ icon: Icon, label, value, tone = "text-slate-900 dark:text-white" }) => (
   <Card className="p-4"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-indigo-50 text-indigo-600"><Icon className="h-5 w-5" /></div>
     <p className={`mt-3 text-2xl font-extrabold ${tone}`}>{value}</p><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p></Card>
+);
+const UsageMini = ({ label, value }) => (
+  <div className="rounded-2xl bg-slate-50 dark:bg-white/5 py-2.5"><p className="text-xl font-extrabold text-slate-900 dark:text-white">{value}</p><p className="text-[10px] font-bold uppercase text-slate-400">{label}</p></div>
 );
 const masteryTone = (m) => m >= 80 ? "text-emerald-600" : m >= 50 ? "text-indigo-600" : m > 0 ? "text-rose-500" : "text-slate-400";
 const barTone = (m) => m >= 80 ? "bg-emerald-400" : m >= 50 ? "bg-indigo-400" : "bg-rose-400";

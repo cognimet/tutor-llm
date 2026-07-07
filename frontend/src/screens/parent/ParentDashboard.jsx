@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Backdrop, AppHeader, Card, Spinner, Button } from "../../ui/components.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
-import { parentApi, usageApi } from "../../api/endpoints.js";
+import { parentApi, usageApi, billingApi } from "../../api/endpoints.js";
 import {
   Brain, Target, Flame, ListChecks, ArrowLeft, UserPlus, ChevronRight,
   Zap, AlertTriangle, CheckCircle2, Link2, Eye, EyeOff,
@@ -10,11 +10,13 @@ import {
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import CurriculumPicker from "../../ui/CurriculumPicker.jsx";
 import ChildAnalyticsDashboard from "./ChildAnalyticsDashboard.jsx";
+import PlansScreen from "../billing/PlansScreen.jsx";
 
 export default function ParentDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [children, setChildren] = useState([]);
+  const [sub, setSub] = useState(null);       // parent's own subscription/plan
   const [loading, setLoading] = useState(true);
   const [panel, setPanel] = useState(null); // "add" | "link" | null
   const [email, setEmail] = useState("");
@@ -29,6 +31,7 @@ export default function ParentDashboard() {
   const load = async () => { setChildren(await parentApi.children()); };
 
   useEffect(() => { (async () => { try { await load(); } finally { setLoading(false); } })(); }, []);
+  useEffect(() => { billingApi.subscription().then((r) => setSub(r.subscription)).catch(() => {}); }, []);
 
   const openPanel = (p) => { setMsg(""); setPanel((cur) => (cur === p ? null : p)); };
 
@@ -71,6 +74,7 @@ export default function ParentDashboard() {
         <div className="hidden gap-1 rounded-2xl bg-white/70 p-1 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:ring-white/10 sm:flex">
           <button onClick={() => navigate("/")} className="rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize text-slate-500 dark:text-slate-400">overview</button>
           <button onClick={() => navigate("/insights")} className="rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize text-slate-500 dark:text-slate-400">insights</button>
+          <button onClick={() => navigate("/plans")} className="rounded-xl px-3 py-1.5 text-sm font-extrabold capitalize text-indigo-600">plans</button>
         </div>
       } />
       <div className="mx-auto max-w-6xl px-5 py-8">
@@ -87,6 +91,49 @@ export default function ParentDashboard() {
                 <Button variant="soft" onClick={() => openPanel("link")}><Link2 className="h-4 w-4" /> Link existing</Button>
               </div>
             </div>
+
+            {/* Your plan strip */}
+            <Card className="mt-5 flex flex-col items-center justify-between gap-3 p-4 sm:flex-row">
+              <div className="flex items-center gap-2 text-sm">
+                <Zap className="h-4 w-4 text-indigo-500" />
+                <span className="text-slate-500 dark:text-slate-400">Your plan:</span>
+                <span className="font-extrabold text-slate-900 dark:text-white">{sub?.plan?.name || "Free"}</span>
+                {sub?.plan?.price_inr > 0 && sub?.current_period_end && (
+                  <span className="text-xs text-slate-400">· {sub.cancel_at ? "cancels" : "renews"} {new Date(sub.cancel_at || sub.current_period_end).toLocaleDateString()}</span>
+                )}
+              </div>
+              <button onClick={() => navigate("/plans")} className="text-sm font-extrabold text-indigo-600 hover:underline">
+                {sub?.plan?.price_inr > 0 ? "Manage plan" : "Upgrade to Family →"}
+              </button>
+            </Card>
+
+            {/* Aggregated family usage across all children (this month) */}
+            {children.length > 0 && (() => {
+              const agg = children.reduce((a, c) => {
+                a.used += c.usage?.monthly?.used || 0;
+                a.limit += c.usage?.monthly?.limit || 0;
+                return a;
+              }, { used: 0, limit: 0 });
+              const pct = agg.limit > 0 ? Math.min(100, Math.round((agg.used / agg.limit) * 100)) : 0;
+              const tone = pct >= 90 ? "bg-rose-400" : pct >= 70 ? "bg-amber-400" : "bg-indigo-400";
+              return (
+                <Card className="mt-4 p-5">
+                  <div className="flex items-center justify-between">
+                    <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      <Zap className="h-4 w-4 text-indigo-500" /> Family usage · this month
+                    </p>
+                    <span className="text-xs text-slate-400">across {children.length} {children.length === 1 ? "child" : "children"}</span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+                      <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="shrink-0 text-sm font-extrabold text-slate-700 dark:text-slate-200">{Math.round(agg.used).toLocaleString()} / {agg.limit.toLocaleString()}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">total credits used across the household this month</p>
+                </Card>
+              );
+            })()}
 
             {/* Create a brand-new student account for a child without one yet. */}
             {panel === "add" && (
@@ -163,6 +210,21 @@ export default function ParentDashboard() {
                       <Mini label="Gaps" value={c.progress.open_gaps} />
                       <Mini label="Streak" value={c.progress.streak_days} />
                     </div>
+                    {c.usage?.monthly && (
+                      <div className="mt-4">
+                        <div className="flex items-center justify-between text-[11px] font-bold">
+                          <span className="text-slate-500 dark:text-slate-400">{c.usage.plan?.name || "Free"} · this month</span>
+                          <span className="text-slate-400">{Math.round(c.usage.monthly.used)} / {c.usage.monthly.limit} credits</span>
+                        </div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+                          {(() => {
+                            const pct = c.usage.monthly.limit > 0 ? Math.min(100, Math.round((c.usage.monthly.used / c.usage.monthly.limit) * 100)) : 0;
+                            const tone = pct >= 90 ? "bg-rose-400" : pct >= 70 ? "bg-amber-400" : "bg-indigo-400";
+                            return <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />;
+                          })()}
+                        </div>
+                      </div>
+                    )}
                   </Card>
                 </button>
               ))}
@@ -176,6 +238,7 @@ export default function ParentDashboard() {
           )} />
           <Route path="child/:id" element={<ChildReportRoute />} />
           <Route path="insights" element={<ChildAnalyticsDashboard />} />
+          <Route path="plans" element={<PlansScreen onBack={() => navigate("/")} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

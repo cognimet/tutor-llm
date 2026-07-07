@@ -167,6 +167,7 @@ class SchoolController extends Controller
             'school' => [
                 'id' => $school->id, 'name' => $school->name, 'board' => $school->board,
                 'seat_limit' => $school->seat_limit, 'seats_used' => $school->seatsUsed(),
+                'plan' => $school->plan?->only('key', 'name', 'monthly_credit_limit'),
             ],
             'counts' => [
                 'students' => $students->count(),
@@ -181,6 +182,7 @@ class SchoolController extends Controller
                 'assessments_completed' => Assessment::whereIn('user_id', $ids)->where('status', 'completed')->count(),
             ],
             'engagement'       => $engagement,
+            'ai_usage'         => Insights::usageTotals($ids),
             'gaps'             => Insights::severityTotals($ids),
             'gap_clusters'     => Insights::gapClusters($ids),
             'topic_hotspots'   => Insights::topicGaps($ids),
