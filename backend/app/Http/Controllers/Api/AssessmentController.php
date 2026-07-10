@@ -10,6 +10,7 @@ use App\Services\LearnerProfileService;
 use App\Services\MindService;
 use App\Services\ProgressService;
 use App\Services\ReadinessService;
+use App\Services\TopicProgressService;
 use App\Services\TutorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,7 @@ class AssessmentController extends Controller
         protected ReadinessService $readiness,
         protected LearnerProfileService $profile,
         protected CurriculumResolver $resolver,
+        protected TopicProgressService $topicProgress,
     ) {}
 
     // Soft learning-gate: should the student learn this topic before testing on
@@ -256,12 +258,22 @@ class AssessmentController extends Controller
         // mind — a milestone the AI can semantically recall ("where am I now?").
         try { $this->profile->snapshot($user); } catch (\Throwable) { /* best-effort */ }
 
+        // Roll the topic's progress + completion forward with this new evidence.
+        // Best-effort: a failure here must never break submitting the quiz.
+        $topicProgress = null;
+        try {
+            $topicProgress = $this->topicProgress->present(
+                $this->topicProgress->recordAssessment($user, $assessment)
+            );
+        } catch (\Throwable) { /* best-effort */ }
+
         return response()->json([
             'score'   => $score,
             'total'   => $assessment->total,
             'summary' => $detection['summary'],
             'gaps'    => $user->knowledgeGaps()->where('assessment_id', $assessment->id)->get(),
             'mind'    => $this->mind->mind($user, $assessment->topic_name),
+            'topic_progress' => $topicProgress,
             'review'  => $assessment->questions->map(fn ($q) => [
                 'question'      => $q->question,
                 'options'       => $q->options,

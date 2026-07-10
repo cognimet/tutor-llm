@@ -1,17 +1,17 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   ArrowLeft, Send, Square, ClipboardCheck, Sparkles,
-  Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Plus, MessageSquare,
+  Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, MessageSquare,
   ChevronRight, ChevronDown, Search, X, Volume2, VolumeX, History, ShieldCheck,
   Pencil, MoreVertical, Download, Keyboard, ArrowDown,
   Mic, MicOff, Camera, Maximize2, PenLine,
   Sparkles as SparklesIcon, CalendarClock, Paperclip, ListChecks,
-  FileText, Loader2, HelpCircle, Calculator,
+  FileText, Loader2, HelpCircle, Calculator, PartyPopper, CheckCircle2, Circle,
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
 import CreditMeter from "../../ui/CreditMeter.jsx";
 import { ThemeToggle, UserMenu } from "../../ui/components.jsx";
-import { tutorApi, plannerApi, notesApi } from "../../api/endpoints.js";
+import { tutorApi, plannerApi, notesApi, progressApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
 import Markdown from "../../ui/Markdown.jsx";
 import RichMessage from "../../ui/RichMessage.jsx";
@@ -340,8 +340,7 @@ function ShortcutsOverlay({ onClose }) {
     ["Enter", "Send message"],
     ["Shift + Enter", "New line"],
     [`${MOD} + Enter`, "Send message"],
-    [`${MOD} + J`, "Start a new chat"],
-    [`${MOD} + K`, "Search your chats"],
+    [`${MOD} + K`, "Search your topics"],
     ["↑", "Edit your last question"],
     ["Esc", "Stop generating"],
     ["?", "Show this help"],
@@ -373,6 +372,44 @@ function ShortcutsOverlay({ onClose }) {
 
 /* ----------------------------------------------------------- session list */
 
+// Compact topic progress + "what's left" checklist, pinned under the header so
+// the student always sees their %, remaining steps, and completion.
+function TopicProgressStrip({ pr, t, onCheck, onAsk }) {
+  const done = pr.status === "completed";
+  const c = pr.checklist || {};
+  const steps = [
+    { key: "learned", label: "Learn", ok: c.learned, onClick: onAsk },
+    { key: "practiced", label: "Practice", ok: c.practiced, onClick: onCheck },
+    { key: "mastered", label: "Master", ok: c.mastered, onClick: onCheck },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200/60 bg-white/50 px-3 py-2 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/30 sm:px-4">
+      <div className="flex min-w-[160px] flex-1 items-center gap-2">
+        {done
+          ? <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-extrabold text-emerald-600 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" /> Completed</span>
+          : <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Progress</span>}
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+          <div className={`h-full rounded-full ${done ? "bg-emerald-500" : `bg-gradient-to-r ${t.grad}`}`} style={{ width: `${pr.percent}%` }} />
+        </div>
+        <span className={`shrink-0 text-[11px] font-extrabold ${done ? "text-emerald-600 dark:text-emerald-300" : "text-slate-500 dark:text-slate-300"}`}>{pr.percent}%</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        {steps.map((s) => (
+          <button key={s.key} onClick={s.ok ? undefined : s.onClick}
+            title={s.ok ? `${s.label} — done` : `${s.label} — tap to continue`}
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-extrabold transition-colors ${
+              s.ok
+                ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300"
+                : "bg-slate-100 text-slate-400 hover:text-indigo-600 dark:bg-white/5"
+            }`}>
+            {s.ok ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />} {s.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SessionList({ sessions, sessionId, onPick, t, searchRef }) {
   const [q, setQ] = useState("");
   const filtered = useMemo(() => {
@@ -392,7 +429,7 @@ function SessionList({ sessions, sessionId, onPick, t, searchRef }) {
           ref={searchRef}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search chats"
+          placeholder="Search topics"
           className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-800/60 py-2 pl-8 pr-3 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none placeholder:font-bold placeholder:text-slate-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
         />
       </div>
@@ -400,7 +437,7 @@ function SessionList({ sessions, sessionId, onPick, t, searchRef }) {
       <div className="mt-2 min-h-0 flex-1 space-y-3 overflow-y-auto pr-0.5">
         {filtered.length === 0 && (
           <p className="px-2 py-6 text-center text-xs text-slate-400">
-            {sessions.length === 0 ? "Your chats will appear here." : "No chats match that search."}
+            {sessions.length === 0 ? "Your topics will appear here." : "No topics match that search."}
           </p>
         )}
         {groups.map(([label, items]) => (
@@ -536,6 +573,9 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
   const [mode, setMode] = useState(initial?.quest_style || "teach");
   const [streaming, setStreaming] = useState(false);
   const [assessing, setAssessing] = useState(false);
+  // Live per-topic progress + completion (drives the header bar/checklist).
+  const [topicProg, setTopicProg] = useState(null);
+  const [celebrate, setCelebrate] = useState(false); // one-time "topic complete!" toast
   const [sessions, setSessions] = useState([]);
   const [copiedId, setCopiedId] = useState(null);
   const [speakingId, setSpeakingId] = useState(null);
@@ -601,6 +641,26 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
     if (!id) return;
     try { setMind(await tutorApi.mind(id)); } catch { /* ignore */ }
   }, []);
+
+  // Pull this topic's progress + completion; fire the celebration once the topic
+  // flips to Completed.
+  const loadTopicProgress = useCallback(async () => {
+    try {
+      const params = ctx.topic_id ? { topic_id: ctx.topic_id } : { topic_name: ctx.topic_name };
+      const pr = await progressApi.topic(params);
+      setTopicProg((prev) => {
+        if (pr?.status === "completed" && prev && prev.status !== "completed") setCelebrate(true);
+        return pr;
+      });
+    } catch { /* ignore */ }
+  }, [ctx.topic_id, ctx.topic_name]);
+
+  // Auto-dismiss the "topic complete!" celebration.
+  useEffect(() => {
+    if (!celebrate) return;
+    const id = setTimeout(() => setCelebrate(false), 5000);
+    return () => clearTimeout(id);
+  }, [celebrate]);
 
   // Re-hydrate the storybook's gate attempts + progressive reveals for a session,
   // so cleared checkpoints and revealed cards stay put across refresh / revisits.
@@ -724,6 +784,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
     })();
     loadSessions();
     loadGuide();
+    loadTopicProgress();
     setAttached([]); // don't carry attachments across topics
     setActiveDiagram(null); // the visual viewer belongs to one topic's diagrams
     return () => { alive = false; abortRef.current?.abort(); stopSpeaking(); };
@@ -820,7 +881,6 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
         } else setDrawerOpen(true);
         return;
       }
-      if (mod && e.key.toLowerCase() === "j") { e.preventDefault(); newChat(); return; }
       if (isTyping(e.target)) return;
       if (e.key === "?") { e.preventDefault(); setShowShortcuts(true); }
     };
@@ -872,6 +932,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
         setLast((last) => ({ ...last, id: meta.id, created_at: meta.created_at, pending: false }));
         setStreaming(false);
         loadSessions();
+        loadTopicProgress();
         onProgressChange?.();
       },
       onError: (msg) => {
@@ -1084,29 +1145,6 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
     } finally { setBooting(false); }
   };
 
-  const newChat = async () => {
-    setDrawerOpen(false);
-    setMenuOpen(false);
-    abortRef.current?.abort();
-    stopSpeaking();
-    setStreaming(false);
-    setActiveDiagram(null);
-    setBooting(true);
-    try {
-      const s = await tutorApi.start({
-        topic_id: ctx.topic_id, topic_name: ctx.topic_name,
-        chapter_name: ctx.chapter_name, subject_name: ctx.subject_name,
-        selected_note_ids: ctx.selected_note_ids || [], fresh: true,
-        quest_style: ctx.quest_style, tutor_vibe: ctx.tutor_vibe,
-      });
-      setSessionId(s.id);
-      setMessages(s.messages || []);
-      setInput(loadDraft(s.id));
-      loadMind(s.id);
-      loadSessions();
-    } finally { setBooting(false); }
-  };
-
   const copy = async (text, id) => {
     try { await navigator.clipboard.writeText(text); setCopiedId(id); setTimeout(() => setCopiedId(null), 1500); } catch { /* */ }
   };
@@ -1297,7 +1335,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
               </button>
             )}
             <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-slate-200 dark:bg-white/10 sm:block" />
-            <button onClick={() => toggleSide("chats")} title="Recent chats"
+            <button onClick={() => toggleSide("chats")} title="Your topics"
               className={headerToggle(sideOpen && sidePanel === "chats")}>
               <History className="h-5 w-5" />
             </button>
@@ -1310,9 +1348,6 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
               </button>
               {menuOpen && (
                 <div className="msg-in absolute right-0 top-11 z-20 w-56 overflow-hidden rounded-2xl border border-slate-100 dark:border-white/10 bg-white dark:bg-slate-800 p-1.5 shadow-xl">
-                  <button onClick={newChat} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">
-                    <Plus className="h-4 w-4 text-slate-400" /> New chat
-                  </button>
                   <button onClick={renameChat} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">
                     <Pencil className="h-4 w-4 text-slate-400" /> Rename chat
                   </button>
@@ -1352,6 +1387,16 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
                 </span>
               ))}
             </div>
+          )}
+
+          {/* Topic progress + completion — always shows the student where they are,
+              what's left, and celebrates completion. */}
+          {topicProg && (
+            <TopicProgressStrip
+              pr={topicProg} t={t}
+              onCheck={() => setAssessing(true)}
+              onAsk={() => taRef.current?.focus()}
+            />
           )}
 
           <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
@@ -1624,7 +1669,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
             <p className="flex flex-1 items-center gap-1.5 px-1 text-xs font-extrabold text-slate-600 dark:text-slate-300">
               {sidePanel === "checklist"
                 ? <><ListChecks className="h-4 w-4 text-indigo-500" /> My study plan</>
-                : <><History className="h-4 w-4 text-indigo-500" /> Recent chats</>}
+                : <><History className="h-4 w-4 text-indigo-500" /> Your topics</>}
             </p>
             <button onClick={() => setSideOpen(false)} title="Hide panel"
               className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 ring-1 ring-slate-200 transition-colors hover:text-slate-600 dark:text-slate-300 dark:ring-white/10">
@@ -1638,10 +1683,7 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
               <NotesChecklist topicName={ctx.topic_name} chapterName={ctx.chapter_name} subjectName={ctx.subject_name || ctx.topic_name} noteIds={ctx.selected_note_ids || []} grad={t.grad} onPrompt={(text) => send(text)} refreshKey={checklistRefresh} />
             ) : (
               <>
-                <button onClick={newChat} className={`mb-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.98]`}>
-                  <Plus className="h-4 w-4" /> New chat
-                  <span className="ml-auto hidden rounded-md bg-white/20 px-1.5 py-0.5 text-[10px] font-extrabold xl:inline">{MOD} J</span>
-                </button>
+                <p className="mb-2 px-1 text-[11px] font-bold text-slate-400">Jump between the topics you're learning.</p>
                 <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} searchRef={searchRef} />
               </>
             )}
@@ -1656,14 +1698,11 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
           <div className="drawer-in absolute inset-y-0 left-0 flex w-[86%] max-w-sm flex-col gap-3 bg-gradient-to-b from-slate-50 to-indigo-50/60 p-4 shadow-2xl dark:from-slate-900 dark:to-slate-950">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-extrabold text-slate-700 dark:text-slate-200">Chat history</p>
+              <p className="text-sm font-extrabold text-slate-700 dark:text-slate-200">Your topics</p>
               <button onClick={() => setDrawerOpen(false)} className="grid h-8 w-8 place-items-center rounded-xl text-slate-500 ring-1 ring-slate-200 dark:ring-white/10">
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <button onClick={newChat} className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-br ${t.grad} px-3 py-2.5 text-sm font-extrabold text-white shadow-md`}>
-              <Plus className="h-4 w-4" /> New chat
-            </button>
             <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/60 dark:border-white/10 bg-white/70 p-3 backdrop-blur-sm">
               <SessionList sessions={sessions} sessionId={sessionId} onPick={switchSession} t={t} />
             </div>
@@ -1709,13 +1748,27 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
 
       {showShortcuts && <ShortcutsOverlay onClose={() => setShowShortcuts(false)} />}
 
+      {/* One-time celebration when the topic just hit Completed */}
+      {celebrate && (
+        <div className="msg-in fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 px-5 py-3 text-white shadow-2xl shadow-emerald-500/30">
+          <PartyPopper className="h-6 w-6" />
+          <div>
+            <p className="text-sm font-extrabold">Topic completed! 🎉</p>
+            <p className="text-[11px] font-bold text-white/80">You learned it, practiced it, and mastered it.</p>
+          </div>
+          <button onClick={() => setCelebrate(false)} className="ml-2 grid h-7 w-7 place-items-center rounded-lg bg-white/20 hover:bg-white/30">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {assessing && (
         <AssessmentFlow
           topicName={ctx.topic_name}
           topicId={ctx.topic_id}
           sessionId={sessionId}
-          onClose={() => { setAssessing(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); }}
-          onSeeWork={() => { setAssessing(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); setStudyTab("fix"); }}
+          onClose={() => { setAssessing(false); loadMind(sessionId); loadGuide(); loadTopicProgress(); onProgressChange?.(); }}
+          onSeeWork={() => { setAssessing(false); loadMind(sessionId); loadGuide(); loadTopicProgress(); onProgressChange?.(); setStudyTab("fix"); }}
         />
       )}
 
@@ -1726,8 +1779,8 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
           topicId={ctx.topic_id}
           sessionId={sessionId}
           scope="exam"
-          onClose={() => { setBigAssess(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); }}
-          onSeeWork={() => { setBigAssess(false); loadMind(sessionId); loadGuide(); onProgressChange?.(); setStudyTab("fix"); }}
+          onClose={() => { setBigAssess(false); loadMind(sessionId); loadGuide(); loadTopicProgress(); onProgressChange?.(); }}
+          onSeeWork={() => { setBigAssess(false); loadMind(sessionId); loadGuide(); loadTopicProgress(); onProgressChange?.(); setStudyTab("fix"); }}
         />
       )}
 

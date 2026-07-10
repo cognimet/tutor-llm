@@ -200,7 +200,9 @@ export const mistakesApi = {
 export const assessmentApi = {
   // Soft learning-gate: { learned, mastery, recommend_learn, reason }.
   readiness: (params) => api.get("/assessments/readiness", { params }).then((r) => r.data),
-  generate: (payload) => api.post("/assessments/generate", payload, { timeout: 200000 }).then((r) => r.data.assessment),
+  // `config` lets the caller pass an AbortController signal so closing the quiz
+  // modal mid-generation cancels the request instead of orphaning an assessment.
+  generate: (payload, config = {}) => api.post("/assessments/generate", payload, { timeout: 200000, ...config }).then((r) => r.data.assessment),
   submit: (id, answers) => api.post(`/assessments/${id}/submit`, { answers }, { timeout: 120000 }).then((r) => r.data),
   history: () => api.get("/assessments/history").then((r) => r.data.assessments),
 };
@@ -215,6 +217,11 @@ export const planApi = {
 // --- Student: progress ---
 export const progressApi = {
   summary: () => api.get("/progress").then((r) => r.data),
+  // Per-topic progress map for the subject browser + "continue learning" list.
+  // → { topics: { "id:12": {...}, "name:Foo": {...} }, in_progress: [...] }
+  topics: () => api.get("/progress/topics").then((r) => r.data),
+  // A single active topic's progress (tutor-chat header).
+  topic: (params) => api.get("/progress/topic", { params }).then((r) => r.data.progress),
 };
 
 // --- AI usage / credits (students see credits, never raw tokens) ---

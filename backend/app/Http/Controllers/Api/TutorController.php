@@ -13,6 +13,7 @@ use App\Services\EventTracker;
 use App\Services\MindService;
 use App\Services\ProgressService;
 use App\Services\TokenMeter;
+use App\Services\TopicProgressService;
 use App\Services\TutorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -32,7 +33,15 @@ class TutorController extends Controller
         protected TokenMeter $meter,
         protected EventTracker $events,
         protected CurriculumResolver $resolver,
+        protected TopicProgressService $topicProgress,
     ) {}
+
+    /** Roll a topic's Learn progress forward after a completed turn (best-effort). */
+    protected function bumpTopicProgress($user, ChatSession $session): void
+    {
+        try { $this->topicProgress->recordChatTurn($user, $session); }
+        catch (\Throwable) { /* progress is a cache — never break the chat turn */ }
+    }
 
     // List the student's chat sessions (most recent first).
     // Accepts an optional ?topic_id= query param to scope results to one topic.
@@ -80,12 +89,17 @@ class TutorController extends Controller
         $tutorVibe  = $data['tutor_vibe'] ?? null;
 
         if (empty($data['fresh'])) {
+            // One persistent chat per topic: resume the richest existing thread
+            // (most messages), so legacy duplicates never strand a student on an
+            // empty session. Newest wins ties.
             $existing = $request->user()->chatSessions()
                 ->when(
                     ! empty($data['topic_id']),
                     fn ($q) => $q->where('topic_id', $data['topic_id']),
                     fn ($q) => $q->where('topic_name', $data['topic_name'])->whereNull('topic_id'),
                 )
+                ->withCount('messages')
+                ->orderByDesc('messages_count')
                 ->orderByDesc('id')
                 ->first();
 
@@ -219,6 +233,7 @@ class TutorController extends Controller
         $message = $session->messages()->create(['role' => 'tutor', 'content' => $reply]);
         $session->update(['last_message_at' => now()]);
         $this->progress->recordActivity($user, topicsStudied: 0, questionsAnswered: 0);
+        $this->bumpTopicProgress($user, $session);
 
         // Same post-turn processing as the streaming path: extract mind signals,
         // mirror state to the graph, and log the action (previously skipped here).
@@ -412,6 +427,7 @@ class TutorController extends Controller
             $message = $session->messages()->create(['role' => 'tutor', 'content' => $full]);
             $session->update(['last_message_at' => now()]);
             $this->progress->recordActivity($user, topicsStudied: 0, questionsAnswered: 0);
+            $this->bumpTopicProgress($user, $session);
 
             $emit('done', ['id' => $message->id, 'created_at' => $message->created_at->toIso8601String()]);
 

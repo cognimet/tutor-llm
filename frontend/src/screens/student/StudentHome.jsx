@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Search, ChevronRight, ArrowLeft, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X, NotebookPen, Trophy, Compass, Check, Rocket, Zap } from "lucide-react";
+import { Search, ChevronRight, ArrowLeft, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X, NotebookPen, Trophy, Compass, Check, Rocket, Zap, CheckCircle2, PlayCircle } from "lucide-react";
 import { Card, Button } from "../../ui/components.jsx";
-import { usageApi } from "../../api/endpoints.js";
+import { usageApi, progressApi } from "../../api/endpoints.js";
 import { tint } from "../../ui/tints.js";
 import CurriculumPicker from "../../ui/CurriculumPicker.jsx";
 
@@ -9,6 +9,19 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
   const [active, setActive] = useState(null);
   const [q, setQ] = useState("");
   const [picking, setPicking] = useState(false);
+
+  // Per-topic progress + completion (keyed "id:{id}" and "name:{name}").
+  const [topicProg, setTopicProg] = useState({ map: {}, inProgress: [] });
+  useEffect(() => {
+    const load = () => progressApi.topics()
+      .then((d) => setTopicProg({ map: d.topics || {}, inProgress: d.in_progress || [] }))
+      .catch(() => {});
+    load();
+    window.addEventListener("progress:refresh", load);
+    return () => window.removeEventListener("progress:refresh", load);
+  }, []);
+  // Look a topic's progress up by id first, then name.
+  const progOf = (topic) => topicProg.map[`id:${topic.id}`] || topicProg.map[`name:${topic.name}`] || null;
 
   // Topic checkbox multi-select for syllabus study (no configurator popup).
   const [selectedIds, setSelectedIds] = useState(new Set()); // selected topic ids (multi-select)
@@ -26,6 +39,25 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
 
   const p = progress?.progress;
   const grad = subject ? tint(subject.tint).grad : "from-indigo-500 to-violet-500";
+
+  // Relaunch an in-progress topic straight into its (single) tutor chat.
+  const resumeTopic = (pr) => {
+    const subj = subjects.find((s) => s.name === pr.subject_name);
+    onOpenTopic({
+      subject_id: subj?.id,
+      subject_name: pr.subject_name || subj?.name || pr.topic_name,
+      name: pr.subject_name || subj?.name || pr.topic_name,
+      tint: subj?.tint,
+      emoji: subj?.emoji,
+      from_notes: false,
+      selected_note_ids: [],
+      quest_style: "teach",
+      tutor_vibe: "coach",
+      topic_id: pr.topic_id || null,
+      topic_name: pr.topic_name,
+      chapter_name: pr.chapter_name || null,
+    });
+  };
 
   // Checkbox multi-select helpers, mirroring the Notes-list design.
   const toggleSelect = (topicId) => {
@@ -136,6 +168,33 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
         </div>
       )}
 
+      {/* Continue where you left off — in-progress topics with live % */}
+      {topicProg.inProgress.length > 0 && (
+        <div>
+          <p className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-slate-400">
+            <PlayCircle className="h-4 w-4 text-indigo-500" /> Continue learning
+          </p>
+          <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
+            {topicProg.inProgress.map((pr) => (
+              <button key={`${pr.topic_id}:${pr.topic_name}`} onClick={() => resumeTopic(pr)}
+                className="group w-60 shrink-0 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/5 dark:bg-slate-800">
+                <p className="truncate text-sm font-extrabold text-slate-800 dark:text-slate-100">{pr.topic_name}</p>
+                <p className="mt-0.5 truncate text-[11px] font-bold text-slate-400">{pr.subject_name || "Study"}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+                    <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500" style={{ width: `${pr.percent}%` }} />
+                  </div>
+                  <span className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-300">{pr.percent}%</span>
+                </div>
+                <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-extrabold text-slate-400 transition-colors group-hover:text-indigo-600">
+                  Resume <ChevronRight className="h-3 w-3" />
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* AI usage insight — daily/monthly credits + top activity */}
       <StudentUsageCard />
 
@@ -214,12 +273,24 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
               {subjects.map((s) => {
                 const t = tint(s.tint);
                 const n = s.chapters.reduce((a, c) => a + c.topics.length, 0);
+                const subjTopics = s.chapters.flatMap((c) => c.topics);
+                const subjPct = subjTopics.length
+                  ? Math.round(subjTopics.reduce((a, tp) => a + (progOf(tp)?.percent || 0), 0) / subjTopics.length)
+                  : 0;
                 return (
                   <button key={s.id} onClick={() => { setActive(s.id); setSelectedIds(new Set()); setQ(""); }}
                     className="group relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:border-white/5 dark:bg-slate-800">
                     <div className={`grid h-12 w-12 place-items-center rounded-2xl text-2xl ${t.soft}`}>{s.emoji}</div>
                     <h3 className="mt-4 text-lg font-extrabold text-slate-900 dark:text-white">{s.name}</h3>
                     <p className="mt-1 line-clamp-2 text-xs text-slate-400">{s.blurb}</p>
+                    {subjPct > 0 && (
+                      <div className="mt-4 flex items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+                          <div className={`h-full rounded-full bg-gradient-to-r ${t.grad}`} style={{ width: `${subjPct}%` }} />
+                        </div>
+                        <span className="text-[10px] font-extrabold text-slate-400">{subjPct}%</span>
+                      </div>
+                    )}
                     <div className="mt-5 flex items-center justify-between border-t border-slate-50 pt-4 dark:border-white/5">
                       <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold ${t.soft} ${t.text}`}>
                         {s.chapters.length} ch · {n} topics
@@ -264,12 +335,18 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
               {filtered.map((ch) => {
                 const chTopicIds = ch.topics.map((t) => t.id);
                 const chAllChecked = chTopicIds.length > 0 && chTopicIds.every((id) => selectedIds.has(id));
+                const chDone = ch.topics.filter((t) => progOf(t)?.status === "completed").length;
                 return (
                   <div key={ch.id} className="rounded-2xl border border-slate-100 bg-white/50 p-5 dark:border-white/5 dark:bg-slate-800/30">
                     <div className="mb-4 flex items-center justify-between">
                       <h3 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-slate-400">
                         <span className={`h-2 w-2 rounded-full ${tint(subject.tint).dot}`} />
                         {ch.name}
+                        {chDone > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-extrabold normal-case tracking-normal text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
+                            <CheckCircle2 className="h-3 w-3" /> {chDone}/{ch.topics.length} done
+                          </span>
+                        )}
                       </h3>
                       <button onClick={() => toggleChapter(ch)} className="text-[10px] font-extrabold text-slate-400 transition-colors hover:text-emerald-600">
                         {chAllChecked ? "Deselect chapter" : "Select chapter"}
@@ -279,32 +356,37 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {ch.topics.map((topic) => {
                         const isSelected = selectedIds.has(topic.id);
+                        const pr = progOf(topic);
+                        const done = pr?.status === "completed";
                         return (
                           <div key={topic.id}
                             onClick={() => toggleSelect(topic.id)}
-                            className={`group flex cursor-pointer items-center justify-between gap-3 rounded-2xl border p-4 text-left shadow-sm transition-all ${
+                            className={`group flex cursor-pointer flex-col gap-2.5 rounded-2xl border p-4 text-left shadow-sm transition-all ${
                               isSelected
                                 ? "border-emerald-500 bg-emerald-50/20 dark:border-emerald-400 dark:bg-emerald-500/10"
                                 : "border-slate-100 bg-white hover:border-slate-200 dark:border-white/5 dark:bg-slate-800"
                             }`}>
-                            <div className="flex min-w-0 items-center gap-2.5">
-                              {/* Sleek multi-selection checkbox matching the Notes list */}
-                              <div className={`grid h-5 w-5 shrink-0 place-items-center rounded-lg border transition-all duration-150 ${
-                                isSelected
-                                  ? "border-emerald-500 bg-emerald-500 text-white"
-                                  : "border-slate-300 bg-slate-50 dark:border-white/10 dark:bg-slate-900"
-                              }`}>
-                                {isSelected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                {/* Sleek multi-selection checkbox matching the Notes list */}
+                                <div className={`grid h-5 w-5 shrink-0 place-items-center rounded-lg border transition-all duration-150 ${
+                                  isSelected
+                                    ? "border-emerald-500 bg-emerald-500 text-white"
+                                    : "border-slate-300 bg-slate-50 dark:border-white/10 dark:bg-slate-900"
+                                }`}>
+                                  {isSelected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                                </div>
+                                <span className={`truncate text-sm font-extrabold ${isSelected ? "text-emerald-700 dark:text-emerald-300" : "text-slate-700 group-hover:text-emerald-600 dark:text-slate-100"}`}>
+                                  {topic.name}
+                                </span>
                               </div>
-                              <span className={`truncate text-sm font-extrabold ${isSelected ? "text-emerald-700 dark:text-emerald-300" : "text-slate-700 group-hover:text-emerald-600 dark:text-slate-100"}`}>
-                                {topic.name}
+                              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-xl transition-all ${
+                                done ? "bg-emerald-500 text-white" : isSelected ? "bg-emerald-500 text-white" : "bg-slate-50 text-slate-400 group-hover:bg-slate-100"
+                              }`}>
+                                {done ? <CheckCircle2 className="h-4 w-4" /> : <Compass className="h-3.5 w-3.5" />}
                               </span>
                             </div>
-                            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-xl transition-all ${
-                              isSelected ? "bg-emerald-500 text-white" : "bg-slate-50 text-slate-400 group-hover:bg-slate-100"
-                            }`}>
-                              <Compass className="h-3.5 w-3.5" />
-                            </span>
+                            <TopicProgressRow pr={pr} />
                           </div>
                         );
                       })}
@@ -387,6 +469,29 @@ function ChangeCurriculumModal({ currentLevelId, onClose, onSetLevel }) {
           <Button onClick={save} disabled={!sel || busy}>{busy ? "Saving…" : "Save"}</Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Per-topic status line inside a topic card: Not started / bar+% / ✅ Completed.
+function TopicProgressRow({ pr }) {
+  const status = pr?.status || "not_started";
+  if (status === "completed") {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-emerald-600 dark:text-emerald-300">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Completed
+      </div>
+    );
+  }
+  if (status === "not_started" || !pr?.percent) {
+    return <p className="text-[11px] font-bold text-slate-300 dark:text-slate-500">Not started</p>;
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+        <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500" style={{ width: `${pr.percent}%` }} />
+      </div>
+      <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-300">{pr.percent}%</span>
     </div>
   );
 }

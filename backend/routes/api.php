@@ -168,6 +168,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Progress snapshot + credit meter
         Route::get('/progress', [ProgressController::class, 'summary']);
+        // Per-topic progress + completion (subject browser map + active topic).
+        Route::get('/progress/topics', [ProgressController::class, 'topics']);
+        Route::get('/progress/topic', [ProgressController::class, 'topic']);
         Route::get('/usage', [UsageController::class, 'me']);
         Route::get('/usage/detail', [UsageController::class, 'detail']);
     });
