@@ -16,7 +16,8 @@ class TopicProgress extends Model
     protected $fillable = [
         'user_id', 'topic_id', 'topic_name', 'subject_name', 'chapter_name',
         'status', 'percent',
-        'chat_turns', 'assessments_taken', 'best_score_pct', 'mastery_pct',
+        'chat_turns', 'concepts_covered', 'concepts_passed',
+        'assessments_taken', 'games_played', 'best_score_pct', 'best_game_pct', 'mastery_pct',
         'completed_at', 'last_activity_at',
     ];
 

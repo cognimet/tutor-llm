@@ -245,6 +245,24 @@ class AiClient
             fn ($i) => $i >= 0 && $i < count($questions)));
     }
 
+    /**
+     * Fill a game template's content contract for a topic (quest engine, Engine 2).
+     *
+     * The AI service assembles the renderable structure and drops any item that
+     * fails its own validator, so this can legitimately return fewer items than
+     * requested — or none. Callers MUST re-validate before persisting; the LLM's
+     * output is never trusted (see {@see \App\Services\Quest\GameValidator}).
+     *
+     * @param  array $payload  ['mechanic','topic','chapter','subject','difficulty','count']
+     * @return array<int,array{prompt:string,answer:string,distractors:array,hint:string,params:array}>
+     */
+    public function authorGame(array $payload): array
+    {
+        $data = $this->post('/ai/game/author', array_filter($payload, fn ($v) => $v !== null));
+        $this->captureUsage($data);
+        return is_array($data['items'] ?? null) ? $data['items'] : [];
+    }
+
     /** Build a dated study schedule -> {title, summary, tasks:[...]}. */
     public function studySchedule(array $payload): array
     {

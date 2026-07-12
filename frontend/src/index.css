@@ -177,8 +177,78 @@ h1, h2, h3, .font-display {
   100% { box-shadow: 0 0 16px #10b981, inset 0 0 3px #10b981; }
 }
 
+/* ------------------------------------------------------------------ */
+/* Accessibility preferences — classes applied on <html> by ui/a11y.js */
+/* (and before first paint by index.html).                            */
+/* ------------------------------------------------------------------ */
+/* Larger text: scale the rem root so every Tailwind size follows.    */
+html.font-lg { font-size: 112.5%; }
+html.font-xl { font-size: 125%; }
+
+/* Dyslexia-friendly reading: rounded, unambiguous letterforms with    */
+/* wider spacing. Uses faces present on-device (no network font).      */
+html.dyslexic body,
+html.dyslexic button,
+html.dyslexic input,
+html.dyslexic textarea,
+html.dyslexic select {
+  font-family: "Comic Sans MS", "Comic Sans", "Chalkboard SE", Verdana, sans-serif !important;
+  letter-spacing: 0.02em;
+  word-spacing: 0.08em;
+}
+
+/* High contrast: push text/border contrast up across both themes.     */
+html.high-contrast body { filter: contrast(1.22); }
+
+/* Quest games — childlike juice. Tiles pop in, correct answers tada, confetti falls. */
+@keyframes game-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  70%  { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.game-pop { animation: game-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+@keyframes game-drop {
+  from { transform: translateY(-14px) scale(0.9); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+.game-drop { animation: game-drop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+@keyframes game-tada {
+  0%          { transform: scale(1); }
+  15%, 30%    { transform: scale(0.92) rotate(-4deg); }
+  45%, 75%    { transform: scale(1.12) rotate(4deg); }
+  60%, 90%    { transform: scale(1.12) rotate(-4deg); }
+  100%        { transform: scale(1); }
+}
+.game-tada { animation: game-tada 0.8s ease-in-out; }
+
+@keyframes game-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+.game-bounce { animation: game-bounce 1.4s ease-in-out infinite; }
+
+@keyframes game-blank-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+.game-blank-pulse { animation: game-blank-pulse 1.2s ease-in-out infinite; }
+
+@keyframes confetti-fall {
+  0%   { transform: translate3d(0, -5%, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0px), 480px, 0) rotate(720deg); opacity: 0; }
+}
+.confetti-piece {
+  position: absolute;
+  top: -12px;
+  pointer-events: none;
+  animation: confetti-fall linear both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .msg-in, .drawer-in, .drawer-in-right, .thinking i, .md-stream > :last-child::after,
   .auth-rise, .auth-float, .tuto-bob, .tuto-spin, .tuto-breathe,
-  .animate-shake, .anchor-flash, .animate-slide-up, .animate-wiggle, .timeline-glow-node { animation: none; }
+  .animate-shake, .anchor-flash, .animate-slide-up, .animate-wiggle, .timeline-glow-node,
+  .game-pop, .game-drop, .game-tada, .game-bounce, .game-blank-pulse, .confetti-piece { animation: none; }
 }

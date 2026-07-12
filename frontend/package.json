@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/baloo-2": "^5.2.7",
+    "@fontsource/nunito": "^5.2.7",
     "axios": "^1.7.2",
     "dompurify": "^3.4.8",
     "katex": "^0.17.0",

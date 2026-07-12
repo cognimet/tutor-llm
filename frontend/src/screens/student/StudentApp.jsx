@@ -13,7 +13,9 @@ import NotebookHub from "./NotebookHub.jsx";
 import GamificationDashboard from "./GamificationDashboard.jsx";
 import UserAnalyticsDashboard from "./UserAnalyticsDashboard.jsx";
 import StudentProfile from "./StudentProfile.jsx";
+import QuestMap from "./quest/QuestMap.jsx";
 import PlansScreen from "../billing/PlansScreen.jsx";
+import TopicSearch from "../../ui/TopicSearch.jsx";
 
 export default function StudentApp() {
   const { user, logout, patchUser } = useAuth();
@@ -68,6 +70,8 @@ export default function StudentApp() {
   return (
     <div className={isChat ? "h-screen" : "min-h-screen"}>
       <Backdrop />
+      {/* Cmd/Ctrl-K: jump to any topic's chat. Chat-mode (Class 9+) only. */}
+      {user.learning_mode !== "game" && <TopicSearch subjects={subjects} onOpenTopic={openTopic} />}
       {/* Chat has its own single, combined header — skip the global bar there. */}
       {!isChat && <AppHeader user={user} onLogout={logout} onProfile={() => navigate("/profile")} onHome={backHome} right={
         <div className="flex items-center gap-2">
@@ -85,17 +89,29 @@ export default function StudentApp() {
       ) : (
         <Routes>
           <Route index element={
-            <StudentHome
-              user={user}
-              path={curriculum.path}
-              subjects={subjects}
-              progress={progress}
-              onOpenTopic={openTopic}
-              onOpenNotebooks={() => navigate("/notebooks")}
-              onOpenRewards={() => navigate("/rewards")}
-              onRefresh={loadProgress}
-              onSetLevel={setLevel}
-            />
+            // Below Class 9 → the gamified quest IS the home; Class 9+ → the
+            // conversational tutor's subject browser. Driven by the student's
+            // grade (backend: User::learningMode → user.learning_mode).
+            user.learning_mode === "game" ? (
+              <QuestMap
+                home
+                user={user}
+                onOpenRewards={() => navigate("/rewards")}
+                onOpenNotebooks={() => navigate("/notebooks")}
+              />
+            ) : (
+              <StudentHome
+                user={user}
+                path={curriculum.path}
+                subjects={subjects}
+                progress={progress}
+                onOpenTopic={openTopic}
+                onOpenNotebooks={() => navigate("/notebooks")}
+                onOpenRewards={() => navigate("/rewards")}
+                onRefresh={loadProgress}
+                onSetLevel={setLevel}
+              />
+            )
           } />
           <Route path="notebooks" element={
             <NotebookHub
@@ -130,6 +146,11 @@ export default function StudentApp() {
             session
               ? <TutorChat user={user} session={session} onBack={backHome} onLogout={logout} onProfile={() => navigate("/profile")} onProgressChange={loadProgress} />
               : <Navigate to="/" replace />
+          } />
+          {/* Games are for game-mode students only (K–Class 5). A chat-mode
+              student (6+) has no gaming system — block the route by URL too. */}
+          <Route path="quest" element={
+            user.learning_mode === "game" ? <QuestMap onBack={backHome} /> : <Navigate to="/" replace />
           } />
           <Route path="profile" element={<StudentProfile onBack={backHome} />} />
           <Route path="plans" element={<PlansScreen onBack={backHome} />} />

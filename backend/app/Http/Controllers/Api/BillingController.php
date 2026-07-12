@@ -123,6 +123,7 @@ class BillingController extends Controller
         $labels = [
             'chat' => 'Ask the tutor a question',
             'assess_gen' => 'Generate a quiz',
+            'game_gen' => 'Play a quest game',
             'grade' => 'Grade an answer',
             'snap' => 'Snap-a-doubt (photo)',
             'plan' => 'Build a study plan',

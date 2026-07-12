@@ -1,9 +1,10 @@
 import React, { useRef, useState } from "react";
-import { ArrowLeft, Camera, Check, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Camera, Check, Loader2, Sparkles, Eye } from "lucide-react";
 import { Button, Card, AvatarBubble, PRESET_AVATARS } from "../../ui/components.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { authApi } from "../../api/endpoints.js";
 import CurriculumPicker from "../../ui/CurriculumPicker.jsx";
+import { getA11y, setA11y } from "../../ui/a11y.js";
 
 /**
  * My Profile — a simple, child-friendly page where a student manages their
@@ -153,6 +154,10 @@ export default function StudentProfile({ onBack }) {
         <CurriculumPicker value={curr?.level_id} onChange={setCurr} />
       </Card>
 
+      {/* Reading & display (accessibility) — applies instantly, saved on-device */}
+      <AccessibilityCard />
+
+
       {error && <p className="mb-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-600 dark:bg-rose-500/10">{error}</p>}
 
       <div className="flex items-center gap-3">
@@ -163,5 +168,69 @@ export default function StudentProfile({ onBack }) {
         {saved && <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-emerald-600"><Check className="h-4 w-4" /> Saved!</span>}
       </div>
     </div>
+  );
+}
+
+/**
+ * Reading & display preferences — larger text, dyslexia-friendly type, high
+ * contrast. Applied instantly on the whole app and remembered on this device
+ * (localStorage), so they work even before login on the next visit.
+ */
+function AccessibilityCard() {
+  const [prefs, setPrefs] = useState(getA11y);
+  const update = (patch) => setPrefs(setA11y(patch));
+
+  const seg = (active) =>
+    `flex-1 rounded-xl border-2 px-3 py-2 text-sm font-extrabold transition-all ${
+      active
+        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300"
+        : "border-slate-200 text-slate-500 hover:border-indigo-300 dark:border-slate-700"
+    }`;
+  const toggle = (active) =>
+    `relative h-7 w-12 rounded-full transition-colors ${active ? "bg-indigo-500" : "bg-slate-300 dark:bg-slate-600"}`;
+
+  return (
+    <Card className="mb-5 p-5">
+      <p className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-slate-400">
+        <Eye className="h-4 w-4 text-indigo-500" /> Reading &amp; display
+      </p>
+      <p className="mb-4 mt-1 text-xs text-slate-400">Changes apply right away and are remembered on this device.</p>
+
+      <div className="space-y-4">
+        <div>
+          <p className="mb-2 text-sm font-bold text-slate-600 dark:text-slate-300">Text size</p>
+          <div className="flex gap-2" role="radiogroup" aria-label="Text size">
+            <button className={seg(prefs.fontScale === "base")} role="radio" aria-checked={prefs.fontScale === "base"}
+              onClick={() => update({ fontScale: "base" })}>Normal</button>
+            <button className={seg(prefs.fontScale === "lg")} role="radio" aria-checked={prefs.fontScale === "lg"}
+              onClick={() => update({ fontScale: "lg" })}>Large</button>
+            <button className={seg(prefs.fontScale === "xl")} role="radio" aria-checked={prefs.fontScale === "xl"}
+              onClick={() => update({ fontScale: "xl" })}>Extra large</button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Easy-reading letters</p>
+            <p className="text-xs text-slate-400">Rounded, well-spaced type that helps with dyslexia.</p>
+          </div>
+          <button className={toggle(prefs.dyslexic)} role="switch" aria-checked={prefs.dyslexic}
+            aria-label="Easy-reading letters" onClick={() => update({ dyslexic: !prefs.dyslexic })}>
+            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${prefs.dyslexic ? "left-6" : "left-1"}`} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Higher contrast</p>
+            <p className="text-xs text-slate-400">Makes text and buttons stand out more.</p>
+          </div>
+          <button className={toggle(prefs.highContrast)} role="switch" aria-checked={prefs.highContrast}
+            aria-label="Higher contrast" onClick={() => update({ highContrast: !prefs.highContrast })}>
+            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${prefs.highContrast ? "left-6" : "left-1"}`} />
+          </button>
+        </div>
+      </div>
+    </Card>
   );
 }

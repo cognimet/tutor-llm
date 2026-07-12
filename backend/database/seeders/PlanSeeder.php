@@ -27,6 +27,7 @@ class PlanSeeder extends Seeder
         $weights = [
             'chat'       => 1,
             'assess_gen' => 1,
+            'game_gen'   => 1,   // a quest game costs the same as a quiz
             'grade'      => 1,
             'gap'        => 1,
             'plan'       => 1,

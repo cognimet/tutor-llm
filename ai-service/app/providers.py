@@ -436,6 +436,9 @@ class GoogleGenAIProvider:
     GOOGLE_GENAI_USE_VERTEXAI=true. Selected with AI_PROVIDER=google."""
     name = "google"
 
+    #: Log the "SDK too old to cap thinking" notice once, not once per call.
+    _thinking_warned = False
+
     def __init__(self, model: str):
         self.model = model
         self._client = None
@@ -446,15 +449,33 @@ class GoogleGenAIProvider:
             self._client = genai.Client()
         return self._client
 
+    def _max_tokens(self, json_mode: bool) -> int:
+        return settings.gemini_json_max_tokens if json_mode else _MAX_TOKENS
+
     def _config(self, system: str, json_mode: bool, schema=None):
         from google.genai import types
-        kw = {"temperature": 0.4 if json_mode else 0.7, "max_output_tokens": _MAX_TOKENS}
+        kw = {"temperature": 0.4 if json_mode else 0.7,
+              "max_output_tokens": self._max_tokens(json_mode)}
         if system:
             kw["system_instruction"] = system
         if json_mode:
             kw["response_mime_type"] = "application/json"
             if schema is not None:
                 kw["response_schema"] = schema
+            # Gemini 2.5 draws thinking tokens from max_output_tokens, so a long
+            # structured answer gets truncated mid-JSON and decodes to nothing.
+            # Capping thinking is the direct fix — but only newer SDKs expose it,
+            # so check rather than swallow the error (a silent `except` here is
+            # what hid this for a whole debugging session). Where it's missing we
+            # rely on the roomier json budget plus the truncation retry.
+            if "thinking_budget" in types.ThinkingConfig.model_fields:
+                kw["thinking_config"] = types.ThinkingConfig(
+                    thinking_budget=settings.gemini_json_thinking_budget)
+            elif not GoogleGenAIProvider._thinking_warned:
+                GoogleGenAIProvider._thinking_warned = True
+                log.info("google: google-genai is too old to cap thinking tokens; "
+                         "relying on max_output_tokens=%d + truncation retry",
+                         self._max_tokens(True))
         return types.GenerateContentConfig(**kw)
 
     def _usage(self, resp) -> Usage:
@@ -464,10 +485,71 @@ class GoogleGenAIProvider:
         return Usage(model=self.model, prompt_tokens=p, completion_tokens=c,
                      total_tokens=int(getattr(um, "total_token_count", 0) or (p + c)))
 
+    @staticmethod
+    def _status_of(exc: Exception) -> int | None:
+        """HTTP status behind a google-genai error, when there is one."""
+        for attr in ("code", "status_code"):
+            value = getattr(exc, attr, None)
+            if isinstance(value, int):
+                return value
+        if "RESOURCE_EXHAUSTED" in str(exc):
+            return 429
+        return None
+
+    async def _generate(self, system: str, user: str, json_mode: bool, schema=None):
+        """Call the model, retrying transient failures AND truncated JSON.
+
+        The REST providers get this from `_post_with_retry`; the SDK path had no
+        retry at all, so a free-tier 429 was caught by the blanket `except` and
+        returned as the *fallback* — indistinguishable from "the model produced
+        nothing". Downstream that surfaced as "we couldn't build a game for this
+        topic", which is a lie: we never got an answer to begin with.
+
+        A `finish_reason=MAX_TOKENS` response is treated the same way. Half a JSON
+        object is not a cheaper answer, it is no answer: `decode_json` fails and
+        the caller silently receives the empty fallback. Retrying is the only way
+        to turn it back into data.
+        """
+        last = None
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            try:
+                resp = await self._client_().aio.models.generate_content(
+                    model=self.model, contents=user, config=self._config(system, json_mode, schema))
+            except Exception as e:  # noqa: BLE001
+                status = self._status_of(e)
+                if status not in _TRANSIENT or attempt == _MAX_ATTEMPTS:
+                    raise
+                wait = (_BACKOFF_429 if status == 429 else _BACKOFF_5XX)[attempt - 1]
+                log.warning("google %s: HTTP %s (attempt %s/%s) — retrying in %.1fs",
+                            "json" if json_mode else "text", status, attempt, _MAX_ATTEMPTS, wait)
+                await asyncio.sleep(wait)
+                continue
+
+            last = resp
+            if not (json_mode and self._truncated(resp)) or attempt == _MAX_ATTEMPTS:
+                return resp
+
+            wait = _BACKOFF_5XX[attempt - 1]
+            log.warning("google json: truncated at max_output_tokens (attempt %s/%s) — "
+                        "retrying in %.1fs", attempt, _MAX_ATTEMPTS, wait)
+            await asyncio.sleep(wait)
+
+        return last
+
+    @staticmethod
+    def _truncated(resp) -> bool:
+        candidates = getattr(resp, "candidates", None) or []
+        return bool(candidates) and "MAX_TOKENS" in str(getattr(candidates[0], "finish_reason", ""))
+
+    def _warn_if_truncated(self, resp, json_mode: bool = True) -> None:
+        if self._truncated(resp):
+            log.warning("google: response truncated at max_output_tokens (%s) — "
+                        "output is likely unusable", self._max_tokens(json_mode))
+
     async def text(self, system: str, user: str) -> tuple[str, Usage]:
         try:
-            resp = await self._client_().aio.models.generate_content(
-                model=self.model, contents=user, config=self._config(system, False))
+            resp = await self._generate(system, user, False)
+            self._warn_if_truncated(resp, json_mode=False)
             return (resp.text or ""), self._usage(resp)
         except Exception as e:  # noqa: BLE001
             log.error("google text failed: %s", e)
@@ -475,10 +557,14 @@ class GoogleGenAIProvider:
 
     async def json(self, system: str, user: str, fallback, schema=None) -> tuple[dict, Usage]:
         try:
-            resp = await self._client_().aio.models.generate_content(
-                model=self.model, contents=user, config=self._config(system, True, schema))
+            resp = await self._generate(system, user, True, schema)
+            self._warn_if_truncated(resp)
             decoded = decode_json(resp.text or "")
-            return (decoded if isinstance(decoded, (dict, list)) else fallback), self._usage(resp)
+            if not isinstance(decoded, (dict, list)):
+                log.warning("google json: unparseable body (%d chars) — using fallback",
+                            len(resp.text or ""))
+                return fallback, self._usage(resp)
+            return decoded, self._usage(resp)
         except Exception as e:  # noqa: BLE001
             log.error("google json failed: %s", e)
             return fallback, Usage(model=self.model)

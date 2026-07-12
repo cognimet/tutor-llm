@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\NotesController;
 use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\PlannerController;
 use App\Http\Controllers\Api\ProgressController;
+use App\Http\Controllers\Api\QuestController;
 use App\Http\Controllers\Api\ReminderController;
 use App\Http\Controllers\Api\SchoolController;
 use App\Http\Controllers\Api\TeacherController;
@@ -165,6 +166,21 @@ Route::middleware('auth:sanctum')->group(function () {
         // Personal analytics dashboard + engagement/integrity ingest
         Route::get('/me/analytics', [AnalyticsController::class, 'me']);
         Route::post('/engagement', [AnalyticsController::class, 'ingest']);
+
+        // Quest engine: prerequisite skill graph + BKT mastery + IRT difficulty +
+        // validated template games. Only /quest/games hits the LLM (and only for
+        // the non-math mechanics), so it alone passes the token gate.
+        Route::prefix('quest')->group(function () {
+            Route::get('/subjects', [QuestController::class, 'subjects']);
+            Route::get('/map', [QuestController::class, 'map']);
+            Route::get('/next', [QuestController::class, 'next']);
+            // Spaced repetition: mastered topics gone stale ("Review 3").
+            Route::get('/review', [QuestController::class, 'review']);
+            Route::post('/games', [QuestController::class, 'generate'])
+                ->middleware('token.gate:game_gen');
+            Route::post('/games/{game}/answer', [QuestController::class, 'answer']);
+            Route::post('/games/{game}/finish', [QuestController::class, 'finish']);
+        });
 
         // Progress snapshot + credit meter
         Route::get('/progress', [ProgressController::class, 'summary']);

@@ -413,6 +413,51 @@ class GamificationService
                     [$label, $emoji, $desc] = self::BADGES[$k] ?? [$k, '🏅', ''];
                     return ['key' => $k, 'label' => $label, 'emoji' => $emoji, 'description' => $desc];
                 })->all(),
+            'daily'         => $this->dailyProgress($student),
+        ];
+    }
+
+    /** Wins needed per day for the daily goal (the habit anchor). */
+    public const DAILY_GOAL = 3;
+
+    /**
+     * Today's "wins" toward the daily goal. A win is a learning outcome, never
+     * time-on-app: a quest game passed at >= 70% on first attempts, or a quiz
+     * submitted at >= 70%. Computed from durable stores so it's cheat-proof and
+     * survives reloads.
+     */
+    public function dailyProgress(User $student): array
+    {
+        $today = Carbon::today();
+        $wins  = 0;
+
+        // Quest games: group today's evidence per game, score FIRST attempts.
+        $events = \App\Models\EvidenceEvent::where('user_id', $student->id)
+            ->where('created_at', '>=', $today)
+            ->whereNotNull('game_instance_id')
+            ->orderBy('id')
+            ->get(['game_instance_id', 'item_index', 'correct']);
+
+        foreach ($events->groupBy('game_instance_id') as $gameEvents) {
+            $first = $gameEvents->groupBy('item_index')->map(fn ($e) => $e->first());
+            if ($first->count() >= 2 && $first->where('correct', true)->count() / $first->count() >= 0.7) {
+                $wins++;
+            }
+        }
+
+        // Quizzes submitted today at >= 70%.
+        $wins += \App\Models\Assessment::where('user_id', $student->id)
+            ->whereNotNull('score')
+            ->where('total', '>', 0)
+            ->where('updated_at', '>=', $today)
+            ->get(['score', 'total'])
+            ->filter(fn ($a) => $a->score / max(1, $a->total) >= 0.7)
+            ->count();
+
+        return [
+            'done' => $wins,
+            'goal' => self::DAILY_GOAL,
+            'met'  => $wins >= self::DAILY_GOAL,
         ];
     }
 

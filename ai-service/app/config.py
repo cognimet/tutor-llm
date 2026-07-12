@@ -64,6 +64,21 @@ class Settings(BaseSettings):
     google_cloud_project: str | None = None
     google_cloud_location: str | None = None
     gemini_vision_model: str | None = None   # VLM model for reading images
+    # Gemini 2.5 spends "thinking" tokens out of the SAME max_output_tokens budget
+    # as the answer. On JSON calls that silently truncates the object mid-string,
+    # the decode fails, and the caller sees an empty result (a quiz with no
+    # questions, a game with no items).
+    #
+    # Measured on gemini-2.5-flash authoring a 6-item word_match: the answer is
+    # ~820 tokens but thinking consumes ~3200 more. At 2048 only 1 in 4 responses
+    # completed; at 4096 all of them did, and 8192 bought nothing. So JSON calls
+    # get their own, roomier budget.
+    gemini_json_max_tokens: int = 4096
+    # Thinking can be capped directly, but only on google-genai >= ~1.10;
+    # 1.2.0 ships a ThinkingConfig with no `thinking_budget` field. When the SDK
+    # supports it, 0 disables thinking (structured authoring needs no chain of
+    # thought) and the budget above can come back down. -1 lets the model decide.
+    gemini_json_thinking_budget: int = 0
     # Gemini IMAGE model for the "idealised render" (redraws a student's isolated
     # hand-drawing into a clean, labelled textbook illustration). Overridable via
     # GEMINI_IMAGE_MODEL if Google renames the image model.

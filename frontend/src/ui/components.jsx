@@ -188,3 +188,39 @@ export function Spinner({ label = "Loading…" }) {
     </div>
   );
 }
+
+/**
+ * Shared empty state: a friendly face, one sentence, one action. Screens use
+ * this instead of blank panels so "nothing here yet" never reads as "broken".
+ */
+export function EmptyState({ emoji = "🦉", title, hint, actionLabel, onAction, className = "" }) {
+  return (
+    <div className={`rounded-3xl border-2 border-dashed border-slate-200 p-8 text-center dark:border-slate-700 ${className}`}>
+      <div className="text-4xl">{emoji}</div>
+      <p className="mt-3 font-display text-lg font-extrabold text-slate-700 dark:text-slate-200">{title}</p>
+      {hint && <p className="mx-auto mt-1 max-w-sm text-sm font-semibold text-slate-500">{hint}</p>}
+      {actionLabel && onAction && (
+        <button onClick={onAction}
+          className="mt-4 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-extrabold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-indigo-700">
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Shared error state: says what went wrong and what to do next — never a raw error dump. */
+export function ErrorState({ title = "Something went wrong", hint = "Give it another try — your work is safe.", onRetry, className = "" }) {
+  return (
+    <div className={`rounded-3xl border-2 border-rose-200 bg-rose-50 p-6 text-center dark:border-rose-500/30 dark:bg-rose-500/10 ${className}`} role="alert">
+      <p className="font-display text-base font-extrabold text-rose-600 dark:text-rose-300">{title}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">{hint}</p>
+      {onRetry && (
+        <button onClick={onRetry}
+          className="mt-3 rounded-2xl border-2 border-rose-200 bg-white px-5 py-2 text-sm font-extrabold text-rose-600 transition-all hover:-translate-y-0.5 dark:border-rose-500/40 dark:bg-transparent dark:text-rose-300">
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}

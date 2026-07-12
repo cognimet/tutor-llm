@@ -7,7 +7,9 @@ const BASE = import.meta.env.VITE_API_URL || "/api";
  *
  * @param {string} path                e.g. `/tutor/sessions/5/stream`
  * @param {object|null} body           JSON body (null for regenerate)
- * @param {object} handlers            { onDelta(text), onDone(meta), onMind(payload), onError(msg) }
+ * @param {object} handlers            { onDelta(text), onDone(meta), onMind(payload), onError(msg, opts) }
+ *                                       onError's 2nd arg carries { quota } so the
+ *                                       UI can show an upgrade CTA on an out-of-credits (402) block.
  * @param {AbortSignal} [signal]       to support a Stop button
  */
 export async function streamSSE(path, body, { onDelta, onDone, onMind, onError }, signal) {
@@ -29,13 +31,14 @@ export async function streamSSE(path, body, { onDelta, onDone, onMind, onError }
   }
 
   if (res.status === 402) {
-    // Out of AI credits — surface the friendly quota message from the gate.
+    // Out of AI credits — surface the friendly quota message from the gate, and
+    // flag it as a quota block so the chat can offer an upgrade instead of a retry.
+    let msg = "You've used today's AI learning credits.";
     try {
       const data = await res.json();
-      onError?.(data.message || "You've used today's AI learning credits.");
-    } catch {
-      onError?.("You've used today's AI learning credits.");
-    }
+      if (data?.message) msg = data.message;
+    } catch { /* keep the default */ }
+    onError?.(msg, { quota: true });
     window.dispatchEvent(new CustomEvent("usage:refresh"));
     return;
   }

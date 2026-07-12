@@ -44,6 +44,8 @@ RUN test -f /app/vendor/autoload.php  # fail the build early if vendor is missin
 RUN rm -f /app/database/migrations/*_create_personal_access_tokens_table.php
 RUN cp -R /overlay/app/. /app/app/ \
     && cp -R /overlay/routes/. /app/routes/ \
+    && cp -R /overlay/tests/. /app/tests/ \
+    && cp /overlay/phpunit.xml /app/phpunit.xml \
     && cp -R /overlay/database/migrations/. /app/database/migrations/ \
     && cp -R /overlay/database/seeders/. /app/database/seeders/ \
     && mkdir -p /app/database/seed-data \

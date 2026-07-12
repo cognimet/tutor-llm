@@ -58,6 +58,7 @@ class UsageController extends Controller
         'plan' => 'Study plans',
         'notes' => 'Notes & vision',
         'snap' => 'Snap-a-doubt',
+        'game_gen' => 'Learning games',
     ];
 
     /** GET /api/parent/children/{child}/usage — child's usage for the parent. */

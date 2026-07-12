@@ -19,7 +19,7 @@ class User extends Authenticatable
         'school_id', 'section_id', 'login_code',
     ];
 
-    protected $appends = ['curriculum_path'];
+    protected $appends = ['curriculum_path', 'learning_mode'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -139,6 +139,12 @@ class User extends Authenticatable
     public function learningPlans()     { return $this->hasMany(LearningPlan::class); }
     public function progressSnapshots() { return $this->hasMany(ProgressSnapshot::class); }
     public function topicProgress()     { return $this->hasMany(TopicProgress::class); }
+
+    /* Quest engine (skill graph + BKT + IRT + evidence stream) */
+    public function evidenceEvents()    { return $this->hasMany(EvidenceEvent::class); }
+    public function skillMasteries()    { return $this->hasMany(SkillMastery::class); }
+    public function abilityEstimates()  { return $this->hasMany(AbilityEstimate::class); }
+
     public function notes()             { return $this->hasMany(TopicNote::class); }
     public function studyPlans()        { return $this->hasMany(StudyPlan::class); }
     public function flashcards()        { return $this->hasMany(Flashcard::class); }
@@ -170,5 +176,39 @@ class User extends Authenticatable
     {
         $class = $this->classNumber();
         return ($class !== null && $class >= 1 && $class <= 4) ? 'junior' : 'senior';
+    }
+
+    /**
+     * Which PRIMARY learning experience a student gets.
+     *
+     *   'game' — Kindergarten to Class 5 (K–5): a gamified quest of interactive
+     *            games, missions, levels, badges and streaks (curriculum-covering).
+     *   'chat' — Classes 6–12 and above, and advanced/unknown levels (college,
+     *            etc.): the conversational AI tutor. No games; learning is chat.
+     *
+     * This is a DIFFERENT axis from {@see engineMode()} (junior 1–4 / senior 5+),
+     * which only tunes how rewards feel — a Class 5 student is game-mode here but
+     * senior there.
+     */
+    public function learningMode(): string
+    {
+        // Resolve the class number cheaply, without a per-row query: prefer the
+        // `grade` column, then an already-loaded `level` relation. (Read the
+        // relation via getRelation() — `$this->level` is the gamification-level
+        // integer column, not the Level model.) Kindergarten is class 0, so treat
+        // 0 as a real value, not a falsy "unknown".
+        $level = $this->relationLoaded('level') ? $this->getRelation('level') : null;
+        $grade = $this->grade;
+        $class = ($grade !== null && $grade !== '')
+            ? (int) $grade
+            : ($level && $level->class_number !== null ? (int) $level->class_number : null);
+
+        return ($class !== null && $class >= 0 && $class <= 5) ? 'game' : 'chat';
+    }
+
+    /** Exposed on every user payload so the client can pick the right home. */
+    public function getLearningModeAttribute(): string
+    {
+        return $this->isStudent() ? $this->learningMode() : 'chat';
     }
 }

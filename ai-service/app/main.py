@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from .config import settings
 from .llm import llm
 from .providers import read_image, read_image_genai
-from . import prompts, rag, graph, pdfjobs, diagrams
+from . import prompts, rag, graph, pdfjobs, diagrams, games
 from .schemas import (
     ChatTurnRequest, ChatTurnResponse,
     AssessmentGenerateRequest, AssessmentGenerateResponse, Question,
@@ -606,6 +606,50 @@ async def assessment_grade(req: AssessmentGradeRequest, authorization: str | Non
         for g in _safe_list(data, "graded"):
             graded.append(GradedItem(**g))
     return AssessmentGradeResponse(graded=graded, usage=usage)
+
+
+class GameAuthorRequest(BaseModel):
+    mechanic: str                    # any of games.AUTHORED (word + math mechanics)
+    topic: str
+    chapter: str | None = None
+    subject: str | None = None
+    difficulty: int = 3              # 1..5
+    count: int = 6
+    subject_id: int | None = None    # for curriculum RAG grounding
+    student_id: int | None = None    # notes-first grounding, when available
+
+
+@app.post("/ai/game/author")
+async def game_author(req: GameAuthorRequest, authorization: str | None = Header(None)):
+    """Fill a game template's content contract for a topic, GROUNDED in the course.
+
+    The content is drawn from the topic's retrieved curriculum (and the student's
+    own notes when available), so games reflect the actual course structure rather
+    than generic filler. The model supplies only meaning/numbers; this service
+    assembles the renderable structure and independently re-solves every item.
+    Items that fail are dropped, so the response may be shorter than `count` —
+    Laravel re-validates and refuses to persist anything unvalidated. The LLM
+    never writes game code (blueprint §3).
+    """
+    _auth(authorization)
+    if req.mechanic not in games.AUTHORED:
+        raise HTTPException(400, f"'{req.mechanic}' is not an authorable mechanic")
+
+    # Retrieve the topic's curriculum (notes-first when we know the student) and
+    # inject it, so the questions come from what this topic actually teaches.
+    context = ""
+    try:
+        chunks = await rag.retrieve(req.topic, topic=req.topic,
+                                    student_id=req.student_id, subject_id=req.subject_id)
+        context = rag.as_context(chunks)
+    except Exception:  # noqa: BLE001 — grounding is best-effort, never blocks a game
+        context = ""
+
+    items, usage = await games.author(
+        req.mechanic, req.topic, req.chapter, req.subject,
+        max(1, min(5, req.difficulty)), max(1, min(12, req.count)), context,
+    )
+    return {"items": items, "usage": usage.model_dump()}
 
 
 @app.post("/ai/gap/analyze", response_model=GapAnalyzeResponse)

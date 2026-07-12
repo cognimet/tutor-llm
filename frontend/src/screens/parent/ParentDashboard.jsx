@@ -285,6 +285,9 @@ function ChildReport({ report, onBack }) {
         <Stat icon={Flame} label="Streak" value={`${p.streak_days}d`} />
       </div>
 
+      {/* "This week" in plain words — parents read sentences, not charts. */}
+      <ThisWeekDigest report={report} />
+
       <Card className="mt-6 p-5">
         <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mastery over time</p>
         <div className="mt-3 h-48">
@@ -484,6 +487,47 @@ const MiniStat = ({ label, value, tone }) => (
 const Mini = ({ label, value }) => (
   <div className="rounded-2xl bg-slate-50 dark:bg-white/5 py-2"><p className="text-lg font-extrabold text-slate-900 dark:text-white">{value}</p><p className="text-[10px] font-bold uppercase text-slate-400">{label}</p></div>
 );
+/**
+ * The weekly story in three sentences: how it went, where the growth edge is,
+ * and one concrete thing to do together. Synthesised from data the page
+ * already loads — a parent gets the answer in 30 seconds, charts optional.
+ */
+function ThisWeekDigest({ report }) {
+  const p = report.progress || {};
+  const name = (report.child?.name || "Your child").split(" ")[0];
+  const trend = p.trend || [];
+  const delta = trend.length >= 7
+    ? Math.round((trend[trend.length - 1]?.mastery ?? 0) - (trend[trend.length - 7]?.mastery ?? 0))
+    : null;
+  const weakest = (report.gaps || [])[0];
+
+  const opening =
+    p.streak_days >= 5 ? `${name} kept a ${p.streak_days}-day streak this week — brilliant consistency. 🎉`
+    : p.streak_days >= 2 ? `${name} studied ${p.streak_days} days in a row — a habit is forming. 💪`
+    : `${name} hasn't studied much recently — a small daily goal is the easiest restart. 🌱`;
+
+  const movement =
+    delta == null ? `Overall mastery stands at ${p.mastery}%.`
+    : delta > 2 ? `Mastery climbed ${delta} points over the week to ${p.mastery}%.`
+    : delta < -2 ? `Mastery slipped ${Math.abs(delta)} points to ${p.mastery}% — usually a sign of harder new topics, not lost ground.`
+    : `Mastery held steady at ${p.mastery}%.`;
+
+  const action = weakest
+    ? `This week's edge: ${weakest.concept} (${weakest.topic_name}). Ten minutes together — ask ${name} to explain it to you, then take the in-app quick check.`
+    : `No open gaps right now — a great week to let ${name} explore a topic they enjoy.`;
+
+  return (
+    <Card className="mt-6 border-l-4 border-indigo-400 p-5">
+      <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">This week, in short</p>
+      <div className="mt-2 space-y-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+        <p>{opening}</p>
+        <p>{movement}</p>
+        <p className="font-semibold text-slate-700 dark:text-slate-200">{action}</p>
+      </div>
+    </Card>
+  );
+}
+
 const Stat = ({ icon: Icon, label, value }) => (
   <Card className="p-4"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-indigo-50 text-indigo-600"><Icon className="h-5 w-5" /></div>
     <p className="mt-3 text-2xl font-extrabold text-slate-900 dark:text-white">{value}</p><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p></Card>

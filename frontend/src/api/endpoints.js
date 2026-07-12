@@ -224,6 +224,23 @@ export const progressApi = {
   topic: (params) => api.get("/progress/topic", { params }).then((r) => r.data.progress),
 };
 
+// --- Student: quest engine (skill graph + BKT mastery + IRT difficulty + games) ---
+// The server owns correctness: games arrive with every answer stripped, and
+// `answer()` posts back only what the child did.
+export const questApi = {
+  subjects: () => api.get("/quest/subjects").then((r) => r.data.subjects),
+  // → { nodes: [{topic_id, name, status, p_mastered, prerequisites}], next, gaps }
+  map: (subjectId) => api.get("/quest/map", { params: { subject_id: subjectId } }).then((r) => r.data),
+  next: (subjectId) => api.get("/quest/next", { params: { subject_id: subjectId } }).then((r) => r.data.next),
+  // Generation can call the LLM for non-math mechanics — give it room.
+  generate: (payload, config = {}) =>
+    api.post("/quest/games", payload, { timeout: 200000, ...config }).then((r) => r.data.game),
+  answer: (gameId, payload) => api.post(`/quest/games/${gameId}/answer`, payload).then((r) => r.data),
+  finish: (gameId) => api.post(`/quest/games/${gameId}/finish`).then((r) => r.data),
+  // Spaced repetition: up to 3 mastered topics gone stale ("Review 3").
+  review: () => api.get("/quest/review").then((r) => r.data),
+};
+
 // --- AI usage / credits (students see credits, never raw tokens) ---
 export const usageApi = {
   me: () => api.get("/usage").then((r) => r.data),

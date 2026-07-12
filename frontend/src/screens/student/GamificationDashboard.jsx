@@ -99,11 +99,16 @@ function SeniorDashboard({ user, data, ranking, onOpenNotes }) {
 
       {/* Leaderboard */}
       <div className="rounded-3xl border border-white/60 bg-white/70 p-6 shadow-sm dark:border-white/10 dark:bg-slate-800/70">
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-1 flex items-center gap-2">
           <Medal className="h-5 w-5 text-amber-500" />
           <h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Leaderboard</h3>
           {ranking?.total ? <span className="text-xs font-bold text-slate-400">· {ranking.total} students</span> : null}
         </div>
+        {/* Effort framing: ranks reward learning activity, not marks — so the
+            board motivates the middle of the class instead of shaming it. */}
+        <p className="mb-3 text-xs font-semibold text-slate-400">
+          Ranks count learning effort (XP), not test marks — anyone can climb this week.
+        </p>
         <LeaderboardTabs ranking={ranking || {}} />
       </div>
 

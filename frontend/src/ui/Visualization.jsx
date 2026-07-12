@@ -432,19 +432,38 @@ function Diagram({ spec }) {
   useEffect(() => {
     let alive = true;
     if (!hasBody) return undefined;
+    const id = `viz-mmd-${Math.random().toString(36).slice(2)}`;
+    // Mermaid's render() leaves a temporary/measurement node in <body> — and on a
+    // parse error it injects its "Syntax error" bomb SVG there and DOESN'T remove
+    // it. In an SPA that orphan then shows on every page. Sweep both the temp id
+    // and mermaid's `d`-prefixed variant.
+    const sweep = () => {
+      document.getElementById(id)?.remove();
+      document.getElementById(`d${id}`)?.remove();
+      // Also clear any mermaid error bombs already orphaned in <body> (from this
+      // session before the fix, or a sibling diagram) — they carry this aria tag.
+      document.querySelectorAll('body > svg[aria-roledescription="error"], body > [id^="dviz-mmd"]')
+        .forEach((n) => n.remove());
+    };
     (async () => {
       try {
         const mermaid = (await import("mermaid")).default;
         mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "neutral",
                              fontFamily: "inherit" });
-        const id = `viz-mmd-${Math.random().toString(36).slice(2)}`;
+        // Validate FIRST. With suppressErrors, parse() resolves to false on bad
+        // syntax instead of throwing + drawing the bomb — so an invalid diagram
+        // degrades to our own quiet fallback and nothing leaks into the page.
+        const valid = await mermaid.parse(code, { suppressErrors: true });
+        if (!valid) { if (alive) setErr("This diagram couldn't be drawn."); return; }
         const { svg } = await mermaid.render(id, code);
         if (alive && ref.current) ref.current.innerHTML = svg;
       } catch (e) {
         if (alive) setErr(e?.message || "diagram failed to render");
+      } finally {
+        sweep();
       }
     })();
-    return () => { alive = false; };
+    return () => { alive = false; sweep(); };
   }, [code, hasBody]);
 
   if (!hasBody) return <Fallback note="Empty diagram." raw={JSON.stringify(spec, null, 1)} />;

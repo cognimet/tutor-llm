@@ -13,6 +13,8 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(CurriculumSeeder::class);
+        $this->call(SchoolClassesSeeder::class);         // fill in K–12 so students can pick any class
+        $this->call(KindergartenCurriculumSeeder::class); // KG quest content (CBSE/NCF foundational)
         $this->call(PlanSeeder::class);
         $this->call(ContentSeeder::class);
         $this->call(NcertMathsContentSeeder::class);   // full NCERT Class 10 Maths textbook

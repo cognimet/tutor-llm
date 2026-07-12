@@ -5,7 +5,7 @@ import { teacherApi } from "../../api/endpoints.js";
 import {
   Users, ArrowLeft, ClipboardList, BarChart3, Brain, Target, ListChecks,
   Flame, PlusCircle, Sparkles, AlertTriangle, Activity, TrendingUp, CheckCircle2,
-  Trophy, BookOpen,
+  Trophy, BookOpen, Download, Send,
 } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 
@@ -240,7 +240,13 @@ function SectionView({ section, subjects, onBack, onStudent }) {
           <h1 className="text-3xl font-extrabold tracking-tight">{section.class} · {section.name}</h1>
           <p className="text-slate-500 dark:text-slate-400">{section.students} students</p>
         </div>
-        <Button onClick={() => setAssignOpen(true)}><PlusCircle className="h-4 w-4" /> Assign work</Button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => exportSectionCsv(section, analytics, setAnalytics)}
+            className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
+            <Download className="h-4 w-4" /> Export CSV
+          </button>
+          <Button onClick={() => setAssignOpen(true)}><PlusCircle className="h-4 w-4" /> Assign work</Button>
+        </div>
       </div>
 
       <div className="mt-5 flex gap-1 rounded-2xl bg-white/70 p-1 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:ring-white/10 sm:w-fit">
@@ -277,7 +283,7 @@ function SectionView({ section, subjects, onBack, onStudent }) {
           )
         )}
 
-        {tab === "analytics" && (!analytics ? <Spinner label="Crunching insights…" /> : <SectionAnalytics a={analytics} onStudent={onStudent} />)}
+        {tab === "analytics" && (!analytics ? <Spinner label="Crunching insights…" /> : <SectionAnalytics a={analytics} onStudent={onStudent} section={section} />)}
 
         {tab === "assignments" && (
           !assignments ? <Spinner label="Loading assignments…" /> : <AssignmentList section={section} list={assignments} />
@@ -293,8 +299,26 @@ function SectionView({ section, subjects, onBack, onStudent }) {
   );
 }
 
-function SectionAnalytics({ a, onStudent, hideAssignments }) {
+function SectionAnalytics({ a, onStudent, hideAssignments, section }) {
   const clk = onStudent ? "cursor-pointer transition hover:ring-1 hover:ring-indigo-300" : "";
+  // Act-from-insight: a weak topic is a button, not just a bar. One click
+  // pushes a personalized revision quiz to the whole section.
+  const [assigning, setAssigning] = useState({}); // topic -> "busy" | "done" | "error"
+  const assignRevision = async (topic) => {
+    setAssigning((s) => ({ ...s, [topic]: "busy" }));
+    try {
+      await teacherApi.createAssignment({
+        section_id: section.id,
+        topic_name: topic,
+        mode: "personalized",
+        count: 5,
+        title: `Revision: ${topic}`,
+      });
+      setAssigning((s) => ({ ...s, [topic]: "done" }));
+    } catch {
+      setAssigning((s) => ({ ...s, [topic]: "error" }));
+    }
+  };
   const k = a.kpis || {}, d = a.distribution || {};
   const total = (d.strong || 0) + (d.developing || 0) + (d.needs_help || 0) + (d.no_data || 0) || 1;
   const bars = [
@@ -372,9 +396,28 @@ function SectionAnalytics({ a, onStudent, hideAssignments }) {
           <div className="mt-3 space-y-3">
             {(a.topic_mastery || []).map((t) => (
               <div key={t.topic}>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-extrabold text-slate-700 dark:text-slate-200">{t.topic}</span>
-                  <span className={`font-extrabold ${masteryTone(t.mastery)}`}>{t.mastery}%</span>
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0 truncate font-extrabold text-slate-700 dark:text-slate-200">{t.topic}</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    {section && t.mastery < 60 && (
+                      <button onClick={() => assignRevision(t.topic)}
+                        disabled={assigning[t.topic] === "busy" || assigning[t.topic] === "done"}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold transition-all ${
+                          assigning[t.topic] === "done"
+                            ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10"
+                            : assigning[t.topic] === "error"
+                              ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10"
+                              : "bg-indigo-50 text-indigo-600 hover:-translate-y-0.5 dark:bg-indigo-500/10 dark:text-indigo-300"
+                        }`}>
+                        <Send className="h-3 w-3" />
+                        {assigning[t.topic] === "busy" ? "Assigning…"
+                          : assigning[t.topic] === "done" ? "Assigned ✓"
+                          : assigning[t.topic] === "error" ? "Failed — retry"
+                          : "Assign revision"}
+                      </button>
+                    )}
+                    <span className={`font-extrabold ${masteryTone(t.mastery)}`}>{t.mastery}%</span>
+                  </span>
                 </div>
                 <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
                   <div className={`h-full rounded-full ${barTone(t.mastery)}`} style={{ width: `${Math.max(4, t.mastery)}%` }} />
@@ -713,6 +756,30 @@ function StudentReport({ studentId, onBack }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Export a section's per-student analytics as CSV — the staff-meeting report,
+ * one click. Fetches the analytics first if the Insights tab wasn't opened yet.
+ */
+async function exportSectionCsv(section, analytics, setAnalytics) {
+  let a = analytics;
+  if (!a) {
+    try { a = await teacherApi.sectionAnalytics(section.id); setAnalytics(a); }
+    catch { return; }
+  }
+  const esc = (v) => `"${String(v ?? "").replaceAll('"', '""')}"`;
+  const rows = [
+    ["Student", "Mastery %", "Open gaps", "Streak (days)", "Active last 7d", "Last active"],
+    ...(a.students || []).map((s) => [s.name, s.mastery, s.open_gaps, s.streak, s.active_7d ? "yes" : "no", s.last_active]),
+  ];
+  const csv = rows.map((r) => r.map(esc).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${section.class}-${section.name}-report.csv`.replaceAll(" ", "_");
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 const Back = ({ onBack, label = "Back" }) => (

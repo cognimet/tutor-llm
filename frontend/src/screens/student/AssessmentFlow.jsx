@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { X, ArrowRight, Sparkles, Target, Loader2, BookOpen, Check, PartyPopper } from "lucide-react";
 import { assessmentApi } from "../../api/endpoints.js";
 import { useEngagementTracker } from "../../hooks/useEngagementTracker.js";
+import UpgradeCTA, { isQuotaError } from "../../ui/UpgradeCTA.jsx";
 
 // Staged "generating…" copy — makes a long AI call feel intentional, not stuck.
 const GEN_STEPS = [
@@ -23,12 +24,12 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [quota, setQuota] = useState(false); // the error is an out-of-credits block
   const [gate, setGate] = useState(null); // soft learning-gate readiness payload
   const [phase, setPhase] = useState(0);  // staged "generating…" skeleton step
-  // Guards: generate exactly once (React 18 StrictMode runs mount effects
-  // twice in dev, which otherwise creates two assessments), and never let a
-  // second submit fire while one is in flight.
-  const generatedRef = useRef(false);
+  // Guard: never let a second submit fire while one is in flight. (Generation
+  // is made idempotent by aborting the previous request, not by a one-shot ref —
+  // see the mount effect below for why a ref guard breaks under StrictMode.)
   const submittingRef = useRef(false);
   // Cancels an in-flight generate when the modal closes, so a slow AI call
   // doesn't orphan a `pending` assessment (and can't fire a dup on reopen).
@@ -58,6 +59,7 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
     setStage("loading");
     setPhase(0);
     setError("");
+    setQuota(false);
     // Fresh controller per attempt; abort any previous in-flight generate.
     genAbortRef.current?.abort();
     const controller = new AbortController();
@@ -75,14 +77,14 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
       // The student closed the modal mid-generation — component is unmounting,
       // so don't touch state (avoids a React warning + a stray error screen).
       if (err?.code === "ERR_CANCELED" || err?.name === "CanceledError") return;
-      // Surface the backend's reason (e.g. rate-limited AI, out of credits).
+      // Out of credits gets the upgrade path; anything else gets a retry.
+      setQuota(isQuotaError(err));
       setError(err?.response?.data?.message || err?.message || "Couldn't generate a quiz. Please try again.");
       setStage("error");
     }
   };
 
   const retryQuiz = () => {
-    generatedRef.current = true; // an explicit retry counts as the one run
     loadQuiz();
   };
 
@@ -98,14 +100,17 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
     loadQuiz();
   };
 
+  // Kick off on mount, and abort any in-flight generation when the modal
+  // unmounts (close / navigate).
+  //
+  // NOTE: no "already ran" ref guard here. React StrictMode (dev) mounts →
+  // unmounts → remounts; the unmount aborts the request, so a one-shot guard
+  // would swallow the remount's reload and leave the modal stuck on "loading".
+  // loadQuiz() aborts any previous controller, so re-running start() is safe.
   useEffect(() => {
-    if (generatedRef.current) return;
-    generatedRef.current = true;
     start();
-  }, []);
-
-  // Abort any in-flight generation when the modal unmounts (close / navigate).
-  useEffect(() => () => genAbortRef.current?.abort(), []);
+    return () => genAbortRef.current?.abort();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Walk the staged "generating…" copy forward while we wait on the AI.
   useEffect(() => {
@@ -182,11 +187,18 @@ export default function AssessmentFlow({ topicName, topicId, sessionId, onClose,
           )}
           {stage === "error" && (
             <Centered>
-              <span>{error}</span>
-              <button onClick={retryQuiz}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2.5 text-sm font-extrabold text-white shadow-md transition-transform active:scale-95">
-                <Sparkles className="h-4 w-4" /> Try again
-              </button>
+              {/* Out of credits → route to Plans instead of a pointless retry. */}
+              {quota ? (
+                <UpgradeCTA message={error} onNavigate={onClose} />
+              ) : (
+                <>
+                  <span>{error}</span>
+                  <button onClick={retryQuiz}
+                    className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2.5 text-sm font-extrabold text-white shadow-md transition-transform active:scale-95">
+                    <Sparkles className="h-4 w-4" /> Try again
+                  </button>
+                </>
+              )}
             </Centered>
           )}
 

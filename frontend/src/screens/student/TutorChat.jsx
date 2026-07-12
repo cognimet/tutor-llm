@@ -13,6 +13,7 @@ import CreditMeter from "../../ui/CreditMeter.jsx";
 import { ThemeToggle, UserMenu } from "../../ui/components.jsx";
 import { tutorApi, plannerApi, notesApi, progressApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
+import UpgradeCTA from "../../ui/UpgradeCTA.jsx";
 import Markdown from "../../ui/Markdown.jsx";
 import RichMessage from "../../ui/RichMessage.jsx";
 import AssessmentFlow from "./AssessmentFlow.jsx";
@@ -377,10 +378,17 @@ function ShortcutsOverlay({ onClose }) {
 function TopicProgressStrip({ pr, t, onCheck, onAsk }) {
   const done = pr.status === "completed";
   const c = pr.checklist || {};
+  // Completion is strictly syllabus-based: "Learn" means covering the topic's key
+  // ideas, not just chatting — surface the coverage so the student knows what's left.
+  const need = pr.concepts_required || 3;
+  const covered = Math.min(pr.concepts_covered || 0, need);
+  const learnTip = c.learned
+    ? "Key ideas covered ✓"
+    : `Cover the topic's key ideas — ${covered}/${need} so far. Keep asking to learn more.`;
   const steps = [
-    { key: "learned", label: "Learn", ok: c.learned, onClick: onAsk },
-    { key: "practiced", label: "Practice", ok: c.practiced, onClick: onCheck },
-    { key: "mastered", label: "Master", ok: c.mastered, onClick: onCheck },
+    { key: "learned", label: "Learn", ok: c.learned, onClick: onAsk, tip: learnTip },
+    { key: "practiced", label: "Practice", ok: c.practiced, onClick: onCheck, tip: c.practiced ? "Quiz passed ✓" : "Pass a quiz on this topic" },
+    { key: "mastered", label: "Master", ok: c.mastered, onClick: onCheck, tip: c.mastered ? "Mastered ✓" : "Master the key ideas (get them consistently right)" },
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200/60 bg-white/50 px-3 py-2 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/30 sm:px-4">
@@ -396,7 +404,7 @@ function TopicProgressStrip({ pr, t, onCheck, onAsk }) {
       <div className="flex items-center gap-1.5">
         {steps.map((s) => (
           <button key={s.key} onClick={s.ok ? undefined : s.onClick}
-            title={s.ok ? `${s.label} — done` : `${s.label} — tap to continue`}
+            title={s.tip}
             className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-extrabold transition-colors ${
               s.ok
                 ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300"
@@ -935,11 +943,12 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
         loadTopicProgress();
         onProgressChange?.();
       },
-      onError: (msg) => {
+      onError: (msg, opts) => {
         setLast((last) => ({
           ...last,
           pending: false,
           error: true,
+          quota: opts?.quota === true, // out of credits → show an upgrade CTA, not a retry
           content: last.content || `⚠️ ${msg}`,
         }));
         setStreaming(false);
@@ -1504,11 +1513,17 @@ export default function TutorChat({ user, session: initial, onBack, onLogout, on
                             )}
                           </div>
                         )}
-                        {/* Regenerate affordance for an errored last reply */}
+                        {/* Errored last reply: out of credits → upgrade; else retry */}
                         {m.error && isLastTutor && (
-                          <button onClick={regenerate} className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-extrabold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10">
-                            <RefreshCw className="h-3.5 w-3.5" /> Try again
-                          </button>
+                          m.quota ? (
+                            <div className="mt-2">
+                              <UpgradeCTA message="You're out of credits for today." compact />
+                            </div>
+                          ) : (
+                            <button onClick={regenerate} className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-extrabold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10">
+                              <RefreshCw className="h-3.5 w-3.5" /> Try again
+                            </button>
+                          )
                         )}
                       </div>
                     </div>

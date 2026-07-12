@@ -4,11 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tuto.ai — AI Tutor</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Fonts are self-hosted via @fontsource (imported in main.jsx): faster,
+         offline-capable, and no third-party request for child users. -->
   </head>
   <body>
     <div id="root"></div>
@@ -20,6 +17,16 @@
           if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
           document.documentElement.classList.toggle("dark", t === "dark");
           document.documentElement.style.colorScheme = t;
+        } catch (e) {}
+        // Accessibility prefs (font size / dyslexia-friendly / high contrast)
+        // apply before paint too, so the page never "jumps" for those users.
+        try {
+          var a = JSON.parse(localStorage.getItem("tuto_a11y") || "{}");
+          var el = document.documentElement;
+          if (a.fontScale === "lg") el.classList.add("font-lg");
+          if (a.fontScale === "xl") el.classList.add("font-xl");
+          if (a.dyslexic) el.classList.add("dyslexic");
+          if (a.highContrast) el.classList.add("high-contrast");
         } catch (e) {}
       })();
     </script>

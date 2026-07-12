@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Search, ChevronRight, ArrowLeft, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X, NotebookPen, Trophy, Compass, Check, Rocket, Zap, CheckCircle2, PlayCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Search, ChevronRight, ArrowLeft, Target, Flame, Brain, ListChecks, GraduationCap, Pencil, X, NotebookPen, Trophy, Compass, Check, Rocket, Zap, CheckCircle2, PlayCircle, Swords } from "lucide-react";
 import { Card, Button } from "../../ui/components.jsx";
 import { usageApi, progressApi } from "../../api/endpoints.js";
 import { tint } from "../../ui/tints.js";
 import CurriculumPicker from "../../ui/CurriculumPicker.jsx";
+import { ReviewCard } from "../../ui/TodayCards.jsx";
 
-export default function StudentHome({ user, path, subjects, progress, onOpenTopic, onOpenNotebooks, onOpenRewards, onSetLevel }) {
+export default function StudentHome({ user, path, subjects, progress, onOpenTopic, onOpenNotebooks, onOpenRewards, onOpenQuest, onSetLevel }) {
   const [active, setActive] = useState(null);
   const [q, setQ] = useState("");
   const [picking, setPicking] = useState(false);
@@ -150,12 +152,20 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
             </button>
           </div>
         </div>
-        {onOpenRewards && (
-          <button onClick={onOpenRewards}
-            className="inline-flex items-center gap-2 self-start rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-extrabold text-amber-600 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-            <Trophy className="h-4 w-4" /> My Rewards
-          </button>
-        )}
+        <div className="flex items-center gap-2 self-start">
+          {onOpenQuest && (
+            <button onClick={onOpenQuest}
+              className="inline-flex items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-extrabold text-indigo-600 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+              <Swords className="h-4 w-4" /> Quest map
+            </button>
+          )}
+          {onOpenRewards && (
+            <button onClick={onOpenRewards}
+              className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-extrabold text-amber-600 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              <Trophy className="h-4 w-4" /> My Rewards
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 2. Premium progress snapshot */}
@@ -167,6 +177,26 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
           <Stat icon={Flame} tintName="rose" label="Day streak" value={`${p.streak_days} days`} />
         </div>
       )}
+
+      {/* Spaced repetition: mastered topics gone stale reopen as tutor chats. */}
+      <ReviewCard
+        onPlay={(d) => {
+          const subj = subjects.find((s) => s.id === d.subject_id);
+          onOpenTopic({
+            subject_id: d.subject_id,
+            subject_name: d.subject_name,
+            name: d.subject_name,
+            tint: subj?.tint,
+            emoji: subj?.emoji,
+            from_notes: false,
+            selected_note_ids: [],
+            quest_style: "teach",
+            tutor_vibe: "coach",
+            topic_id: d.topic_id,
+            topic_name: d.topic_name,
+          });
+        }}
+      />
 
       {/* Continue where you left off — in-progress topics with live % */}
       {topicProg.inProgress.length > 0 && (
@@ -194,9 +224,6 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
           </div>
         </div>
       )}
-
-      {/* AI usage insight — daily/monthly credits + top activity */}
-      <StudentUsageCard />
 
       {/* 3. Side-by-side dual pathway gateway */}
       {subjects.length > 0 && (
@@ -238,6 +265,9 @@ export default function StudentHome({ user, path, subjects, progress, onOpenTopi
           </button>
         </div>
       )}
+
+      {/* AI usage insight — daily/monthly credits + top activity */}
+      <StudentUsageCard />
 
       {/* 4. Focus Areas */}
       {progress?.gaps?.length > 0 && (
@@ -513,6 +543,7 @@ function sev(s) {
 
 /* Compact "your AI usage" insight — self-contained (fetches its own data). */
 function StudentUsageCard() {
+  const navigate = useNavigate();
   const [u, setU] = useState(null);
   useEffect(() => {
     usageApi.detail().then(setU).catch(() => setU(null));
@@ -540,7 +571,10 @@ function StudentUsageCard() {
         <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           <Zap className="h-4 w-4 text-indigo-500" /> Your AI usage
         </p>
-        <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-extrabold text-indigo-600">{u.summary?.plan?.name}</span>
+        <button onClick={() => navigate("/plans")}
+          className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-extrabold text-indigo-600 transition-colors hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20">
+          {u.summary?.plan?.name || "Free"} plan
+        </button>
       </div>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         <div>
@@ -552,7 +586,15 @@ function StudentUsageCard() {
           <div className="mt-1.5">{bar(m.used, m.limit)}</div>
         </div>
       </div>
-      {top && <p className="mt-3 text-xs text-slate-400">Most used: <span className="font-bold text-slate-500 dark:text-slate-300">{top.label}</span> · {top.credits} credits in 30 days</p>}
+      <div className="mt-3 flex items-center justify-between gap-3">
+        {top ? (
+          <p className="text-xs text-slate-400">Most used: <span className="font-bold text-slate-500 dark:text-slate-300">{top.label}</span> · {top.credits} credits in 30 days</p>
+        ) : <span />}
+        <button onClick={() => navigate("/plans")}
+          className="inline-flex shrink-0 items-center gap-1 rounded-2xl border border-indigo-200 bg-indigo-50 px-3.5 py-1.5 text-xs font-extrabold text-indigo-600 transition-all hover:-translate-y-0.5 hover:shadow-sm dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+          View plans &amp; upgrade <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </Card>
   );
 }

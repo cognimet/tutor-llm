@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="CACHE_STORE" value="array"/>
+        <!-- Feature tests run against a DEDICATED Postgres database and NEVER
+             refresh it: they use DatabaseTransactions (roll back), not
+             RefreshDatabase (migrate:fresh, which drops every table).
+
+             These <env> values are a hint only; do not rely on them. The container
+             environment (docker-compose.yml) sets DB_DATABASE and wins over this
+             file even with force="true". Tests\TestCase pins the connection itself
+             and refuses to run against anything else. It also tells you how to
+             create and migrate the test database if it is missing. -->
+        <env name="DB_CONNECTION" value="pgsql" force="true"/>
+        <env name="DB_DATABASE" value="aitutor_test" force="true"/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <!-- Never call the real AI service (or a real LLM) from a test. -->
+        <env name="AI_MOCK" value="true"/>
+    </php>
+</phpunit>
