@@ -55,9 +55,12 @@ export function ThemeToggle({ className = "" }) {
 export function Logo({ onClick, subtitle = "Study Buddy" }) {
   return (
     <button onClick={onClick} className="flex items-center gap-2.5 select-none transition-transform hover:scale-[1.02]">
-      <div className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-lg text-white shadow-lg shadow-indigo-500/30">🦉</div>
+      <img src="/logo-mark.png" alt="tutorLLM" className="h-9 w-9 object-contain" />
       <div className="text-left leading-tight">
-        <p className="font-display font-extrabold tracking-tight text-slate-800 dark:text-white">Tuto<span className="text-indigo-500 dark:text-indigo-300">.ai</span></p>
+        {/* "tutor" adapts to the theme; "LLM" carries the brand blue in both. */}
+        <p className="font-display text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
+          tutor<span className="text-blue-600 dark:text-blue-400">LLM</span>
+        </p>
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">{subtitle}</p>
       </div>
     </button>

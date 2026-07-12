@@ -14,6 +14,16 @@ export default defineConfig({
     // Allow the dev server to be reached via a temporary tunnel domain
     // (cloudflared / ngrok / VS Code port-forward). Dev-only convenience.
     allowedHosts: true,
+    // The dev server's pre-bundled dep chunks carry a version hash (?v=…) that
+    // changes whenever dependencies change. If the browser caches them, a later
+    // deploy can mix old + new chunks → two copies of React → "Invalid hook
+    // call" / blank page (seen in Chrome but not a freshly-cached Brave). Tell
+    // browsers never to cache dev-server responses so they always fetch the
+    // current graph. (The real prod fix is serving the built bundle — see
+    // Dockerfile.prod — where assets are content-hashed and this can't happen.)
+    headers: {
+      "Cache-Control": "no-store",
+    },
     proxy: {
       // Proxy API calls to the Laravel backend in dev.
       // In Docker this is set to http://backend:8000 via VITE_PROXY_TARGET.
