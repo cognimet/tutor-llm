@@ -4,15 +4,9 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
-// Fonts are self-hosted (bundled woff2) — no Google Fonts request, so pages
-// render faster, work offline, and make no third-party call for child users.
-import "@fontsource/nunito/400.css";
-import "@fontsource/nunito/600.css";
-import "@fontsource/nunito/700.css";
-import "@fontsource/nunito/800.css";
-import "@fontsource/baloo-2/600.css";
-import "@fontsource/baloo-2/700.css";
-import "@fontsource/baloo-2/800.css";
+// Fonts load from Google Fonts via a <link> in index.html (no build-time npm
+// dependency, so a stale production node_modules can never break the build; if
+// the network blocks the CDN, the page degrades gracefully to system fonts).
 import "katex/dist/katex.min.css";
 import "./index.css";
 
