@@ -4,7 +4,7 @@ import {
   Eye, EyeOff, Check, MessageSquare, Target, TrendingUp, Loader2, BookOpen,
 } from "lucide-react";
 import CurriculumPicker from "../ui/CurriculumPicker.jsx";
-import { ThemeToggle } from "../ui/components.jsx";
+import { LogoMark, ThemeToggle } from "../ui/components.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 const ROLES = [
@@ -77,7 +77,7 @@ export default function AuthScreen() {
         <div className="auth-rise mx-auto w-full max-w-[400px]">
           {/* Mobile brand mark */}
           <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <img src="/logo-mark.png" alt="tutorLLM" className="h-10 w-10 object-contain" />
+            <LogoMark className="h-10 w-10" />
             <div className="leading-tight">
               <p className="font-display text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">tutor<span className="text-blue-600 dark:text-blue-400">LLM</span></p>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Your Study Buddy</p>
@@ -237,9 +237,7 @@ function BrandPanel() {
 
       {/* logo — on the coloured promo panel; a white tile keeps the mark crisp. */}
       <div className="relative flex items-center gap-2.5">
-        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white p-1.5 ring-1 ring-white/25 backdrop-blur">
-          <img src="/logo-mark.png" alt="tutorLLM" className="h-full w-full object-contain" />
-        </span>
+        <LogoMark className="h-11 w-11 rounded-2xl" tile={true} />
         <div className="leading-tight">
           <p className="font-display text-lg font-extrabold tracking-tight">tutor<span className="text-indigo-200">LLM</span></p>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60">Your Study Buddy</p>

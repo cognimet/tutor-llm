@@ -1,6 +1,6 @@
 import React from "react";
 import { useAuth } from "./context/AuthContext.jsx";
-import { Backdrop, Spinner } from "./ui/components.jsx";
+import { Backdrop, LogoMark, Spinner } from "./ui/components.jsx";
 import AuthScreen from "./screens/AuthScreen.jsx";
 import StudentApp from "./screens/student/StudentApp.jsx";
 import ParentDashboard from "./screens/parent/ParentDashboard.jsx";
@@ -19,7 +19,17 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen"><Backdrop /><Spinner label="Starting tutorLLM…" /></div>
+      // Branded boot screen — the mark is the first thing the app paints.
+      <div className="min-h-screen">
+        <Backdrop />
+        <div className="flex min-h-screen flex-col items-center justify-center gap-1">
+          <LogoMark className="h-16 w-16 animate-pulse" />
+          <p className="font-display text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            tutor<span className="text-blue-600 dark:text-blue-400">LLM</span>
+          </p>
+          <Spinner label="Starting tutorLLM…" />
+        </div>
+      </div>
     );
   }
 

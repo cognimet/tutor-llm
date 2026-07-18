@@ -52,10 +52,32 @@ export function ThemeToggle({ className = "" }) {
   );
 }
 
+/**
+ * The tutorLLM mark — the single place the logo file is referenced, so every
+ * surface stays in sync.
+ *
+ * The mark's "L" is near-black navy, which sinks into dark or coloured
+ * backgrounds. `tile` puts it on a white rounded badge so it stays crisp; it
+ * defaults to "dark", meaning "plain on light themes, tiled in dark mode".
+ * Pass tile={true} on always-coloured surfaces (gradients, promo panels) and
+ * tile={false} when the mark already sits on white.
+ */
+export function LogoMark({ className = "h-9 w-9", tile = "dark", alt = "tutorLLM" }) {
+  const pad =
+    tile === true ? "bg-white p-1 ring-1 ring-black/5"
+      : tile === "dark" ? "dark:bg-white dark:p-1 dark:ring-1 dark:ring-white/20"
+      : "";
+  return (
+    <span className={`grid shrink-0 place-items-center rounded-xl ${pad} ${className}`}>
+      <img src="/logo-mark.png" alt={alt} className="h-full w-full object-contain" />
+    </span>
+  );
+}
+
 export function Logo({ onClick, subtitle = "Study Buddy" }) {
   return (
     <button onClick={onClick} className="flex items-center gap-2.5 select-none transition-transform hover:scale-[1.02]">
-      <img src="/logo-mark.png" alt="tutorLLM" className="h-9 w-9 object-contain" />
+      <LogoMark />
       <div className="text-left leading-tight">
         {/* "tutor" adapts to the theme; "LLM" carries the brand blue in both. */}
         <p className="font-display text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">

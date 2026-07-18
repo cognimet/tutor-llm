@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { tint } from "../../ui/tints.js";
 import CreditMeter from "../../ui/CreditMeter.jsx";
-import { ThemeToggle, UserMenu } from "../../ui/components.jsx";
+import { LogoMark, ThemeToggle, UserMenu } from "../../ui/components.jsx";
 import { tutorApi, plannerApi, notesApi, progressApi } from "../../api/endpoints.js";
 import { streamSSE } from "../../api/stream.js";
 import UpgradeCTA from "../../ui/UpgradeCTA.jsx";
@@ -137,13 +137,15 @@ const MOD = isMac ? "⌘" : "Ctrl";
 /* -------------------------------------------------------------- primitives */
 
 function Avatar({ user, t }) {
+  // The student keeps an emoji; the tutor speaks as the brand, so its bubble
+  // carries the tutorLLM mark (tiled white, since it sits on a gradient).
   return (
     <div
       className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl text-lg shadow-sm ${
         user ? "bg-white dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-white/10" : `bg-gradient-to-br ${t.grad} text-white shadow-md`
       }`}
     >
-      {user ? "🧑‍🎓" : "🦉"}
+      {user ? "🧑‍🎓" : <LogoMark className="h-6 w-6" tile={true} alt="tutorLLM" />}
     </div>
   );
 }
